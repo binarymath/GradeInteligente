@@ -8,7 +8,8 @@ import DataInputSection from './components/DataInputSection';
 import ActivitiesSection from './components/ActivitiesSection';
 import TimetableSection from './components/TimetableSection';
 import AgendaSection from './components/AgendaSection';
-import ScheduleManager from './models/ScheduleManager';
+import { exportBackup, importBackup } from './services/stateService';
+import { generateScheduleAsync } from './services/scheduleService';
 
 const INITIAL_STATE = {
   timeSlots: [
@@ -95,48 +96,11 @@ const App = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleExportState = () => {
-    const json = JSON.stringify(data, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const href = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = href;
-    link.download = `grade_inteligente_backup_${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  const handleExportState = () => exportBackup(data);
 
-  const handleImportState = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const parsed = JSON.parse(event.target.result);
-        setData(parsed);
-        alert('Backup restaurado com sucesso!');
-      } catch (err) {
-        alert('Erro ao ler arquivo de backup.');
-      }
-    };
-    reader.readAsText(file);
-  };
+  const handleImportState = (e) => importBackup(e.target.files[0], setData);
 
-  const generateSchedule = async () => {
-    setGenerating(true);
-    setGenerationLog([]);
-    
-    // Use setTimeout to allow UI to update
-    setTimeout(() => {
-      const manager = new ScheduleManager(data);
-      const result = manager.generate();
-      
-      setData(prev => ({ ...prev, schedule: result.schedule }));
-      setGenerationLog(result.log);
-      setGenerating(false);
-    }, 100);
-  };
+  const generateSchedule = () => generateScheduleAsync(data, setData, setGenerationLog, setGenerating);
 
   // Helper to call Gemini (passed to ActivitiesSection)
   const callGemini = async (prompt) => {
