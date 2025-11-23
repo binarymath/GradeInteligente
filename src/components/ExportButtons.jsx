@@ -9,7 +9,7 @@ import { exportICS } from '../services/icsExporter';
  */
 const ExportButtons = ({ viewMode, selectedEntity, data, displayPeriods, calendarSettings }) => {
   const disabled = !selectedEntity;
-  const commonCls = 'p-2 rounded-md border text-xs font-medium flex items-center justify-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
+  const commonCls = 'p-2 rounded-md border text-xs font-medium flex items-center justify-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
   return (
     <div className="flex gap-2">
       <button

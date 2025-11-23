@@ -129,7 +129,7 @@ const App = () => {
           <div className="px-4 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Operações</div>
           <SidebarItem icon={Calendar} label="Agenda e Grade" active={view === 'agenda'} onClick={() => { setView('agenda'); if(isMobile) setSidebarOpen(false); }} />
         </div>
-        <div className={`p-4 border-t border-slate-100 overflow-hidden whitespace-nowrap ${!sidebarOpen && !isMobile ? 'hidden' : 'block'}`}><div className="bg-slate-50 rounded-lg p-3 border border-slate-200"><h4 className="font-bold text-xs text-slate-700 mb-1">Dica Rápida</h4><p className="text-[10px] text-slate-500 leading-relaxed">Defina as H. Extra Classe dos professores na aba "Dados Básicos" antes de gerar o horário.</p></div></div>
+        <div className={`p-4 border-t border-slate-100 overflow-hidden whitespace-nowrap ${!sidebarOpen && !isMobile ? 'hidden' : 'block'}`}><div className="bg-slate-50 rounded-lg p-3 border border-slate-200"><h4 className="font-bold text-xs text-slate-800 mb-1">Dica Rápida</h4><p className="text-[10px] text-slate-600 leading-relaxed">Defina as H. Extra Classe dos professores na aba "Dados Básicos" antes de gerar o horário.</p></div></div>
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 bg-slate-100 transition-all duration-300">
@@ -153,12 +153,17 @@ const App = () => {
              <div className="flex flex-col gap-4">
                <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-slate-200">
                  <h2 className="text-lg font-bold text-slate-800">Gerar Grade</h2>
-                 <button onClick={generateSchedule} disabled={generating} className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-50">
+                 <button onClick={generateSchedule} disabled={generating} className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed" aria-busy={generating}>
                    {generating ? 'Gerando...' : 'Gerar Agora'}
                  </button>
                </div>
                {generationLog.length > 0 && (
-                 <div className="bg-slate-800 text-slate-200 p-4 rounded-lg text-xs font-mono max-h-40 overflow-y-auto">
+                 <div 
+                   className="bg-slate-800 text-slate-200 p-4 rounded-lg text-xs font-mono max-h-40 overflow-y-auto"
+                   role="log"
+                   aria-live="polite"
+                   aria-label="Log de geração da grade"
+                 >
                    {generationLog.map((log, i) => <div key={i}>{log}</div>)}
                  </div>
                )}

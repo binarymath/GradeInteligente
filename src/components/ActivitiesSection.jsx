@@ -112,7 +112,15 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
              <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} className="text-slate-400"/> Vincule Professor, Matéria e Turma abaixo.</p>
            </div>
            <div className="flex items-center gap-3">
-             {aiLoading && <span className="text-[10px] text-indigo-600 flex items-center gap-1 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100"><Sparkles size={12} className="animate-pulse"/> IA analisando...</span>}
+             {aiLoading && (
+               <span 
+                 className="text-[10px] text-indigo-600 flex items-center gap-1 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100"
+                 role="status"
+                 aria-live="polite"
+               >
+                 <Sparkles size={12} className="animate-pulse"/> IA analisando...
+               </span>
+             )}
              <div className="hidden md:flex items-center gap-2 text-[10px] text-slate-400">
                <span className="inline-flex items-center gap-1"><Layers size={12} className="text-purple-500"/> Aulas Duplas</span>
                <span className="inline-flex items-center gap-1"><Sparkles size={12} className="text-indigo-500"/> Sugestão IA</span>
@@ -121,9 +129,15 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-5 relative z-10">
            <div className="xl:col-span-3 group">
-             <label className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><Users size={12} className="text-blue-500"/> Professor</label>
+             <label htmlFor="new-activity-teacher" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><Users size={12} className="text-blue-500"/> Professor</label>
              <div className="relative">
-               <select className="peer w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm transition-all focus:border-blue-500" value={newActivity.teacherId} onChange={e => setNewActivity({...newActivity, teacherId: e.target.value})}>
+               <select 
+                 id="new-activity-teacher"
+                 className="peer w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm transition-all focus:border-blue-500" 
+                 value={newActivity.teacherId} 
+                 onChange={e => setNewActivity({...newActivity, teacherId: e.target.value})}
+                 aria-label="Selecionar professor"
+               >
                  <option value="">Selecione...</option>
                  {data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                </select>
@@ -131,9 +145,15 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
              </div>
            </div>
            <div className="xl:col-span-3 group">
-             <label className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><BookOpen size={12} className="text-emerald-500"/> Matéria</label>
+             <label htmlFor="new-activity-subject" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><BookOpen size={12} className="text-emerald-500"/> Matéria</label>
              <div className="relative">
-               <select className="peer w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white/80 backdrop-blur-sm transition-all focus:border-emerald-500" value={newActivity.subjectId} onChange={e => setNewActivity({...newActivity, subjectId: e.target.value})}>
+               <select 
+                 id="new-activity-subject"
+                 className="peer w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white/80 backdrop-blur-sm transition-all focus:border-emerald-500" 
+                 value={newActivity.subjectId} 
+                 onChange={e => setNewActivity({...newActivity, subjectId: e.target.value})}
+                 aria-label="Selecionar matéria"
+               >
                  <option value="">Selecione...</option>
                  {data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                </select>
@@ -141,9 +161,15 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
              </div>
            </div>
            <div className="xl:col-span-2 group">
-             <label className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><Layout size={12} className="text-indigo-500"/> Turma</label>
+             <label htmlFor="new-activity-class" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><Layout size={12} className="text-indigo-500"/> Turma</label>
              <div className="relative">
-               <select className="peer w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white/80 backdrop-blur-sm transition-all focus:border-indigo-500" value={newActivity.classId} onChange={e => setNewActivity({...newActivity, classId: e.target.value})}>
+               <select 
+                 id="new-activity-class"
+                 className="peer w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white/80 backdrop-blur-sm transition-all focus:border-indigo-500" 
+                 value={newActivity.classId} 
+                 onChange={e => setNewActivity({...newActivity, classId: e.target.value})}
+                 aria-label="Selecionar turma"
+               >
                  <option value="">Selecione...</option>
                  {data.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                </select>
@@ -151,10 +177,36 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
              </div>
            </div>
            <div className="xl:col-span-2 relative group">
-             <label className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center justify-between"><span className="flex items-center gap-1"><Layers size={12} className="text-purple-500"/> Qtd. Aulas</span><button onClick={handleAiSuggestion} title="Sugestão IA" className="text-indigo-600 hover:text-indigo-800 transition-colors"><Sparkles size={14} /></button></label>
-             <input type="number" min="1" max="10" placeholder="0" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-white/80 backdrop-blur-sm transition-all font-semibold text-center tracking-wide" value={newActivity.quantity} onChange={e => { const val = e.target.value; setNewActivity({ ...newActivity, quantity: val === '' ? '' : parseInt(val) }); }} />
+             <label htmlFor="new-activity-quantity" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center justify-between">
+               <span className="flex items-center gap-1"><Layers size={12} className="text-purple-500"/> Qtd. Aulas</span>
+               <button 
+                 onClick={handleAiSuggestion} 
+                 title="Sugestão IA" 
+                 disabled={aiLoading}
+                 aria-busy={aiLoading}
+                 aria-label="Solicitar sugestão de IA"
+                 className="text-indigo-600 hover:text-indigo-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+               >
+                 <Sparkles size={14} />
+               </button>
+             </label>
+             <input 
+               id="new-activity-quantity"
+               type="number" 
+               min="1" 
+               max="10" 
+               placeholder="0" 
+               aria-label="Quantidade de aulas semanais"
+               className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-white/80 backdrop-blur-sm transition-all font-semibold text-center tracking-wide" 
+               value={newActivity.quantity} 
+               onChange={e => { const val = e.target.value; setNewActivity({ ...newActivity, quantity: val === '' ? '' : parseInt(val) }); }} 
+             />
              {suggestion && (
-               <div className="absolute top-full left-0 right-0 mt-2 z-10 bg-indigo-600/95 text-white text-[11px] p-3 rounded-lg shadow-lg animate-fadeIn border border-indigo-400">
+               <div 
+                 className="absolute top-full left-0 right-0 mt-2 z-10 bg-indigo-600/95 text-white text-[11px] p-3 rounded-lg shadow-lg animate-fadeIn border border-indigo-400"
+                 role="status"
+                 aria-live="polite"
+               >
                   <div className="flex justify-between items-start mb-1">
                     <strong className="flex items-center gap-1"><Sparkles size={10}/> Sugestão IA</strong>
                     <button onClick={() => setSuggestion(null)} className="text-indigo-200 hover:text-white"><X size={12}/></button>
