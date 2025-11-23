@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BookOpen, Users, Layout, Sparkles, Plus, X, Layers, Search, Trash2, Pencil, Check } from 'lucide-react';
 import { uid } from '../utils';
+import { useDebounce } from '../hooks/useDebounce';
 
 const apiKey = ""; 
 
@@ -11,18 +12,33 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
   const [editingActivityId, setEditingActivityId] = useState(null);
   const [editActivity, setEditActivity] = useState({ teacherId: '', subjectId: '', classId: '', quantity: 2, doubleLesson: false });
 
-  const totalLessons = data.activities.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0);
-  const uniqueTeachers = new Set(data.activities.map(a => a.teacherId)).size;
-  const uniqueClasses = new Set(data.activities.map(a => a.classId)).size;
+  const debouncedFilter = useDebounce(filter, 300);
 
-  const filteredActivities = data.activities.filter(act => {
-    if (!filter) return true;
-    const searchLower = filter.toLowerCase();
-    const tName = data.teachers.find(t => t.id === act.teacherId)?.name.toLowerCase() || '';
-    const sName = data.subjects.find(s => s.id === act.subjectId)?.name.toLowerCase() || '';
-    const cName = data.classes.find(c => c.id === act.classId)?.name.toLowerCase() || '';
-    return tName.includes(searchLower) || sName.includes(searchLower) || cName.includes(searchLower);
-  });
+  const totalLessons = useMemo(() => 
+    data.activities.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0),
+    [data.activities]
+  );
+  
+  const uniqueTeachers = useMemo(() => 
+    new Set(data.activities.map(a => a.teacherId)).size,
+    [data.activities]
+  );
+  
+  const uniqueClasses = useMemo(() => 
+    new Set(data.activities.map(a => a.classId)).size,
+    [data.activities]
+  );
+
+  const filteredActivities = useMemo(() => {
+    if (!debouncedFilter) return data.activities;
+    const searchLower = debouncedFilter.toLowerCase();
+    return data.activities.filter(act => {
+      const tName = data.teachers.find(t => t.id === act.teacherId)?.name.toLowerCase() || '';
+      const sName = data.subjects.find(s => s.id === act.subjectId)?.name.toLowerCase() || '';
+      const cName = data.classes.find(c => c.id === act.classId)?.name.toLowerCase() || '';
+      return tName.includes(searchLower) || sName.includes(searchLower) || cName.includes(searchLower);
+    });
+  }, [debouncedFilter, data.activities, data.teachers, data.subjects, data.classes]);
 
   const handleAddActivity = () => {
     if (!newActivity.teacherId || !newActivity.subjectId || !newActivity.classId) return;

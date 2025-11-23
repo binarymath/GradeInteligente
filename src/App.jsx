@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { 
   Layout, Settings, Clock, BookOpen, Calendar, Menu, X, ChevronLeft, ChevronRight, Upload, Download 
 } from 'lucide-react';
@@ -96,11 +96,14 @@ const App = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleExportState = () => exportBackup(data);
+  const handleExportState = useCallback(() => exportBackup(data), [data]);
 
-  const handleImportState = (e) => importBackup(e.target.files[0], setData);
+  const handleImportState = useCallback((e) => importBackup(e.target.files[0], setData), []);
 
-  const generateSchedule = () => generateScheduleAsync(data, setData, setGenerationLog, setGenerating);
+  const generateSchedule = useCallback(() => 
+    generateScheduleAsync(data, setData, setGenerationLog, setGenerating),
+    [data]
+  );
 
   // Helper to call Gemini (passed to ActivitiesSection)
   const callGemini = async (prompt) => {
