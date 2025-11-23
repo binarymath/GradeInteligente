@@ -1,0 +1,77 @@
+# === Node / JavaScript ===
+node_modules/
+
+# Build output
+/dist/
+/build/
+.esbuild/
+.vite/
+
+# Cache & tooling
+.cache/
+.turbo/
+.vercel/
+.netlify/
+.storybook/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Tests / coverage
+coverage/
+*.lcov
+
+# Environment files (keep example)
+.env
+.env.*
+!.env.example
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# Misc temporary
+.tmp/
+tmp/
+temp/
+
+# Output archives
+*.tar
+*.tgz
+*.zip
+
+# Production bundles (optional, uncomment if generated locally)
+# *.min.js
+# *.min.css
+
+# Lock files SHOULD be committed; do not ignore:
+# package-lock.json
+# pnpm-lock.yaml
+# yarn.lock
+
+# ESLint / TypeScript cache
+/.eslintcache
+/*.tsbuildinfo
+
+# Optional: ignore backups
+*.bak
+
+# Tailwind JIT cache
+/.tailwind-cache
+
+# Ignore generated calendar or export artifacts (if saved locally)
+/*.ics
+/*.pdf
+/*.xlsx
+
