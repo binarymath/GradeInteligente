@@ -55,7 +55,7 @@ const TimeSettingsSection = ({ data, setData }) => {
 
   const startEdit = (slot) => {
     setEditingId(slot.id);
-    const defaultShift = slot.shift || getShiftLabel(slot.start);
+    const defaultShift = slot.shift ? slot.shift : 'AUTO';
     setEditSlot({ start: slot.start, end: slot.end, type: slot.type, shift: defaultShift });
   };
 
@@ -182,6 +182,7 @@ const TimeSettingsSection = ({ data, setData }) => {
                   <td className="px-4 py-3">
                     {editingId === slot.id ? (
                       <select className="border border-slate-300 rounded px-2 py-1 text-xs" value={editSlot.shift} onChange={e => setEditSlot({ ...editSlot, shift: e.target.value })}>
+                        <option value="AUTO">Automático</option>
                         <option value="Manhã">Manhã</option>
                         <option value="Tarde">Tarde</option>
                         <option value="Noite">Noite</option>
@@ -189,17 +190,18 @@ const TimeSettingsSection = ({ data, setData }) => {
                         <option value="Integral (Tarde e Noite)">Integral (Tarde e Noite)</option>
                       </select>
                     ) : (() => {
-                      const lbl = slot.shift || getShiftLabel(slot.start);
-                      const styles = lbl === 'Manhã'
+                      const autoLbl = getShiftLabel(slot.start);
+                      const lbl = slot.shift ? slot.shift : autoLbl;
+                      const styles = lbl.startsWith('Manhã')
                         ? 'bg-amber-100 text-amber-700'
-                        : lbl === 'Tarde'
+                        : lbl.startsWith('Tarde')
                           ? 'bg-emerald-100 text-emerald-700'
-                          : lbl === 'Noite'
+                          : lbl.startsWith('Noite')
                             ? 'bg-violet-100 text-violet-700'
-                            : lbl === 'Integral (Manhã e Tarde)'
+                            : lbl.startsWith('Integral (Manhã e Tarde)')
                               ? 'bg-teal-100 text-teal-700'
                               : 'bg-fuchsia-100 text-fuchsia-700';
-                      return <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${styles}`}>{lbl}</span>;
+                      return <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${styles}`}>{lbl}{slot.shift ? '' : ' (auto)'}</span>;
                     })()}
                   </td>
                   <td className="px-4 py-3 text-right flex justify-end gap-2">

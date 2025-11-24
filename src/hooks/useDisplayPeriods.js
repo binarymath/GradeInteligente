@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { classifySlotShift, expandShifts } from '../utils/time';
+import { classifySlotShift, expandShifts, computeSlotShift } from '../utils/time';
 
 // Hook para encapsular a lógica de filtragem de períodos.
 export function useDisplayPeriods({ data, viewMode, selectedEntity }) {
@@ -17,7 +17,7 @@ export function useDisplayPeriods({ data, viewMode, selectedEntity }) {
       const teacher = data.teachers.find(t => t.id === selectedEntity);
       if (teacher?.shifts?.length) {
         const expanded = expandShifts(teacher.shifts);
-        return periods.filter(p => expanded.has(classifySlotShift(p.start)));
+        return periods.filter(p => expanded.has(computeSlotShift(p)));
       }
       return periods;
     }

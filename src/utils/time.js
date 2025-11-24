@@ -9,6 +9,11 @@ export function classifySlotShift(start) {
   return 'Noite';
 }
 
+/** Retorna turno efetivo considerando override manual (slot.shift). */
+export function computeSlotShift(slot) {
+  return slot.shift || classifySlotShift(slot.start);
+}
+
 /** Expande rótulos de turno integral para seus componentes. */
 export function expandShifts(shifts) {
   const expanded = new Set();
