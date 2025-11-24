@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { 
-  Layout, Settings, Clock, BookOpen, Calendar, Menu, X, ChevronLeft, ChevronRight, Upload, Download 
+  Layout, Settings, Clock, BookOpen, Calendar, Menu, X, ChevronLeft, ChevronRight, Upload, Download, AlertTriangle 
 } from 'lucide-react';
+import { DAYS } from './utils';
 import SidebarItem from './components/SidebarItem';
 import TimeSettingsSection from './components/TimeSettingsSection';
 import DataInputSection from './components/DataInputSection';
@@ -62,7 +63,8 @@ const INITIAL_STATE = {
     { id: 'a1', teacherId: 't1', subjectId: 's1', classId: 'c1', quantity: 5, split: 1, doubleLesson: true }, 
     { id: 'a2', teacherId: 't2', subjectId: 's3', classId: 'c1', quantity: 2, split: 1, doubleLesson: true },
   ],
-  schedule: {} 
+  schedule: {},
+  scheduleConflicts: []
 };
 
 const App = () => {
@@ -95,7 +97,6 @@ const App = () => {
   const [generationLog, setGenerationLog] = useState([]);
   const [viewMode, setViewMode] = useState(initialNav.viewMode);
   const [selectedEntity, setSelectedEntity] = useState(initialNav.selectedEntity);
-  const [aiLoading, setAiLoading] = useState(false);
   const [calendarSettings, setCalendarSettings] = useState({
     schoolYearStart: '2025-02-01',
     schoolYearEnd: '2025-12-15',
@@ -135,11 +136,6 @@ const App = () => {
     [data]
   );
 
-  // Helper to call Gemini (passed to ActivitiesSection)
-  const callGemini = async (prompt) => {
-    // Implementation moved to ActivitiesSection or kept here if needed globally
-    // For now, ActivitiesSection handles it.
-  };
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans text-slate-900 overflow-hidden">
@@ -180,7 +176,7 @@ const App = () => {
         <div className="flex-1 p-4 lg:p-8 overflow-y-auto">
            {view === 'data' && subView === 'timeSettings' && <TimeSettingsSection data={data} setData={setData} />}
            {view === 'data' && subView !== 'timeSettings' && <DataInputSection data={data} setData={setData} subView={subView} setSubView={setSubView} />}
-           {view === 'activities' && <ActivitiesSection data={data} setData={setData} callGemini={callGemini} aiLoading={aiLoading} setAiLoading={setAiLoading} />}
+           {view === 'activities' && <ActivitiesSection data={data} setData={setData} />}
            {view === 'generate' && (
              <div className="flex flex-col gap-4">
                <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-slate-200">
@@ -197,6 +193,24 @@ const App = () => {
                    aria-label="Log de geração da grade"
                  >
                    {generationLog.map((log, i) => <div key={i}>{log}</div>)}
+                 </div>
+               )}
+               {data.scheduleConflicts && data.scheduleConflicts.length > 0 && (
+                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm flex flex-col gap-2" role="alert" aria-live="assertive">
+                   <div className="flex items-center gap-2 font-semibold text-red-700"><AlertTriangle size={16}/> Conflitos de professor detectados</div>
+                   <ul className="list-disc pl-5 space-y-1 text-red-700">
+                     {data.scheduleConflicts.map((c, idx) => {
+                       const teacherName = data.teachers.find(t => t.id === c.teacherId)?.name || c.teacherId;
+                       const classNames = c.classes.map(cid => data.classes.find(cl => cl.id === cid)?.name || cid).join(' & ');
+                       const dayName = DAYS[c.dayIdx] || `Dia ${c.dayIdx}`;
+                       return (
+                         <li key={idx}>
+                           <span className="font-semibold">{teacherName}</span> conflito em <span className="font-medium">{classNames}</span> ({dayName}) — {c.reason}
+                         </li>
+                       );
+                     })}
+                   </ul>
+                   <p className="text-[11px] text-red-600">Ajuste atividades, turnos ou horários para eliminar conflitos.</p>
                  </div>
                )}
                <div className="flex flex-wrap gap-6 mb-4">

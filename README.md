@@ -14,7 +14,6 @@ Sistema web para gerenciamento e geração de grade horária escolar com suporte
   - Excel (linhas detalhadas com Professor/Materia/Turma/Dia/Horário)
   - ICS (agenda semanal recorrente com exclusões por eventos)
 - **Preferências de Matérias**: Ciclo Disponível → Bloqueado → Preferencial por slot (clique sequencial).
-- **Formulário assistido por IA (placeholder)**: Estrutura pronta para sugestão de quantidade de aulas (Gemini API).
 
 ## 🗂 Estrutura de Pastas (Resumo)
 ```
@@ -90,15 +89,14 @@ Acesse normalmente via endereço mostrado pelo Vite (ex: `http://localhost:5173`
 - xlsx + file-saver (Excel)
 
 ## 🔐 Arquivos Sensíveis
-Variables de ambiente e chaves de API devem permanecer em `.env` (ignorado). O placeholder `apiKey` para IA está em `ActivitiesSection.jsx` e deve ser movido para `.env` antes de uso real.
+Variáveis de ambiente e chaves (ex: integrações futuras) devem permanecer em `.env` (ignorado).
 
 ## 🧩 Próximos Passos / Roadmap
 - [ ] UI de exportações: botões individuais (ícones) e filtro por sala.
 - [ ] Vincular Sala às Turmas (form e exibição).
 - [ ] Algoritmo automático de geração/otimização de grade (uso de `ScheduleManager`).
-- [ ] Validação de conflitos (professor em duas turmas simultâneas). 
+- [x] Validação de conflitos (professor em duas turmas simultâneas) — implementado com detecção de sobreposição e motivo intuitivo.
 - [ ] Agrupamento de aulas duplas na geração final.
-- [ ] Melhoria no fluxo de sugestão IA (tratamento de erros e fallback).
 - [ ] Testes automatizados (unitários para utilidades e componentes críticos).
 
 ## 🛠 Personalização

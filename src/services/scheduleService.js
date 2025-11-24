@@ -14,7 +14,7 @@ export function generateScheduleAsync(data, setData, setGenerationLog, setGenera
   setTimeout(() => {
     const manager = new ScheduleManager(data);
     const result = manager.generate();
-    setData(prev => ({ ...prev, schedule: result.schedule }));
+    setData(prev => ({ ...prev, schedule: result.schedule, scheduleConflicts: result.conflicts }));
     setGenerationLog(result.log);
     setGenerating(false);
   }, 100);
