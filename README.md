@@ -92,8 +92,7 @@ Acesse normalmente via endereço mostrado pelo Vite (ex: `http://localhost:5173`
 Variáveis de ambiente e chaves (ex: integrações futuras) devem permanecer em `.env` (ignorado).
 
 ## 🧩 Próximos Passos / Roadmap
-- [ ] UI de exportações: botões individuais (ícones) e filtro por sala.
-- [ ] Vincular Sala às Turmas (form e exibição).
+- [ ] UI de exportações: botões individuais (ícones).
 - [ ] Algoritmo automático de geração/otimização de grade (uso de `ScheduleManager`).
 - [x] Validação de conflitos (professor em duas turmas simultâneas) — implementado com detecção de sobreposição e motivo intuitivo.
 - [ ] Agrupamento de aulas duplas na geração final.

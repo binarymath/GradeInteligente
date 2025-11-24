@@ -1,13 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { BookOpen, Users, Layout, Sparkles, Plus, X, Layers, Search, Trash2, Pencil, Check } from 'lucide-react';
+import { BookOpen, Users, Layout, Plus, Layers, Search, Trash2, Pencil } from 'lucide-react';
 import { uid } from '../utils';
 import { useDebounce } from '../hooks/useDebounce';
 
-const apiKey = ""; 
-
-const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading }) => {
+const ActivitiesSection = ({ data, setData }) => {
   const [newActivity, setNewActivity] = useState({ teacherId: '', subjectId: '', classId: '', quantity: '', doubleLesson: false });
-  const [suggestion, setSuggestion] = useState(null);
+  // IA removida: mantemos somente estados necessários ao formulário
   const [filter, setFilter] = useState('');
   const [teacherFilter, setTeacherFilter] = useState('');
   const [editingActivityId, setEditingActivityId] = useState(null);
@@ -66,27 +64,7 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
       ...prev,
       activities: [...prev.activities, { ...newActivity, id: uid(), split: 1 }]
     }));
-    // Clear suggestion and reset form fields after adding
-    setSuggestion(null);
     setNewActivity({ teacherId: '', subjectId: '', classId: '', quantity: '', doubleLesson: false });
-  };
-
-  const handleAiSuggestion = async () => {
-     const subject = data.subjects.find(s => s.id === newActivity.subjectId);
-     const classroom = data.classes.find(c => c.id === newActivity.classId);
-     if(!subject || !classroom) { alert("Selecione a matéria e a turma primeiro."); return; }
-     setAiLoading(true);
-     const prompt = `Matéria: ${subject.name}, Turma: ${classroom.name}. Sugira a quantidade ideal de aulas semanais. Responda JSON: {"quantity": numero, "reason": "curto"}.`;
-     try {
-       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
-       const resData = await response.json();
-       const text = resData.candidates?.[0]?.content?.parts?.[0]?.text;
-       if (text) { 
-         const cleanText = text.replace(/```json|```/g, '').trim();
-         const result = JSON.parse(cleanText); 
-         if(result) { setNewActivity(prev => ({ ...prev, quantity: result.quantity })); setSuggestion(result.reason); } 
-       }
-     } catch (e) { console.error(e); } finally { setAiLoading(false); }
   };
 
   const startEditActivity = (act) => {
@@ -184,18 +162,8 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
              <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} className="text-slate-400"/> Vincule Professor, Matéria e Turma abaixo.</p>
            </div>
            <div className="flex items-center gap-3">
-             {aiLoading && (
-               <span 
-                 className="text-[10px] text-indigo-600 flex items-center gap-1 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100"
-                 role="status"
-                 aria-live="polite"
-               >
-                 <Sparkles size={12} className="animate-pulse"/> IA analisando...
-               </span>
-             )}
              <div className="hidden md:flex items-center gap-2 text-[10px] text-slate-400">
                <span className="inline-flex items-center gap-1"><Layers size={12} className="text-purple-500"/> Aulas Duplas</span>
-               <span className="inline-flex items-center gap-1"><Sparkles size={12} className="text-indigo-500"/> Sugestão IA</span>
              </div>
            </div>
         </div>
@@ -251,16 +219,6 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
            <div className="xl:col-span-2 relative group">
              <label htmlFor="new-activity-quantity" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center justify-between">
                <span className="flex items-center gap-1"><Layers size={12} className="text-purple-500"/> Qtd. Aulas</span>
-               <button 
-                 onClick={handleAiSuggestion} 
-                 title="Sugestão IA" 
-                 disabled={aiLoading}
-                 aria-busy={aiLoading}
-                 aria-label="Solicitar sugestão de IA"
-                 className="text-indigo-600 hover:text-indigo-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-               >
-                 <Sparkles size={14} />
-               </button>
              </label>
              <input 
                id="new-activity-quantity"
@@ -273,19 +231,7 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
                value={newActivity.quantity} 
                onChange={e => { const val = e.target.value; setNewActivity({ ...newActivity, quantity: val === '' ? '' : parseInt(val) }); }} 
              />
-             {suggestion && (
-               <div 
-                 className="absolute top-full left-0 right-0 mt-2 z-10 bg-indigo-600/95 text-white text-[11px] p-3 rounded-lg shadow-lg animate-fadeIn border border-indigo-400"
-                 role="status"
-                 aria-live="polite"
-               >
-                  <div className="flex justify-between items-start mb-1">
-                    <strong className="flex items-center gap-1"><Sparkles size={10}/> Sugestão IA</strong>
-                    <button onClick={() => setSuggestion(null)} className="text-indigo-200 hover:text-white"><X size={12}/></button>
-                  </div>
-                  {suggestion}
-               </div>
-             )}
+             {/* Popover IA removido */}
            </div>
            <div className="xl:col-span-2 flex flex-col items-center gap-4">
              <div className="flex items-center gap-2 -mt-1">
@@ -306,7 +252,7 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
              <button onClick={handleAddActivity} className="group mx-auto bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl px-6 py-3 text-sm font-bold tracking-wide hover:from-blue-500 hover:to-indigo-500 transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-xl active:scale-[0.97]">
                <Plus size={18} className="group-hover:rotate-12 transition-transform"/> Adicionar Atividade
              </button>
-             <div className="text-[10px] text-slate-400 flex items-center gap-1"><Sparkles size={10} className="text-indigo-400"/> Após adicionar, o formulário é resetado automaticamente.</div>
+             <div className="text-[10px] text-slate-400 flex items-center gap-1">Após adicionar, o formulário é resetado automaticamente.</div>
            </div>
         </div>
         <div className="mt-6 rounded-lg bg-white/60 backdrop-blur p-3 border border-slate-200 text-[11px] flex flex-wrap gap-3">

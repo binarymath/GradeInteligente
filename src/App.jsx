@@ -42,22 +42,14 @@ const INITIAL_STATE = {
       id: 'c1', 
       name: '6º Ano A', 
       shift: 'Manhã',
-      activeSlots: ['ts1', 'ts2', 'ts3', 'ts4', 'ts5', 'ts6'],
-      classroomId: 'r1'
+      activeSlots: ['ts1', 'ts2', 'ts3', 'ts4', 'ts5', 'ts6']
     },
     { 
       id: 'c2', 
       name: '9º Ano Int', 
       shift: 'Integral',
-      activeSlots: ['ts1', 'ts2', 'ts3', 'ts4', 'ts5', 'ts6', 'ts7', 'ts8'],
-      classroomId: 'r2'
+      activeSlots: ['ts1', 'ts2', 'ts3', 'ts4', 'ts5', 'ts6', 'ts7', 'ts8']
     },
-  ],
-  classrooms: [
-    { id: 'r1', name: 'Sala 01 - Térreo', capacity: 30 },
-    { id: 'r2', name: 'Sala 02 - Térreo', capacity: 30 },
-    { id: 'r3', name: 'Sala 03 - 1º Andar', capacity: 35 },
-    { id: 'r4', name: 'Laboratório de Informática', capacity: 20 }
   ],
   activities: [
     { id: 'a1', teacherId: 't1', subjectId: 's1', classId: 'c1', quantity: 5, split: 1, doubleLesson: true }, 
