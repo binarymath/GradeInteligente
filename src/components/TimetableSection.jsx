@@ -9,7 +9,6 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
   // Estado local do formulário de ano letivo e eventos
   const [schoolStart, setSchoolStart] = useState(calendarSettings.schoolYearStart || '');
   const [schoolEnd, setSchoolEnd] = useState(calendarSettings.schoolYearEnd || '');
-  const [eventType, setEventType] = useState('Ferias');
   const [eventTitle, setEventTitle] = useState('');
   const [eventStart, setEventStart] = useState('');
   const [eventEnd, setEventEnd] = useState('');
@@ -23,8 +22,8 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
     const finalEnd = eventEnd || eventStart;
     const newEvt = {
       id: Date.now().toString(),
-      type: eventType, // Ferias | Feriado
-      title: eventTitle.trim() || (eventType === 'Ferias' ? 'Férias' : 'Feriado'),
+      type: 'Evento',
+      title: eventTitle.trim() || 'Evento',
       start: eventStart,
       end: finalEnd
     };
@@ -67,17 +66,10 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
             {/* Adicionar Evento */}
             <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm flex flex-col gap-3 lg:col-span-2">
               <h4 className="font-semibold text-slate-700 text-sm">Adicionar Evento (Exclusão de Aulas)</h4>
-              <div className="grid md:grid-cols-5 gap-3">
-                <div className="flex flex-col md:col-span-1">
-                  <label className="text-xs font-semibold text-slate-600 mb-1">Tipo</label>
-                  <select value={eventType} onChange={e => setEventType(e.target.value)} className="border rounded px-2 py-1.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
-                    <option value="Ferias">Férias</option>
-                    <option value="Feriado">Feriado</option>
-                  </select>
-                </div>
+              <div className="grid md:grid-cols-4 gap-3">
                 <div className="flex flex-col md:col-span-2">
-                  <label className="text-xs font-semibold text-slate-600 mb-1">Título (opcional)</label>
-                  <input type="text" value={eventTitle} placeholder={eventType === 'Ferias' ? 'Férias de Julho' : 'Dia da Independência'} onChange={e => setEventTitle(e.target.value)} className="border rounded px-2 py-1.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
+                  <label className="text-xs font-semibold text-slate-600 mb-1">Título</label>
+                  <input type="text" value={eventTitle} placeholder="Ex: Férias de Julho ou Dia da Independência" onChange={e => setEventTitle(e.target.value)} className="border rounded px-2 py-1.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
                 </div>
                 <div className="flex flex-col md:col-span-1">
                   <label className="text-xs font-semibold text-slate-600 mb-1">Início</label>
@@ -99,7 +91,7 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
                     {calendarSettings.events.map(ev => (
                       <li key={ev.id} className="flex items-center justify-between px-3 py-2 text-xs">
                         <div className="flex flex-col">
-                          <span className="font-semibold text-slate-700">{ev.title} <span className="text-slate-400 font-normal">({ev.type})</span></span>
+                          <span className="font-semibold text-slate-700">{ev.title}</span>
                           <span className="text-slate-500">{ev.start}{ev.end !== ev.start ? ` → ${ev.end}` : ''}</span>
                         </div>
                         <button onClick={() => removeEvent(ev.id)} className="text-red-600 hover:text-red-700 p-1" title="Remover"><Trash2 size={14} /></button>
