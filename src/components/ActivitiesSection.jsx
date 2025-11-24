@@ -9,6 +9,7 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
   const [newActivity, setNewActivity] = useState({ teacherId: '', subjectId: '', classId: '', quantity: '', doubleLesson: false });
   const [suggestion, setSuggestion] = useState(null);
   const [filter, setFilter] = useState('');
+  const [teacherFilter, setTeacherFilter] = useState('');
   const [editingActivityId, setEditingActivityId] = useState(null);
   const [editActivity, setEditActivity] = useState({ teacherId: '', subjectId: '', classId: '', quantity: 2, doubleLesson: false });
 
@@ -29,16 +30,35 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
     [data.activities]
   );
 
+  // Estatísticas por professor
+  const teacherStats = useMemo(() => {
+    if (!teacherFilter) return null;
+    const teacherActivities = data.activities.filter(a => a.teacherId === teacherFilter);
+    return {
+      totalLessons: teacherActivities.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0),
+      activitiesCount: teacherActivities.length,
+      classesCount: new Set(teacherActivities.map(a => a.classId)).size
+    };
+  }, [teacherFilter, data.activities]);
+
   const filteredActivities = useMemo(() => {
-    if (!debouncedFilter) return data.activities;
+    let activities = data.activities;
+    
+    // Filtro por professor
+    if (teacherFilter) {
+      activities = activities.filter(a => a.teacherId === teacherFilter);
+    }
+    
+    // Filtro por texto
+    if (!debouncedFilter) return activities;
     const searchLower = debouncedFilter.toLowerCase();
-    return data.activities.filter(act => {
+    return activities.filter(act => {
       const tName = data.teachers.find(t => t.id === act.teacherId)?.name.toLowerCase() || '';
       const sName = data.subjects.find(s => s.id === act.subjectId)?.name.toLowerCase() || '';
       const cName = data.classes.find(c => c.id === act.classId)?.name.toLowerCase() || '';
       return tName.includes(searchLower) || sName.includes(searchLower) || cName.includes(searchLower);
     });
-  }, [debouncedFilter, data.activities, data.teachers, data.subjects, data.classes]);
+  }, [debouncedFilter, teacherFilter, data.activities, data.teachers, data.subjects, data.classes]);
 
   const handleAddActivity = () => {
     if (!newActivity.teacherId || !newActivity.subjectId || !newActivity.classId) return;
@@ -118,6 +138,42 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
               <h3 className="text-2xl font-bold text-slate-700">{uniqueClasses} <span className="text-sm font-normal text-slate-400">/ {data.classes.length}</span></h3>
             </div>
          </div>
+      </div>
+
+      {/* Filtro por Professor */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+          <div className="flex-1">
+            <label htmlFor="teacher-filter" className="text-xs font-semibold text-slate-600 mb-1 block">Filtrar por Professor</label>
+            <select 
+              id="teacher-filter"
+              value={teacherFilter} 
+              onChange={e => setTeacherFilter(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Todos os professores</option>
+              {data.teachers.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+          {teacherFilter && teacherStats && (
+            <div className="flex gap-3 sm:gap-4 flex-wrap">
+              <div className="bg-blue-50 px-4 py-2 rounded-lg border border-blue-200">
+                <p className="text-[10px] text-blue-600 font-semibold uppercase">Qtde. Aulas</p>
+                <p className="text-xl font-bold text-blue-700">{teacherStats.totalLessons}</p>
+              </div>
+              <div className="bg-emerald-50 px-4 py-2 rounded-lg border border-emerald-200">
+                <p className="text-[10px] text-emerald-600 font-semibold uppercase">Atribuições</p>
+                <p className="text-xl font-bold text-emerald-700">{teacherStats.activitiesCount}</p>
+              </div>
+              <div className="bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-200">
+                <p className="text-[10px] text-indigo-600 font-semibold uppercase">Turmas</p>
+                <p className="text-xl font-bold text-indigo-700">{teacherStats.classesCount}</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="bg-gradient-to-br from-white to-slate-50 p-6 rounded-2xl shadow-sm border border-slate-200 shrink-0 relative overflow-hidden">

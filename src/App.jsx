@@ -24,7 +24,7 @@ const INITIAL_STATE = {
     { id: 'ts9', start: '19:00', end: '20:00', type: 'jantar' },
   ],
   teachers: [
-    { id: 't1', name: 'Ana Silva', unavailable: [], shifts: ['Manhã'] }, 
+    { id: 't1', name: 'Marisa N. S.', unavailable: [], shifts: ['Manhã'] }, 
     { id: 't2', name: 'Carlos Souza', unavailable: [], shifts: ['Integral (Manhã e Tarde)'] },
     { id: 't3', name: 'Maria Oliveira', unavailable: [], shifts: ['Tarde'] },
     { id: 't4', name: 'Roberto Santos', unavailable: [], shifts: ['Noite'] },
@@ -182,13 +182,14 @@ const App = () => {
                    <label className="text-xs font-semibold text-slate-600 mb-1">{viewMode === 'class' ? 'Selecione a Turma' : 'Selecione o Professor'}</label>
                    <select value={selectedEntity} onChange={e => setSelectedEntity(e.target.value)} className="border p-2 rounded text-sm bg-white shadow-sm min-w-[180px]">
                      <option value="">{viewMode === 'class' ? 'Escolha a turma...' : 'Escolha o professor...'}</option>
+                     <option value="all">📋 Todos</option>
                      {viewMode === 'class'
                        ? data.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
                        : data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                    </select>
                  </div>
                </div>
-               {selectedEntity && (
+               {selectedEntity && selectedEntity !== 'all' && (
                  <TimetableSection 
                    data={data} 
                    viewMode={viewMode} 
@@ -197,6 +198,42 @@ const App = () => {
                    setCalendarSettings={setCalendarSettings} 
                     showAgendaControls={false}
                   />
+               )}
+               {selectedEntity === 'all' && (
+                 <div className="space-y-4">
+                   {viewMode === 'class' 
+                     ? data.classes.map(cls => (
+                         <div key={cls.id} className="border-t-4 border-indigo-500 pt-4">
+                           <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+                             <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm">{cls.name}</span>
+                           </h3>
+                           <TimetableSection 
+                             data={data} 
+                             viewMode={viewMode} 
+                             selectedEntity={cls.id} 
+                             calendarSettings={calendarSettings} 
+                             setCalendarSettings={setCalendarSettings} 
+                             showAgendaControls={false}
+                           />
+                         </div>
+                       ))
+                     : data.teachers.map(teacher => (
+                         <div key={teacher.id} className="border-t-4 border-emerald-500 pt-4">
+                           <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+                             <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-sm">{teacher.name}</span>
+                           </h3>
+                           <TimetableSection 
+                             data={data} 
+                             viewMode={viewMode} 
+                             selectedEntity={teacher.id} 
+                             calendarSettings={calendarSettings} 
+                             setCalendarSettings={setCalendarSettings} 
+                             showAgendaControls={false}
+                           />
+                         </div>
+                       ))
+                   }
+                 </div>
                )}
              </div>
            )}
