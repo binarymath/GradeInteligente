@@ -67,14 +67,34 @@ const INITIAL_STATE = {
 
 const App = () => {
   const [data, setData] = useState(INITIAL_STATE);
+  // Restauração de navegação salva no localStorage (view, subView, viewMode, selectedEntity, sidebarOpen)
+  const getInitialNav = () => {
+    try {
+      const raw = localStorage.getItem('app_nav');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          view: parsed.view || 'generate',
+          subView: parsed.subView || 'teachers',
+          viewMode: parsed.viewMode || 'class',
+          selectedEntity: parsed.selectedEntity || '',
+          sidebarOpen: typeof parsed.sidebarOpen === 'boolean' ? parsed.sidebarOpen : true
+        };
+      }
+    } catch (e) {
+      // ignore and fall back to defaults
+    }
+    return { view: 'generate', subView: 'teachers', viewMode: 'class', selectedEntity: '', sidebarOpen: true };
+  };
+  const initialNav = getInitialNav();
   // Default view changed to 'generate' so Grade Inteligente is homepage
-  const [view, setView] = useState('generate');
-  const [subView, setSubView] = useState('teachers');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [view, setView] = useState(initialNav.view);
+  const [subView, setSubView] = useState(initialNav.subView);
+  const [sidebarOpen, setSidebarOpen] = useState(initialNav.sidebarOpen);
   const [generating, setGenerating] = useState(false);
   const [generationLog, setGenerationLog] = useState([]);
-  const [viewMode, setViewMode] = useState('class');
-  const [selectedEntity, setSelectedEntity] = useState('');
+  const [viewMode, setViewMode] = useState(initialNav.viewMode);
+  const [selectedEntity, setSelectedEntity] = useState(initialNav.selectedEntity);
   const [aiLoading, setAiLoading] = useState(false);
   const [calendarSettings, setCalendarSettings] = useState({
     schoolYearStart: '2025-02-01',
@@ -95,6 +115,16 @@ const App = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Persiste navegação para manter a página/visualização após reload
+  useEffect(() => {
+    try {
+      const nav = { view, subView, viewMode, selectedEntity, sidebarOpen };
+      localStorage.setItem('app_nav', JSON.stringify(nav));
+    } catch (e) {
+      // ignore quota or serialization errors
+    }
+  }, [view, subView, viewMode, selectedEntity, sidebarOpen]);
 
   const handleExportState = useCallback(() => exportBackup(data), [data]);
 
