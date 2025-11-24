@@ -16,9 +16,14 @@ import { DAYS } from '../utils';
  */
 export function exportPDF({ viewMode, selectedEntity, data, displayPeriods }) {
   const doc = new jsPDF({ orientation: 'landscape' });
-  const titleText = viewMode === 'class'
-    ? `Grade Horária - ${data.classes.find(c => c.id === selectedEntity)?.name}`
-    : `Grade Horária - Professor(a) ${data.teachers.find(t => t.id === selectedEntity)?.name}`;
+  let titleText = '';
+  if (viewMode === 'class') {
+    titleText = `Grade Horária - ${data.classes.find(c => c.id === selectedEntity)?.name}`;
+  } else if (viewMode === 'teacher') {
+    titleText = `Grade Horária - Professor(a) ${data.teachers.find(t => t.id === selectedEntity)?.name}`;
+  } else if (viewMode === 'subject') {
+    titleText = `Grade Horária - Matéria ${data.subjects.find(s => s.id === selectedEntity)?.name}`;
+  }
 
   doc.setFontSize(18);
   doc.text(titleText, 14, 22);
@@ -46,13 +51,22 @@ export function exportPDF({ viewMode, selectedEntity, data, displayPeriods }) {
           const teacher = data.teachers.find(t => t.id === entry.teacherId);
           cellContent = `${subj.name}\n(${teacher.name})`;
         }
-      } else {
+      } else if (viewMode === 'teacher') {
         const entry = Object.entries(data.schedule).find(([_, val]) => val.teacherId === selectedEntity && val.timeKey === timeKey);
         if (entry) {
           const item = entry[1];
           const subj = data.subjects.find(s => s.id === item.subjectId);
           const cls = data.classes.find(c => c.id === item.classId);
           cellContent = `${subj.name}\n(${cls.name})`;
+        }
+      } else if (viewMode === 'subject') {
+        const entries = Object.values(data.schedule).filter(val => val.subjectId === selectedEntity && val.timeKey === timeKey);
+        if (entries.length) {
+          cellContent = entries.map(e => {
+            const cls = data.classes.find(c => c.id === e.classId);
+            const teacher = data.teachers.find(t => t.id === e.teacherId);
+            return `${cls?.name} (${teacher?.name})`;
+          }).join('\n');
         }
       }
       row.push(cellContent);
@@ -85,6 +99,7 @@ export function exportExcel({ viewMode, selectedEntity, data }) {
   Object.entries(data.schedule).forEach(([key, slot]) => {
     if (viewMode === 'class' && slot.classId !== selectedEntity) return;
     if (viewMode === 'teacher' && slot.teacherId !== selectedEntity) return;
+    if (viewMode === 'subject' && slot.subjectId !== selectedEntity) return;
 
     const parts = key.split('-');
     const dayIdx = parseInt(parts[1]);

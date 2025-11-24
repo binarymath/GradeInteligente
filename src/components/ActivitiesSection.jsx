@@ -151,7 +151,7 @@ const ActivitiesSection = ({ data, setData, callGemini, aiLoading, setAiLoading 
               onChange={e => setTeacherFilter(e.target.value)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="">Todos os professores</option>
+              <option value="">Escolha o professor</option>
               {data.teachers.map(t => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}

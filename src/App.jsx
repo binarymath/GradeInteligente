@@ -132,7 +132,6 @@ const App = () => {
           <div className="px-4 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Operações</div>
           <SidebarItem icon={Calendar} label="Agenda e Grade" active={view === 'agenda'} onClick={() => { setView('agenda'); if(isMobile) setSidebarOpen(false); }} />
         </div>
-        <div className={`p-4 border-t border-slate-100 overflow-hidden whitespace-nowrap ${!sidebarOpen && !isMobile ? 'hidden' : 'block'}`}><div className="bg-slate-50 rounded-lg p-3 border border-slate-200"><h4 className="font-bold text-xs text-slate-800 mb-1">Dica Rápida</h4><p className="text-[10px] text-slate-600 leading-relaxed">Defina as H. Extra Classe dos professores na aba "Dados Básicos" antes de gerar o horário.</p></div></div>
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 bg-slate-100 transition-all duration-300">
@@ -176,16 +175,17 @@ const App = () => {
                    <select value={viewMode} onChange={e => { setViewMode(e.target.value); setSelectedEntity(''); }} className="border p-2 rounded text-sm bg-white shadow-sm">
                      <option value="class">Turmas</option>
                      <option value="teacher">Professores</option>
+                     <option value="subject">Matérias</option>
                    </select>
                  </div>
                  <div className="flex flex-col">
-                   <label className="text-xs font-semibold text-slate-600 mb-1">{viewMode === 'class' ? 'Selecione a Turma' : 'Selecione o Professor'}</label>
+                   <label className="text-xs font-semibold text-slate-600 mb-1">{viewMode === 'class' ? 'Selecione a Turma' : viewMode === 'teacher' ? 'Selecione o Professor' : 'Selecione a Matéria'}</label>
                    <select value={selectedEntity} onChange={e => setSelectedEntity(e.target.value)} className="border p-2 rounded text-sm bg-white shadow-sm min-w-[180px]">
-                     <option value="">{viewMode === 'class' ? 'Escolha a turma...' : 'Escolha o professor...'}</option>
+                     <option value="">{viewMode === 'class' ? 'Escolha a turma...' : viewMode === 'teacher' ? 'Escolha o professor...' : 'Escolha a matéria...'}</option>
                      <option value="all">📋 Todos</option>
-                     {viewMode === 'class'
-                       ? data.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
-                       : data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                     {viewMode === 'class' && data.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                     {viewMode === 'teacher' && data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                     {viewMode === 'subject' && data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                    </select>
                  </div>
                </div>
@@ -201,8 +201,7 @@ const App = () => {
                )}
                {selectedEntity === 'all' && (
                  <div className="space-y-4">
-                   {viewMode === 'class' 
-                     ? data.classes.map(cls => (
+                   {viewMode === 'class' && data.classes.map(cls => (
                          <div key={cls.id} className="border-t-4 border-indigo-500 pt-4">
                            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
                              <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm">{cls.name}</span>
@@ -216,8 +215,8 @@ const App = () => {
                              showAgendaControls={false}
                            />
                          </div>
-                       ))
-                     : data.teachers.map(teacher => (
+                       ))}
+                   {viewMode === 'teacher' && data.teachers.map(teacher => (
                          <div key={teacher.id} className="border-t-4 border-emerald-500 pt-4">
                            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
                              <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-sm">{teacher.name}</span>
@@ -231,7 +230,22 @@ const App = () => {
                              showAgendaControls={false}
                            />
                          </div>
-                       ))
+                       ))}
+                   {viewMode === 'subject' && data.subjects.map(subject => (
+                      <div key={subject.id} className="border-t-4 border-violet-500 pt-4">
+                        <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+                          <span className="bg-violet-100 text-violet-700 px-3 py-1 rounded-full text-sm">{subject.name}</span>
+                        </h3>
+                        <TimetableSection 
+                          data={data} 
+                          viewMode={viewMode} 
+                          selectedEntity={subject.id} 
+                          calendarSettings={calendarSettings} 
+                          setCalendarSettings={setCalendarSettings} 
+                          showAgendaControls={false}
+                        />
+                      </div>
+                   ))}
                    }
                  </div>
                )}

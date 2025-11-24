@@ -171,6 +171,23 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
                             </div>
                           );
                         }
+                      } else if (viewMode === 'subject') {
+                        const entries = Object.values(data.schedule).filter(val => val.subjectId === selectedEntity && val.timeKey === timeKey);
+                        if (entries.length > 0) {
+                          cellContent = (
+                            <div className="flex flex-col gap-1">
+                              {entries.map(e => {
+                                const cls = data.classes.find(c => c.id === e.classId);
+                                const teacher = data.teachers.find(t => t.id === e.teacherId);
+                                return (
+                                  <div key={e.classId + e.teacherId} className="text-[11px] leading-tight">
+                                    <span className="font-bold text-slate-700">{cls?.name}</span> <span className="text-slate-500">({teacher?.name})</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        }
                       }
                       return <td key={dayIdx} className="border p-2">{cellContent}</td>;
                     })

@@ -41,9 +41,10 @@ function cleanText(str) {
  * @param {Object} params.calendarSettings { schoolYearStart, schoolYearEnd, events }
  */
 export function exportICS({ viewMode, selectedEntity, data, calendarSettings }) {
-  const entity = viewMode === 'class'
-    ? data.classes.find(c => c.id === selectedEntity)
-    : data.teachers.find(t => t.id === selectedEntity);
+  let entity = null;
+  if (viewMode === 'class') entity = data.classes.find(c => c.id === selectedEntity);
+  else if (viewMode === 'teacher') entity = data.teachers.find(t => t.id === selectedEntity);
+  else if (viewMode === 'subject') entity = data.subjects.find(s => s.id === selectedEntity);
   if (!entity) return;
 
   const schoolStart = parseDateInput(calendarSettings.schoolYearStart);
@@ -73,6 +74,7 @@ export function exportICS({ viewMode, selectedEntity, data, calendarSettings }) 
   Object.entries(data.schedule).forEach(([key, slot]) => {
     if (viewMode === 'class' && slot.classId !== entity.id) return;
     if (viewMode === 'teacher' && slot.teacherId !== entity.id) return;
+    if (viewMode === 'subject' && slot.subjectId !== entity.id) return;
 
     const parts = key.split('-');
     const dayIdx = parseInt(parts[1]);
@@ -84,8 +86,18 @@ export function exportICS({ viewMode, selectedEntity, data, calendarSettings }) 
     const clsObj = data.classes.find(c => c.id === slot.classId);
     const teacher = data.teachers.find(t => t.id === slot.teacherId);
 
-    const summary = viewMode === 'class' ? subject.name : `${subject.name} (${clsObj.name})`;
-    const description = viewMode === 'class' ? `Professor(a): ${teacher.name}` : `Turma: ${clsObj.name}`;
+    let summary = '';
+    let description = '';
+    if (viewMode === 'class') {
+      summary = subject.name;
+      description = `Professor(a): ${teacher.name}`;
+    } else if (viewMode === 'teacher') {
+      summary = `${subject.name} (${clsObj.name})`;
+      description = `Turma: ${clsObj.name}`;
+    } else if (viewMode === 'subject') {
+      summary = `${subject.name} (${clsObj.name})`;
+      description = `Professor(a): ${teacher.name}`;
+    }
 
     let currentCheckDate = new Date(schoolStart);
     const targetJSDay = (dayIdx + 1) % 7;

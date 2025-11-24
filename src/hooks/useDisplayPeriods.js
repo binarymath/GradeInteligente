@@ -21,6 +21,10 @@ export function useDisplayPeriods({ data, viewMode, selectedEntity }) {
       }
       return periods;
     }
+    if (viewMode === 'subject') {
+      // Matérias não têm restrição de período; mostramos todos.
+      return periods;
+    }
     return periods;
   }, [data.timeSlots, data.classes, data.teachers, viewMode, selectedEntity]);
 }
