@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { Calendar, Plus, Trash2, Download } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Calendar, Plus, Trash2, Download, Calculator, FileText } from 'lucide-react';
 import { uid, DAYS } from '../utils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // Generates ICS for a specific class (turma) using global events
 const generateICSForClass = (data, calendarSettings, classId) => {
@@ -387,6 +389,181 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Calculadora de Aulas */}
+      <LessonCalculator data={data} calendarSettings={calendarSettings} />
+    </div>
+  );
+};
+
+const LessonCalculator = ({ data, calendarSettings }) => {
+  const [start, setStart] = useState(calendarSettings.schoolYearStart || '');
+  const [end, setEnd] = useState(calendarSettings.schoolYearEnd || '');
+
+  const parseDate = (str) => {
+    if (!str) return null;
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+  const schoolStart = useMemo(() => parseDate(calendarSettings.schoolYearStart), [calendarSettings.schoolYearStart]);
+  const schoolEnd = useMemo(() => parseDate(calendarSettings.schoolYearEnd), [calendarSettings.schoolYearEnd]);
+  const events = useMemo(() => (calendarSettings.events || []).map(e => ({ start: parseDate(e.start), end: parseDate(e.end || e.start) })), [calendarSettings.events]);
+
+  const isExcluded = (date) => {
+    return events.some(({ start, end }) => start && end && date >= start && date <= end);
+  };
+
+  const clampRange = (s, e) => {
+    let rs = s ? new Date(s) : schoolStart;
+    let re = e ? new Date(e) : schoolEnd;
+    if (rs < schoolStart) rs = new Date(schoolStart);
+    if (re > schoolEnd) re = new Date(schoolEnd);
+    return [rs, re];
+  };
+
+  const getFirstWeekdayOnOrAfter = (date, targetWeekday) => {
+    const d = new Date(date);
+    const diff = (targetWeekday - d.getDay() + 7) % 7;
+    d.setDate(d.getDate() + diff);
+    return d;
+  };
+
+  const countBySubject = useMemo(() => {
+    if (!schoolStart || !schoolEnd) return { map: new Map(), total: 0 };
+    const [rs, re] = clampRange(parseDate(start), parseDate(end));
+    const counts = new Map();
+    let total = 0;
+
+    Object.entries(data.schedule || {}).forEach(([key, slot]) => {
+      const parts = key.split('-');
+      const dayIdx = parseInt(parts[1]);
+      const slotIdx = parseInt(parts[2]);
+      const timeSlot = data.timeSlots[slotIdx];
+      if (!timeSlot || timeSlot.type !== 'aula') return;
+
+      const subjectId = slot.subjectId;
+      if (!subjectId) return;
+
+      // Map our internal weekdays (0..4 for Mon..Fri) to JS weekday (1..5)
+      const jsWeekday = (dayIdx + 1) % 7; // 1..5 (Mon..Fri)
+      const first = getFirstWeekdayOnOrAfter(rs, jsWeekday);
+      for (let cursor = new Date(first); cursor <= re; cursor.setDate(cursor.getDate() + 7)) {
+        if (cursor < rs) continue;
+        if (isExcluded(cursor)) continue;
+        counts.set(subjectId, (counts.get(subjectId) || 0) + 1);
+        total += 1;
+      }
+    });
+
+    return { map: counts, total };
+  }, [data.schedule, data.timeSlots, start, end, events, schoolStart, schoolEnd]);
+
+  // Year and 4 bimesters (split into 4 equal ranges)
+  const bimesterRanges = useMemo(() => {
+    if (!schoolStart || !schoolEnd) return [];
+    const ranges = [];
+    const totalDays = Math.floor((schoolEnd - schoolStart) / (1000*60*60*24)) + 1;
+    const chunk = Math.floor(totalDays / 4);
+    let curStart = new Date(schoolStart);
+    for (let i = 0; i < 4; i++) {
+      const curEnd = new Date(i === 3 ? schoolEnd : new Date(curStart.getTime() + (chunk - 1) * 86400000));
+      ranges.push([new Date(curStart), curEnd]);
+      curStart = new Date(curEnd.getTime() + 86400000);
+    }
+    return ranges;
+  }, [schoolStart, schoolEnd]);
+
+  const subjectsList = useMemo(() => data.subjects || [], [data.subjects]);
+
+  const handleQuickRange = (idx) => {
+    if (idx === 'year') {
+      setStart(fmt(schoolStart));
+      setEnd(fmt(schoolEnd));
+    } else {
+      const [s, e] = bimesterRanges[idx];
+      setStart(fmt(s));
+      setEnd(fmt(e));
+    }
+  };
+
+  const exportPDF = () => {
+    const doc = new jsPDF();
+    const periodStr = `${start || fmt(schoolStart)} a ${end || fmt(schoolEnd)}`;
+    doc.setFontSize(14);
+    doc.text('Contagem de Aulas por Matéria', 14, 16);
+    doc.setFontSize(10);
+    doc.text(`Período: ${periodStr}`, 14, 22);
+
+    const rows = subjectsList.map(s => [s.name, countBySubject.map.get(s.id) || 0]);
+    autoTable(doc, {
+      head: [['Matéria', 'Aulas no Período']],
+      body: rows,
+      startY: 28,
+      styles: { fontSize: 10 }
+    });
+
+    const finalY = doc.lastAutoTable.finalY || 28;
+    doc.setFontSize(10);
+    doc.text(`Total de aulas: ${countBySubject.total}`, 14, finalY + 8);
+
+    doc.save('Contagem_Aulas.pdf');
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
+      <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calculator className="w-5 h-5 text-violet-600"/> Calculadora de Aulas</h4>
+      <p className="text-[11px] text-slate-500">Selecione o período (bimestre) para contar aulas por matéria, já considerando eventos de exclusão.</p>
+      <div className="grid md:grid-cols-3 gap-3">
+        <div className="flex flex-col">
+          <label className="text-xs font-semibold text-slate-600 mb-1">Início do Período</label>
+          <input type="date" value={start} onChange={e => setStart(e.target.value)} className="border rounded px-2 py-1.5 text-sm bg-slate-50 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+        </div>
+        <div className="flex flex-col">
+          <label className="text-xs font-semibold text-slate-600 mb-1">Fim do Período</label>
+          <input type="date" value={end} onChange={e => setEnd(e.target.value)} className="border rounded px-2 py-1.5 text-sm bg-slate-50 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
+        </div>
+        <div className="flex flex-col justify-end">
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => handleQuickRange(0)} className="px-2 py-1.5 text-xs rounded bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">1º Bimestre</button>
+            <button onClick={() => handleQuickRange(1)} className="px-2 py-1.5 text-xs rounded bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">2º</button>
+            <button onClick={() => handleQuickRange(2)} className="px-2 py-1.5 text-xs rounded bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">3º</button>
+            <button onClick={() => handleQuickRange(3)} className="px-2 py-1.5 text-xs rounded bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">4º</button>
+            <button onClick={() => handleQuickRange('year')} className="px-2 py-1.5 text-xs rounded bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100">Ano todo</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="bg-slate-50 border border-slate-200 rounded p-3">
+          <div className="text-xs text-slate-500">Total no Período</div>
+          <div className="text-2xl font-extrabold text-slate-800">{countBySubject.total}</div>
+        </div>
+        <div className="bg-slate-50 border border-slate-200 rounded p-3 lg:col-span-2 flex items-center justify-between">
+          <div className="text-xs text-slate-500">Exportação</div>
+          <button onClick={exportPDF} className="flex items-center gap-2 bg-violet-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-violet-700"><FileText size={14}/> PDF (todas as matérias)</button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-left border-collapse">
+          <thead>
+            <tr>
+              <th className="border p-2 bg-slate-50">Matéria</th>
+              <th className="border p-2 bg-slate-50 w-32 text-right">Aulas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {subjectsList.map(s => (
+              <tr key={s.id}>
+                <td className="border p-2">{s.name}</td>
+                <td className="border p-2 text-right font-semibold">{countBySubject.map.get(s.id) || 0}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
