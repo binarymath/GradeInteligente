@@ -16,7 +16,8 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const [editingClassId, setEditingClassId] = useState(null);
   const [newClassName, setNewClassName] = useState('');
   const [newClassShift, setNewClassShift] = useState('Manhã');
-  const [selectedClassSlots, setSelectedClassSlots] = useState([]); 
+  const [selectedClassSlots, setSelectedClassSlots] = useState([]);
+  const [classNames, setClassNames] = useState(['']); 
 
   const allSlots = getAllSlots(data.timeSlots);
 
@@ -117,6 +118,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
     setSelectedClassSlots([]);
     setEditingClassId(null);
     setIsAddingClass(false);
+    setClassNames(['']);
   };
 
   const handleEditClass = (cls) => {
@@ -124,27 +126,38 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
     setNewClassShift(cls.shift);
     setSelectedClassSlots(cls.activeSlots || []);
     setEditingClassId(cls.id);
+    setClassNames([cls.name]);
     setIsAddingClass(true);
   };
 
   const handleSaveClass = () => {
-    if (!newClassName.trim()) return;
-
-    const classData = {
-      name: newClassName,
-      shift: newClassShift,
-      activeSlots: selectedClassSlots
-    };
-
     if (editingClassId) {
+      // Modo edição: salva uma única turma
+      if (!newClassName.trim()) return;
+      const classData = {
+        name: newClassName,
+        shift: newClassShift,
+        activeSlots: selectedClassSlots
+      };
       setData(prev => ({
         ...prev,
         classes: prev.classes.map(c => c.id === editingClassId ? { ...c, ...classData } : c)
       }));
     } else {
+      // Modo criação: cria múltiplas turmas com os mesmos horários
+      const validNames = classNames.filter(name => name.trim() !== '');
+      if (validNames.length === 0) return;
+
+      const newClasses = validNames.map(name => ({
+        id: uid(),
+        name: name.trim(),
+        shift: newClassShift,
+        activeSlots: selectedClassSlots
+      }));
+
       setData(prev => ({
         ...prev,
-        classes: [...prev.classes, { id: uid(), ...classData }]
+        classes: [...prev.classes, ...newClasses]
       }));
     }
     resetClassForm();
@@ -167,9 +180,9 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-auto">
       <div className="flex border-b border-slate-200 overflow-x-auto scrollbar-elegant">
-        <button onClick={() => setSubView('teachers')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium whitespace-nowrap ${subView === 'teachers' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>Professores</button>
-        <button onClick={() => setSubView('subjects')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium whitespace-nowrap ${subView === 'subjects' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>Matérias</button>
         <button onClick={() => setSubView('classes')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium whitespace-nowrap ${subView === 'classes' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>Turmas</button>
+        <button onClick={() => setSubView('subjects')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium whitespace-nowrap ${subView === 'subjects' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>Matérias</button>
+        <button onClick={() => setSubView('teachers')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium whitespace-nowrap ${subView === 'teachers' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>Professores</button>
       </div>
 
       <div className="p-4 sm:p-6">
@@ -451,8 +464,54 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                   <div className="flex flex-col gap-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">Nome da Turma</label>
-                        <input type="text" placeholder="Ex: 6º Ano A" className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500" value={newClassName} onChange={e => setNewClassName(e.target.value)} />
+                        <label className="block text-xs font-bold text-slate-500 mb-1">
+                          {editingClassId ? 'Nome da Turma' : 'Nomes das Turmas (uma por linha)'}
+                        </label>
+                        {editingClassId ? (
+                          <input 
+                            type="text" 
+                            placeholder="Ex: 6º Ano A" 
+                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500" 
+                            value={newClassName} 
+                            onChange={e => setNewClassName(e.target.value)} 
+                          />
+                        ) : (
+                          <div className="space-y-2">
+                            {classNames.map((name, idx) => (
+                              <div key={idx} className="flex gap-2">
+                                <input
+                                  type="text"
+                                  placeholder={`Ex: ${idx === 0 ? '6º Ano A' : '6º Ano B'}`}
+                                  className="flex-1 border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
+                                  value={name}
+                                  onChange={e => {
+                                    const newNames = [...classNames];
+                                    newNames[idx] = e.target.value;
+                                    setClassNames(newNames);
+                                  }}
+                                />
+                                {classNames.length > 1 && (
+                                  <button
+                                    onClick={() => setClassNames(classNames.filter((_, i) => i !== idx))}
+                                    className="text-slate-400 hover:text-red-500 transition-colors p-2"
+                                    title="Remover"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            <button
+                              onClick={() => setClassNames([...classNames, ''])}
+                              className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                            >
+                              <Plus size={14} /> Adicionar mais uma turma
+                            </button>
+                            <p className="text-[10px] text-slate-400 mt-1">
+                              Todas as turmas terão o mesmo turno e horários selecionados
+                            </p>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-slate-500 mb-1">Turno</label>

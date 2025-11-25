@@ -5,11 +5,13 @@ import { useDebounce } from '../hooks/useDebounce';
 
 const ActivitiesSection = ({ data, setData }) => {
   const [newActivity, setNewActivity] = useState({ teacherId: '', subjectId: '', classId: '', quantity: '', doubleLesson: false });
+  const [multipleActivities, setMultipleActivities] = useState([{ subjectId: '', classId: '', quantity: '', doubleLesson: false }]);
   // IA removida: mantemos somente estados necessários ao formulário
   const [filter, setFilter] = useState('');
   const [teacherFilter, setTeacherFilter] = useState('');
   const [editingActivityId, setEditingActivityId] = useState(null);
   const [editActivity, setEditActivity] = useState({ teacherId: '', subjectId: '', classId: '', quantity: 2, doubleLesson: false });
+  const [bulkMode, setBulkMode] = useState(false);
 
   const debouncedFilter = useDebounce(filter, 300);
 
@@ -59,12 +61,39 @@ const ActivitiesSection = ({ data, setData }) => {
   }, [debouncedFilter, teacherFilter, data.activities, data.teachers, data.subjects, data.classes]);
 
   const handleAddActivity = () => {
-    if (!newActivity.teacherId || !newActivity.subjectId || !newActivity.classId) return;
-    setData(prev => ({
-      ...prev,
-      activities: [...prev.activities, { ...newActivity, id: uid(), split: 1 }]
-    }));
-    setNewActivity({ teacherId: '', subjectId: '', classId: '', quantity: '', doubleLesson: false });
+    if (bulkMode) {
+      // Modo múltiplo: cria várias atividades para o mesmo professor
+      if (!newActivity.teacherId) return;
+      const validActivities = multipleActivities.filter(act => act.subjectId && act.classId && act.quantity);
+      if (validActivities.length === 0) return;
+      
+      const newActivities = validActivities.map(act => ({
+        id: uid(),
+        teacherId: newActivity.teacherId,
+        subjectId: act.subjectId,
+        classId: act.classId,
+        quantity: act.quantity,
+        doubleLesson: act.doubleLesson,
+        split: 1
+      }));
+      
+      setData(prev => ({
+        ...prev,
+        activities: [...prev.activities, ...newActivities]
+      }));
+      
+      setNewActivity({ teacherId: '', subjectId: '', classId: '', quantity: '', doubleLesson: false });
+      setMultipleActivities([{ subjectId: '', classId: '', quantity: '', doubleLesson: false }]);
+      setBulkMode(false);
+    } else {
+      // Modo simples: cria uma única atividade
+      if (!newActivity.teacherId || !newActivity.subjectId || !newActivity.classId) return;
+      setData(prev => ({
+        ...prev,
+        activities: [...prev.activities, { ...newActivity, id: uid(), split: 1 }]
+      }));
+      setNewActivity({ teacherId: '', subjectId: '', classId: '', quantity: '', doubleLesson: false });
+    }
   };
 
   const startEditActivity = (act) => {
@@ -162,12 +191,21 @@ const ActivitiesSection = ({ data, setData }) => {
              <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} className="text-slate-400"/> Vincule Professor, Matéria e Turma abaixo.</p>
            </div>
            <div className="flex items-center gap-3">
+             <button
+               onClick={() => setBulkMode(!bulkMode)}
+               className={`text-xs px-3 py-2 rounded-lg font-medium transition-all flex items-center gap-1 ${bulkMode ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+             >
+               <Layers size={14} />
+               {bulkMode ? 'Modo Múltiplo Ativo' : 'Cadastro Múltiplo'}
+             </button>
              <div className="hidden md:flex items-center gap-2 text-[10px] text-slate-400">
                <span className="inline-flex items-center gap-1"><Layers size={12} className="text-purple-500"/> Aulas Duplas</span>
              </div>
            </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-5 relative z-10">
+        {!bulkMode ? (
+          // MODO SIMPLES: Um formulário único
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-5 relative z-10">
            <div className="xl:col-span-3 group">
              <label htmlFor="new-activity-teacher" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><Users size={12} className="text-blue-500"/> Professor</label>
              <div className="relative">
@@ -231,7 +269,6 @@ const ActivitiesSection = ({ data, setData }) => {
                value={newActivity.quantity} 
                onChange={e => { const val = e.target.value; setNewActivity({ ...newActivity, quantity: val === '' ? '' : parseInt(val) }); }} 
              />
-             {/* Popover IA removido */}
            </div>
            <div className="xl:col-span-2 flex flex-col items-center gap-4">
              <div className="flex items-center gap-2 -mt-1">
@@ -246,15 +283,128 @@ const ActivitiesSection = ({ data, setData }) => {
                  htmlFor="doubleLesson"
                  className={`text-[11px] font-semibold flex items-center gap-1 cursor-pointer px-2 py-1 rounded transition-colors ${newActivity.doubleLesson ? 'bg-purple-100 text-purple-700 border border-purple-300' : 'text-slate-600 hover:bg-slate-100'}`}
                >
-                 <Layers size={12} className={newActivity.doubleLesson ? 'text-purple-600' : 'text-purple-500'} /> Você prefere aula dupla
+                 <Layers size={12} className={newActivity.doubleLesson ? 'text-purple-600' : 'text-purple-500'} /> Aula dupla
                </label>
              </div>
              <button onClick={handleAddActivity} className="group mx-auto bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl px-6 py-3 text-sm font-bold tracking-wide hover:from-blue-500 hover:to-indigo-500 transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-xl active:scale-[0.97]">
-               <Plus size={18} className="group-hover:rotate-12 transition-transform"/> Adicionar Atividade
+               <Plus size={18} className="group-hover:rotate-12 transition-transform"/> Adicionar
              </button>
-             <div className="text-[10px] text-slate-400 flex items-center gap-1">Após adicionar, o formulário é resetado automaticamente.</div>
            </div>
-        </div>
+          </div>
+        ) : (
+          // MODO MÚLTIPLO: Professor único + múltiplas atribuições
+          <div className="space-y-4 relative z-10">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <label htmlFor="bulk-teacher" className="text-xs font-semibold text-blue-700 mb-2 flex items-center gap-1">
+                <Users size={14} className="text-blue-600"/> Professor (aplicado a todas as atribuições)
+              </label>
+              <select 
+                id="bulk-teacher"
+                className="w-full border border-blue-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white" 
+                value={newActivity.teacherId} 
+                onChange={e => setNewActivity({...newActivity, teacherId: e.target.value})}
+              >
+                <option value="">Selecione o professor...</option>
+                {data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+
+            <div className="space-y-3">
+              {multipleActivities.map((act, idx) => (
+                <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-3 p-3 bg-white/80 rounded-lg border border-slate-200">
+                  <div className="md:col-span-4">
+                    <label className="text-[10px] font-semibold text-slate-600 mb-1 block">Matéria</label>
+                    <select 
+                      className="w-full border border-slate-300 rounded px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500" 
+                      value={act.subjectId} 
+                      onChange={e => {
+                        const updated = [...multipleActivities];
+                        updated[idx].subjectId = e.target.value;
+                        setMultipleActivities(updated);
+                      }}
+                    >
+                      <option value="">Selecione...</option>
+                      {data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="md:col-span-3">
+                    <label className="text-[10px] font-semibold text-slate-600 mb-1 block">Turma</label>
+                    <select 
+                      className="w-full border border-slate-300 rounded px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
+                      value={act.classId} 
+                      onChange={e => {
+                        const updated = [...multipleActivities];
+                        updated[idx].classId = e.target.value;
+                        setMultipleActivities(updated);
+                      }}
+                    >
+                      <option value="">Selecione...</option>
+                      {data.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-[10px] font-semibold text-slate-600 mb-1 block">Qtd. Aulas</label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="10" 
+                      placeholder="0"
+                      className="w-full border border-slate-300 rounded px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-center font-semibold" 
+                      value={act.quantity} 
+                      onChange={e => {
+                        const updated = [...multipleActivities];
+                        updated[idx].quantity = e.target.value === '' ? '' : parseInt(e.target.value);
+                        setMultipleActivities(updated);
+                      }} 
+                    />
+                  </div>
+                  <div className="md:col-span-2 flex items-end gap-2">
+                    <label className="flex items-center gap-1 cursor-pointer text-xs">
+                      <input
+                        type="checkbox"
+                        checked={act.doubleLesson}
+                        onChange={e => {
+                          const updated = [...multipleActivities];
+                          updated[idx].doubleLesson = e.target.checked;
+                          setMultipleActivities(updated);
+                        }}
+                        className="h-3 w-3 rounded border-slate-300 text-purple-600"
+                      />
+                      <span className="text-[10px]">Dupla</span>
+                    </label>
+                    {multipleActivities.length > 1 && (
+                      <button
+                        onClick={() => setMultipleActivities(multipleActivities.filter((_, i) => i !== idx))}
+                        className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                        title="Remover"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setMultipleActivities([...multipleActivities, { subjectId: '', classId: '', quantity: '', doubleLesson: false }])}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors"
+                >
+                  <Plus size={14} /> Adicionar outra atribuição
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button 
+                onClick={handleAddActivity} 
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl px-6 py-3 text-sm font-bold hover:from-blue-500 hover:to-indigo-500 transition-all flex items-center gap-2 shadow-md hover:shadow-xl"
+              >
+                <Plus size={18} /> Salvar Todas as Atribuições
+              </button>
+            </div>
+          </div>
+        )}
         <div className="mt-6 rounded-lg bg-white/60 backdrop-blur p-3 border border-slate-200 text-[11px] flex flex-wrap gap-3">
            <div className="flex items-center gap-1"><Users size={12} className="text-blue-500"/> <span className="font-medium">{newActivity.teacherId ? data.teachers.find(t => t.id === newActivity.teacherId)?.name : 'Professor não selecionado'}</span></div>
            <div className="flex items-center gap-1"><BookOpen size={12} className="text-emerald-500"/> <span className="font-medium">{newActivity.subjectId ? data.subjects.find(s => s.id === newActivity.subjectId)?.name : 'Matéria não selecionada'}</span></div>

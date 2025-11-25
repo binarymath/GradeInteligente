@@ -218,7 +218,6 @@ Todos os dados iniciais e configurações estão centralizados em `App.jsx`. Par
 ### 🎯 Próximas Melhorias
 - Interface de edição manual da grade gerada
 - Dashboard com estatísticas e visualizações
-- Suporte a múltiplas escolas/unidades
 - Histórico de versões de grades
 - Notificações de conflitos em tempo real
 - Modo de comparação entre grades

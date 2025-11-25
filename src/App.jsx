@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { 
-  Layout, Settings, Clock, BookOpen, Calendar, Menu, X, ChevronLeft, ChevronRight, Upload, Download, AlertTriangle 
+  Layout, Settings, Clock, BookOpen, Calendar, Menu, X, ChevronLeft, ChevronRight, Upload, Download, AlertTriangle, Info, Edit3 
 } from 'lucide-react';
 import { DAYS } from './utils';
 import SidebarItem from './components/SidebarItem';
@@ -9,6 +9,8 @@ import DataInputSection from './components/DataInputSection';
 import ActivitiesSection from './components/ActivitiesSection';
 import TimetableSection from './components/TimetableSection';
 import AgendaSection from './components/AgendaSection';
+import AboutSection from './components/AboutSection';
+import ManualEditSection from './components/ManualEditSection';
 import { exportBackup, importBackup } from './services/stateService';
 import { generateScheduleAsync } from './services/scheduleService';
 
@@ -141,11 +143,12 @@ const App = () => {
         </div>
         <div className={`flex-1 py-4 space-y-1 overflow-hidden whitespace-nowrap ${!sidebarOpen && !isMobile ? 'hidden' : 'block'} overflow-y-auto`}>
           <div className="px-4 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Menu Principal</div>
-          {/* Moved Grade Inteligente to top and kept other items below */}
-          <SidebarItem icon={Calendar} label="Grade Inteligente" active={view === 'generate'} onClick={() => { setView('generate'); if(isMobile) setSidebarOpen(false); }} />
-          <SidebarItem icon={Clock} label="Config. Horários" active={view === 'data' && subView === 'timeSettings'} onClick={() => { setView('data'); setSubView('timeSettings'); if(isMobile) setSidebarOpen(false); }} />
-          <SidebarItem icon={Settings} label="Inserções" active={view === 'data' && subView !== 'timeSettings'} onClick={() => { setView('data'); setSubView('teachers'); if(isMobile) setSidebarOpen(false); }} />
+          <SidebarItem icon={Info} label="Sobre o Sistema" active={view === 'about'} onClick={() => { setView('about'); if(isMobile) setSidebarOpen(false); }} />
+          <SidebarItem icon={Clock} label="Configure os Horários" active={view === 'data' && subView === 'timeSettings'} onClick={() => { setView('data'); setSubView('timeSettings'); if(isMobile) setSidebarOpen(false); }} />
+          <SidebarItem icon={Settings} label="Cadastro" active={view === 'data' && subView !== 'timeSettings'} onClick={() => { setView('data'); setSubView('teachers'); if(isMobile) setSidebarOpen(false); }} />
           <SidebarItem icon={BookOpen} label="Atribuições" active={view === 'activities'} onClick={() => { setView('activities'); if(isMobile) setSidebarOpen(false); }} />
+          <SidebarItem icon={Calendar} label="Gerar/Visualizar" active={view === 'generate'} onClick={() => { setView('generate'); if(isMobile) setSidebarOpen(false); }} />
+          <SidebarItem icon={Edit3} label="Edição Manual" active={view === 'manualEdit'} onClick={() => { setView('manualEdit'); if(isMobile) setSidebarOpen(false); }} />
           <div className="my-4 border-t border-slate-100"></div>
           <div className="px-4 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Operações</div>
           <SidebarItem icon={Calendar} label="Agenda e Grade" active={view === 'agenda'} onClick={() => { setView('agenda'); if(isMobile) setSidebarOpen(false); }} />
@@ -157,7 +160,7 @@ const App = () => {
           <div className="flex items-center gap-4 min-w-0">
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-md"><Menu size={24} /></button>
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:block text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 transition-colors" title={sidebarOpen ? "Fechar Menu" : "Abrir Menu"}>{sidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}</button>
-            <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2 truncate">{view === 'data' && subView === 'timeSettings' ? 'Configuração de Horários' : view === 'data' ? 'Dados Institucionais' : view === 'activities' ? 'Atribuições' : view === 'agenda' ? 'Agenda e Grade' : 'Grade Inteligente'}</h1>
+            <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2 truncate">{view === 'about' ? 'Sobre o Sistema' : view === 'data' && subView === 'timeSettings' ? 'Configuração de Horários' : view === 'data' ? 'Dados Institucionais' : view === 'activities' ? 'Atribuições' : view === 'manualEdit' ? 'Edição Manual da Grade' : view === 'agenda' ? 'Agenda e Grade' : 'Gerar/Visualizar Grade'}</h1>
           </div>
           <div className="flex items-center gap-4 shrink-0">
              <input type="file" ref={fileInputRef} onChange={handleImportState} style={{display: 'none'}} accept=".json" />
@@ -166,9 +169,11 @@ const App = () => {
           </div>
         </header>
         <div className="flex-1 p-4 lg:p-8 overflow-y-auto">
+           {view === 'about' && <AboutSection />}
            {view === 'data' && subView === 'timeSettings' && <TimeSettingsSection data={data} setData={setData} />}
            {view === 'data' && subView !== 'timeSettings' && <DataInputSection data={data} setData={setData} subView={subView} setSubView={setSubView} />}
            {view === 'activities' && <ActivitiesSection data={data} setData={setData} />}
+           {view === 'manualEdit' && <ManualEditSection data={data} setData={setData} />}
            {view === 'generate' && (
              <div className="flex flex-col gap-4">
                <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-slate-200">

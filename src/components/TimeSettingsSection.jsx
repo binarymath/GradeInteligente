@@ -3,7 +3,7 @@ import { Plus, BookOpen, Coffee, Utensils, ArrowUp, ArrowDown, Trash2, Pencil, X
 import { uid } from '../utils';
 
 const TimeSettingsSection = ({ data, setData }) => {
-  const [newSlot, setNewSlot] = useState({ start: '', end: '', type: 'aula' });
+  const [newSlot, setNewSlot] = useState({ start: '', end: '', type: '', shift: '' });
   const [shiftFilter, setShiftFilter] = useState('Todos');
   const [editingId, setEditingId] = useState(null);
   const [editSlot, setEditSlot] = useState({ start: '', end: '', type: 'aula', shift: 'Manhã' });
@@ -46,11 +46,21 @@ const TimeSettingsSection = ({ data, setData }) => {
   }, [shiftFilter, data.timeSlots]);
 
   const handleAddSlot = () => {
-    if (!newSlot.start || !newSlot.end) return;
+    if (!newSlot.start || !newSlot.end || !newSlot.type) return;
+    const slotData = {
+      id: uid(),
+      start: newSlot.start,
+      end: newSlot.end,
+      type: newSlot.type
+    };
+    if (newSlot.shift) {
+      slotData.shift = newSlot.shift;
+    }
     setData(prev => ({
       ...prev,
-      timeSlots: [...prev.timeSlots, { id: uid(), ...newSlot }]
+      timeSlots: [...prev.timeSlots, slotData]
     }));
+    setNewSlot({ start: '', end: '', type: '', shift: '' });
   };
 
   const startEdit = (slot) => {
@@ -107,7 +117,7 @@ const TimeSettingsSection = ({ data, setData }) => {
         </div>
         <p className="text-sm text-slate-500 mb-6">Defina os blocos de tempo e o tipo global. Você pode filtrar pelos turnos para facilitar a visualização.</p>
         
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200">
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200">
            <div className="col-span-1">
              <label className="block text-xs font-semibold text-slate-500 mb-1">Início</label>
              <input type="time" className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={newSlot.start} onChange={e => setNewSlot({...newSlot, start: e.target.value})} />
@@ -119,10 +129,22 @@ const TimeSettingsSection = ({ data, setData }) => {
            <div className="col-span-1">
              <label className="block text-xs font-semibold text-slate-500 mb-1">Tipo</label>
              <select className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={newSlot.type} onChange={e => setNewSlot({...newSlot, type: e.target.value})}>
+               <option value="">Escolha o tipo</option>
                <option value="aula">Aula</option>
                <option value="intervalo">Intervalo</option>
                <option value="almoco">Almoço</option>
                <option value="jantar">Jantar</option>
+             </select>
+           </div>
+           <div className="col-span-1">
+             <label className="block text-xs font-semibold text-slate-500 mb-1">Turno</label>
+             <select className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={newSlot.shift} onChange={e => setNewSlot({...newSlot, shift: e.target.value})}>
+               <option value="">Automático</option>
+               <option value="Manhã">Manhã</option>
+               <option value="Tarde">Tarde</option>
+               <option value="Noite">Noite</option>
+               <option value="Integral (Manhã e Tarde)">Integral (Manhã e Tarde)</option>
+               <option value="Integral (Tarde e Noite)">Integral (Tarde e Noite)</option>
              </select>
            </div>
            <button onClick={handleAddSlot} className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"><Plus size={18} /> Adicionar</button>
