@@ -75,3 +75,4 @@ temp/
 /*.pdf
 /*.xlsx
 
+.vercel
