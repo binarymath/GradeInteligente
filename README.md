@@ -257,6 +257,7 @@ Contribuições são bem-vindas! Siga estas etapas:
 ## 📬 Contato
 
 [![GitHub](https://img.shields.io/badge/GitHub-binarymath-181717?style=for-the-badge&logo=github)](https://github.com/binarymath)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-fabiomatech-0A66C2?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/fabiomatech/)
 
 ---
 
