@@ -63,6 +63,14 @@ class ScheduleManager {
       const lessonsOnDay = bookedEntries.filter(e => e.teacherId === teacherId && e.dayIdx === dayIdx).length;
       if (lessonsOnDay >= 3) return false; // Nunca mais de 3 aulas por dia
 
+      // Verificar se o professor já deu essa matéria neste dia (nunca mais de 1 aula da mesma matéria por dia)
+      const sameSubjectOnDay = bookedEntries.filter(e => 
+        e.teacherId === teacherId && 
+        e.dayIdx === dayIdx && 
+        e.subjectId === subjectId
+      ).length;
+      if (sameSubjectOnDay >= 1) return false; // Nunca mais de 1 aula da mesma matéria por dia
+
       return true;
     };
 
@@ -126,6 +134,7 @@ class ScheduleManager {
       bookedEntries.push({
         teacherId: activity.teacherId,
         classId: activity.classId,
+        subjectId: activity.subjectId,
         dayIdx,
         slotIdx,
         start: timeSlots[slotIdx].start,
