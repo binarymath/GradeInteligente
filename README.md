@@ -214,9 +214,9 @@ Todos os dados iniciais e configurações estão centralizados em `App.jsx`. Par
 - ✅ Suite de testes automatizados
 - ✅ Distribuição pedagógica equilibrada
 - ✅ Limitação de repetição de matérias
+- ✅ Interface de edição manual da grade (inclui modo multi-turmas)
 
 ### 🎯 Próximas Melhorias
-- Interface de edição manual da grade gerada
 - Dashboard com estatísticas e visualizações
 - Histórico de versões de grades
 - Notificações de conflitos em tempo real
@@ -257,6 +257,26 @@ Contribuições são bem-vindas! Siga estas etapas:
 ## 📄 Licença
 
 Este projeto está sob análise de licenciamento. Para uso comercial ou distribuição, entre em contato.
+
+---
+
+## 🔐 Privacidade
+
+O sistema não coleta nem envia dados pessoais para servidores. Todo processamento ocorre localmente no navegador.
+
+**Escopo atual:**
+- Nomes de professores são ilustrativos/abreviados
+- Não há dados de alunos ou informações sensíveis
+- Turmas e matérias são identificadores pedagógicos, não pessoais
+- Exportações (PDF, Excel, ICS) são geradas 100% localmente
+
+**Sem rastreamento:** nenhuma integração de analytics, cookies de perfil ou publicidade.
+
+**Armazenamento:** memória e (quando usado) `localStorage`; o usuário controla exclusão limpando dados ou removendo arquivos exportados.
+
+**Conflitos e geração:** toda lógica é executada client-side, sem transmissão externa.
+
+Para detalhes e futuras expansões consulte `PRIVACY.md`.
 
 ---
 
