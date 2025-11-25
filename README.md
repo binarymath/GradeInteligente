@@ -88,11 +88,9 @@ Acesse normalmente via endereço mostrado pelo Vite (ex: `http://localhost:5173`
 - jsPDF + jspdf-autotable (PDF)
 - xlsx + file-saver (Excel)
 
-## 🔐 Arquivos Sensíveis
-Variáveis de ambiente e chaves (ex: integrações futuras) devem permanecer em `.env` (ignorado).
 
 ## 🧩 Próximos Passos / Roadmap
-- [ ] UI de exportações: botões individuais (ícones).
+- [x] UI de exportações: botões individuais (ícones) — implementado com ExportButtons (PDF, Excel, ICS).
 - [ ] Algoritmo automático de geração/otimização de grade (uso de `ScheduleManager`).
 - [x] Validação de conflitos (professor em duas turmas simultâneas) — implementado com detecção de sobreposição e motivo intuitivo.
 - [ ] Agrupamento de aulas duplas na geração final.
