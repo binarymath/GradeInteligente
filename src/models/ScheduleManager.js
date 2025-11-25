@@ -58,7 +58,17 @@ class ScheduleManager {
       if (teacherSchedule[teacherId]?.[timeKey]) return false;
       if (classSchedule[classId]?.[timeKey]) return false;
 
+      // Verificar limite de aulas por dia para o professor (máximo 3, preferencial 2)
+      const teacherDayKey = `${teacherId}-${dayIdx}`;
+      const lessonsOnDay = bookedEntries.filter(e => e.teacherId === teacherId && e.dayIdx === dayIdx).length;
+      if (lessonsOnDay >= 3) return false; // Nunca mais de 3 aulas por dia
+
       return true;
+    };
+
+    // Calcular quantas aulas um professor já tem em um dia
+    const getTeacherLessonsOnDay = (teacherId, dayIdx) => {
+      return bookedEntries.filter(e => e.teacherId === teacherId && e.dayIdx === dayIdx).length;
     };
 
     // Helper para verificar se dois slots são consecutivos
@@ -69,13 +79,27 @@ class ScheduleManager {
     };
 
     // Calcular score de preferência para um slot
-    const getPreferenceScore = (subjectId, dayIdx, slotIdx) => {
+    const getPreferenceScore = (teacherId, subjectId, dayIdx, slotIdx) => {
       const timeKey = `${dayIdx}-${slotIdx}`;
+      let score = 0;
+      
+      // Preferência da matéria
       const subject = this.data.subjects.find(s => s.id === subjectId);
       if (subject && subject.preferred && subject.preferred.includes(timeKey)) {
-        return 10; // Alta preferência
+        score += 10; // Alta preferência
       }
-      return 0;
+      
+      // Penalizar dias com mais aulas do professor (preferência por distribuir melhor)
+      const lessonsOnDay = getTeacherLessonsOnDay(teacherId, dayIdx);
+      if (lessonsOnDay === 0) {
+        score += 5; // Preferir dias sem aulas ainda
+      } else if (lessonsOnDay === 1) {
+        score += 2; // Ainda aceitável (2 aulas por dia)
+      } else if (lessonsOnDay === 2) {
+        score -= 5; // Desincentivar 3ª aula (só se necessário)
+      }
+      
+      return score;
     };
 
     const bookedEntries = []; // rastreia para validação de conflitos por intervalo real
@@ -123,8 +147,12 @@ class ScheduleManager {
               isAvailable(activity.teacherId, activity.classId, activity.subjectId, dayIdx, slot1) &&
               isAvailable(activity.teacherId, activity.classId, activity.subjectId, dayIdx, slot2)) {
             
-            const score = getPreferenceScore(activity.subjectId, dayIdx, slot1) + 
-                         getPreferenceScore(activity.subjectId, dayIdx, slot2);
+            // Verificar se após alocar a dupla não ultrapassará o limite preferencial
+            const lessonsOnDay = getTeacherLessonsOnDay(activity.teacherId, dayIdx);
+            if (lessonsOnDay + 2 > 3) continue; // Pular se a dupla ultrapassar 3 aulas
+            
+            const score = getPreferenceScore(activity.teacherId, activity.subjectId, dayIdx, slot1) + 
+                         getPreferenceScore(activity.teacherId, activity.subjectId, dayIdx, slot2);
             candidates.push({ dayIdx, slot1, slot2, score });
           }
         }
@@ -149,7 +177,7 @@ class ScheduleManager {
       for (let dayIdx = 0; dayIdx < DAYS.length; dayIdx++) {
         for (const slotIdx of lessonIndices) {
           if (isAvailable(activity.teacherId, activity.classId, activity.subjectId, dayIdx, slotIdx)) {
-            const score = getPreferenceScore(activity.subjectId, dayIdx, slotIdx);
+            const score = getPreferenceScore(activity.teacherId, activity.subjectId, dayIdx, slotIdx);
             candidates.push({ dayIdx, slotIdx, score });
           }
         }
