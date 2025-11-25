@@ -26,10 +26,7 @@ const AboutSection = () => {
           <h1 className="text-3xl font-bold tracking-tight">Grade Inteligente</h1>
         </div>
         <p className="text-indigo-100 text-lg max-w-2xl">
-          Automatize a construção da grade escolar com regras pedagógicas, distribuição equilibrada e prevenção de conflitos.
-        </p>
-        <p className="mt-3 text-sm text-indigo-200 max-w-xl">
-          Focada em clareza e eficiência: você cadastra pessoas, matérias e horários; o sistema gera uma grade otimizada priorizando qualidade de alocação.
+          Gere automaticamente a grade escolar, equilibrando aulas, respeitando preferências e evitando conflitos — simples, claro e eficiente.
         </p>
       </section>
 
@@ -112,33 +109,7 @@ const AboutSection = () => {
         </div>
       </section>
 
-      {/* DOCUMENTAÇÃO & CÓDIGO */}
-      <section className="space-y-4">
-        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><BookOpen className="w-5 h-5 text-indigo-600" /> Documentação & Código</h2>
-        <p className="text-sm text-slate-600 max-w-3xl">Consulte a documentação técnica detalhada (estrutura, algoritmos e exportações) e acesse o repositório para acompanhar evolução, abrir issues ou contribuir.</p>
-        <div className="flex flex-wrap gap-4">
-          <a
-            href="https://github.com/binarymath/Grade-Inteligente#readme"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 shadow-sm hover:border-indigo-500 hover:bg-indigo-50 transition-colors text-sm font-medium"
-          >
-            <BookOpen className="w-4 h-4 text-indigo-600 group-hover:scale-110 transition-transform" />
-            <span>Documentação Técnica</span>
-            <ExternalLink className="w-4 h-4 text-slate-400" />
-          </a>
-          <a
-            href="https://github.com/binarymath/Grade-Inteligente"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 shadow-sm hover:border-indigo-500 hover:bg-indigo-50 transition-colors text-sm font-medium"
-          >
-            <Github className="w-4 h-4 text-slate-800 group-hover:scale-110 transition-transform" />
-            <span>Repositório GitHub</span>
-            <ExternalLink className="w-4 h-4 text-slate-400" />
-          </a>
-        </div>
-      </section>
+      {/* DOCUMENTAÇÃO & CÓDIGO removido conforme solicitação */}
 
       {/* FOOTER */}
       {/* Rodapé removido conforme solicitação */}
