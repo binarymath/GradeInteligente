@@ -7,13 +7,16 @@ Sistema web para gerenciamento e geração de grade horária escolar com suporte
 - **Turnos Avançados**: Suporte a Manhã, Tarde, Noite e combinações "Integral (Manhã e Tarde)" e "Integral (Tarde e Noite)".
 - **Atribuições**: Registro de aulas por Professor/Matéria/Turma com quantidade semanal e preferência por aula dupla.
 - **Edição Inline**: Professores, Matérias, Turmas, Horários e Atribuições podem ser editados diretamente nas listagens.
-- **Grade Horária Dinâmica**: Visualização por Turma ou Professor, filtrando automaticamente horários por turno do professor.
+- **Grade Horária Dinâmica**: Visualização por Turma, Professor ou Matéria, filtrando automaticamente horários por turno.
+- **Geração Inteligente**: Algoritmo automático que prioriza aulas duplas, respeita preferências de matérias e aloca otimizando restrições.
+- **Validação de Conflitos**: Detecção automática de sobreposição de professores com mensagens intuitivas.
 - **Eventos Escolares**: Cadastro de Férias e Feriados que excluem aulas da exportação de Agenda.
 - **Exportações**:
   - PDF (layout tabular da grade)
   - Excel (linhas detalhadas com Professor/Materia/Turma/Dia/Horário)
   - ICS (agenda semanal recorrente com exclusões por eventos)
 - **Preferências de Matérias**: Ciclo Disponível → Bloqueado → Preferencial por slot (clique sequencial).
+- **Testes Automatizados**: Suite de testes unitários para garantir qualidade e confiabilidade.
 
 ## 🗂 Estrutura de Pastas (Resumo)
 ```
@@ -80,6 +83,9 @@ Acesse normalmente via endereço mostrado pelo Vite (ex: `http://localhost:5173`
 | `dev` | Inicia servidor Vite com HMR |
 | `build` | Gera bundle otimizado em `dist/` |
 | `preview` | Servidor estático para testar build |
+| `test` | Executa testes unitários com Vitest |
+| `test:ui` | Interface visual para testes |
+| `test:coverage` | Relatório de cobertura de testes |
 
 ## ⚙️ Tecnologias
 - React 18 + Vite
@@ -91,10 +97,10 @@ Acesse normalmente via endereço mostrado pelo Vite (ex: `http://localhost:5173`
 
 ## 🧩 Próximos Passos / Roadmap
 - [x] UI de exportações: botões individuais (ícones) — implementado com ExportButtons (PDF, Excel, ICS).
-- [ ] Algoritmo automático de geração/otimização de grade (uso de `ScheduleManager`).
+- [x] Algoritmo automático de geração/otimização de grade — implementado com priorização por restrições e preferências.
 - [x] Validação de conflitos (professor em duas turmas simultâneas) — implementado com detecção de sobreposição e motivo intuitivo.
-- [ ] Agrupamento de aulas duplas na geração final.
-- [ ] Testes automatizados (unitários para utilidades e componentes críticos).
+- [x] Agrupamento de aulas duplas na geração final — aulas duplas são alocadas em slots consecutivos.
+- [x] Testes automatizados (unitários para utilidades e componentes críticos) — suite de testes com Vitest.
 
 ## 🛠 Personalização
 Todos os estados iniciais estão em `App.jsx`. Para adicionar novos tipos de slot (ex: "reforço"), inclua nas seleções de `TimeSettingsSection.jsx` e ajuste cores conforme necessário.

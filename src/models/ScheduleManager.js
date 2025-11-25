@@ -15,15 +15,23 @@ class ScheduleManager {
     this.logMessage("Iniciando geração de grade...");
     this.schedule = {};
     
-    // Sort activities by difficulty (e.g., double lessons first, or teachers with most constraints)
-    // For simplicity, we'll just process them as is, or maybe shuffle to get random results on retry.
-    const activities = [...this.data.activities];
+    // Ordenar atividades por prioridade: aulas duplas primeiro, depois por restrições do professor
+    const activities = [...this.data.activities].sort((a, b) => {
+      // Priorizar aulas duplas
+      if (a.doubleLesson && !b.doubleLesson) return -1;
+      if (!a.doubleLesson && b.doubleLesson) return 1;
+      
+      // Priorizar professores com mais restrições
+      const teacherA = this.data.teachers.find(t => t.id === a.teacherId);
+      const teacherB = this.data.teachers.find(t => t.id === b.teacherId);
+      const constraintsA = teacherA?.unavailable?.length || 0;
+      const constraintsB = teacherB?.unavailable?.length || 0;
+      return constraintsB - constraintsA;
+    });
     
-    // Simple greedy approach with backtracking is complex to implement in one go.
-    // We will try a randomized greedy approach for now.
+    this.logMessage(`Ordenadas ${activities.length} atividades por prioridade (aulas duplas e restrições).`);
     
     // Initialize schedule grid
-    // We need to track teacher and class usage per slot.
     const teacherSchedule = {}; // { teacherId: { timeKey: true } }
     const classSchedule = {};   // { classId: { timeKey: true } }
 
@@ -31,7 +39,7 @@ class ScheduleManager {
     const lessonIndices = timeSlots.map((_, i) => i).filter(i => timeSlots[i].type === 'aula');
 
     // Helper to check availability
-    const isAvailable = (teacherId, classId, dayIdx, slotIdx) => {
+    const isAvailable = (teacherId, classId, subjectId, dayIdx, slotIdx) => {
       const timeKey = `${dayIdx}-${slotIdx}`;
       
       // Check teacher availability (constraints)
@@ -42,6 +50,10 @@ class ScheduleManager {
       const cls = this.data.classes.find(c => c.id === classId);
       if (cls && !cls.activeSlots.includes(timeSlots[slotIdx].id)) return false;
 
+      // Check subject preferences
+      const subject = this.data.subjects.find(s => s.id === subjectId);
+      if (subject && subject.unavailable && subject.unavailable.includes(timeKey)) return false;
+
       // Check if already booked
       if (teacherSchedule[teacherId]?.[timeKey]) return false;
       if (classSchedule[classId]?.[timeKey]) return false;
@@ -49,9 +61,26 @@ class ScheduleManager {
       return true;
     };
 
+    // Helper para verificar se dois slots são consecutivos
+    const areConsecutive = (slotIdx1, slotIdx2) => {
+      return Math.abs(slotIdx1 - slotIdx2) === 1 && 
+             timeSlots[slotIdx1].type === 'aula' && 
+             timeSlots[slotIdx2].type === 'aula';
+    };
+
+    // Calcular score de preferência para um slot
+    const getPreferenceScore = (subjectId, dayIdx, slotIdx) => {
+      const timeKey = `${dayIdx}-${slotIdx}`;
+      const subject = this.data.subjects.find(s => s.id === subjectId);
+      if (subject && subject.preferred && subject.preferred.includes(timeKey)) {
+        return 10; // Alta preferência
+      }
+      return 0;
+    };
+
     const bookedEntries = []; // rastreia para validação de conflitos por intervalo real
 
-    const book = (activity, dayIdx, slotIdx) => {
+    const book = (activity, dayIdx, slotIdx, isDoubleSecondPart = false) => {
       const timeKey = `${dayIdx}-${slotIdx}`;
       const scheduleKey = `${activity.classId}-${timeKey}`;
       
@@ -59,7 +88,8 @@ class ScheduleManager {
         subjectId: activity.subjectId,
         teacherId: activity.teacherId,
         classId: activity.classId,
-        timeKey
+        timeKey,
+        isDoubleLesson: isDoubleSecondPart ? false : activity.doubleLesson // marca apenas primeira parte
       };
 
       if (!teacherSchedule[activity.teacherId]) teacherSchedule[activity.teacherId] = {};
@@ -68,7 +98,7 @@ class ScheduleManager {
       if (!classSchedule[activity.classId]) classSchedule[activity.classId] = {};
       classSchedule[activity.classId][timeKey] = true;
 
-      // Guardar dados detalhados para verificação de sobreposição (considerando possíveis horários customizados)
+      // Guardar dados detalhados para verificação de sobreposição
       bookedEntries.push({
         teacherId: activity.teacherId,
         classId: activity.classId,
@@ -79,25 +109,105 @@ class ScheduleManager {
       });
     };
 
+    // Tentar alocar aula dupla (dois slots consecutivos)
+    const tryBookDouble = (activity) => {
+      const candidates = [];
+      
+      // Buscar pares de slots consecutivos disponíveis
+      for (let dayIdx = 0; dayIdx < DAYS.length; dayIdx++) {
+        for (let i = 0; i < lessonIndices.length - 1; i++) {
+          const slot1 = lessonIndices[i];
+          const slot2 = lessonIndices[i + 1];
+          
+          if (areConsecutive(slot1, slot2) &&
+              isAvailable(activity.teacherId, activity.classId, activity.subjectId, dayIdx, slot1) &&
+              isAvailable(activity.teacherId, activity.classId, activity.subjectId, dayIdx, slot2)) {
+            
+            const score = getPreferenceScore(activity.subjectId, dayIdx, slot1) + 
+                         getPreferenceScore(activity.subjectId, dayIdx, slot2);
+            candidates.push({ dayIdx, slot1, slot2, score });
+          }
+        }
+      }
+      
+      if (candidates.length === 0) return false;
+      
+      // Ordenar por score de preferência (maior primeiro)
+      candidates.sort((a, b) => b.score - a.score);
+      
+      // Usar o melhor candidato
+      const best = candidates[0];
+      book(activity, best.dayIdx, best.slot1, false);
+      book(activity, best.dayIdx, best.slot2, true);
+      return true;
+    };
+
+    // Tentar alocar aula simples
+    const tryBookSingle = (activity) => {
+      const candidates = [];
+      
+      for (let dayIdx = 0; dayIdx < DAYS.length; dayIdx++) {
+        for (const slotIdx of lessonIndices) {
+          if (isAvailable(activity.teacherId, activity.classId, activity.subjectId, dayIdx, slotIdx)) {
+            const score = getPreferenceScore(activity.subjectId, dayIdx, slotIdx);
+            candidates.push({ dayIdx, slotIdx, score });
+          }
+        }
+      }
+      
+      if (candidates.length === 0) return false;
+      
+      // Escolher slot com melhor score ou aleatório entre os de mesmo score
+      candidates.sort((a, b) => b.score - a.score);
+      const maxScore = candidates[0].score;
+      const topCandidates = candidates.filter(c => c.score === maxScore);
+      const chosen = topCandidates[Math.floor(Math.random() * topCandidates.length)];
+      
+      book(activity, chosen.dayIdx, chosen.slotIdx);
+      return true;
+    };
+
     // Try to schedule each activity
     for (const activity of activities) {
       let remaining = activity.quantity;
-      let attempts = 0;
+      const activityName = this.data.subjects.find(s => s.id === activity.subjectId)?.name || activity.subjectId;
+      const className = this.data.classes.find(c => c.id === activity.classId)?.name || activity.classId;
       
-      while (remaining > 0 && attempts < 1000) {
+      this.logMessage(`Alocando ${activity.quantity} aulas de ${activityName} para ${className}${activity.doubleLesson ? ' (duplas)' : ''}...`);
+      
+      let attempts = 0;
+      const maxAttempts = 100;
+      
+      while (remaining > 0 && attempts < maxAttempts) {
         attempts++;
-        // Pick random day and slot
-        const dayIdx = Math.floor(Math.random() * DAYS.length);
-        const slotIdx = lessonIndices[Math.floor(Math.random() * lessonIndices.length)];
         
-        if (isAvailable(activity.teacherId, activity.classId, dayIdx, slotIdx)) {
-          book(activity, dayIdx, slotIdx);
-          remaining--;
+        // Se for aula dupla, tentar alocar 2 slots consecutivos
+        if (activity.doubleLesson && remaining >= 2) {
+          if (tryBookDouble(activity)) {
+            remaining -= 2;
+            this.logMessage(`  ✓ Alocada aula dupla (${remaining} restantes)`);
+          }
+        } 
+        // Tentar alocar aula simples
+        else if (remaining > 0) {
+          if (tryBookSingle(activity)) {
+            remaining--;
+            if (remaining > 0) {
+              this.logMessage(`  ✓ Alocada aula simples (${remaining} restantes)`);
+            }
+          }
+        }
+        
+        // Se não conseguiu alocar, sair do loop
+        if (attempts > 10 && remaining === activity.quantity) {
+          break; // Nenhum progresso após 10 tentativas
         }
       }
       
       if (remaining > 0) {
-        this.logMessage(`Aviso: Não foi possível alocar ${remaining} aulas de ${activity.subjectId} para a turma ${activity.classId}.`);
+        this.logMessage(`  ⚠ Não foi possível alocar ${remaining} de ${activity.quantity} aulas de ${activityName} para ${className}.`);
+      } else {
+        this.logMessage(`  ✓ Todas as ${activity.quantity} aulas alocadas com sucesso!`);
       }
     }
 
