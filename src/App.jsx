@@ -139,7 +139,7 @@ const App = () => {
       {isMobile && !sidebarOpen && (<button onClick={() => setSidebarOpen(true)} className="fixed top-3 left-4 z-50 p-2 bg-indigo-600 text-white rounded shadow-lg lg:hidden"><Menu size={20} /></button>)}
       {isMobile && sidebarOpen && (<div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)}/>)}
 
-      <aside className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-slate-200 flex flex-col shadow-lg transition-all duration-300 ease-in-out ${isMobile ? (sidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64') : sidebarOpen ? 'w-64' : 'w-16'} lg:relative lg:translate-x-0`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-slate-200 flex flex-col shadow-lg transition-all duration-300 ease-in-out ${isMobile ? (sidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64') : sidebarOpen ? 'w-64' : 'w-16'} lg:relative lg:translate-x-0 relative`}>
         <div className={`border-b border-slate-100 flex items-center ${sidebarOpen ? 'p-6 justify-between' : 'p-3 justify-center'} overflow-hidden whitespace-nowrap`}>
            <div className="flex items-center gap-2 text-indigo-700 mb-1">
              <Layout className="w-6 h-6 shrink-0" />
@@ -159,6 +159,17 @@ const App = () => {
              <button onClick={() => setSidebarOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
            )}
         </div>
+        {/* Botão de toggle lateral (desktop) */}
+        {!isMobile && (
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            title={sidebarOpen ? 'Colapsar' : 'Expandir'}
+            className={`absolute top-1/2 -translate-y-1/2 right-[-14px] bg-white border border-slate-200 shadow-sm rounded-full p-1 text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-colors ${sidebarOpen ? '' : ''}`}
+            aria-label={sidebarOpen ? 'Colapsar menu lateral' : 'Expandir menu lateral'}
+          >
+            {sidebarOpen ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+          </button>
+        )}
         <div className={`flex-1 py-4 space-y-1 overflow-hidden whitespace-nowrap overflow-y-auto`}>
           {sidebarOpen && <div className="px-4 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Menu Principal</div>}
           <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Info} label="Sobre o Sistema" active={view === 'about'} onClick={() => { setView('about'); if(isMobile) setSidebarOpen(false); }} />
