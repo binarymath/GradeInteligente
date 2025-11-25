@@ -516,7 +516,7 @@ const LessonCalculator = ({ data, calendarSettings }) => {
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
       <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calculator className="w-5 h-5 text-violet-600"/> Calculadora de Aulas</h4>
       <p className="text-[11px] text-slate-500">Selecione o período (bimestre) para contar aulas por matéria, já considerando eventos de exclusão.</p>
-      <div className="grid md:grid-cols-3 gap-3">
+      <div className="grid md:grid-cols-2 gap-3">
         <div className="flex flex-col">
           <label className="text-xs font-semibold text-slate-600 mb-1">Início do Período</label>
           <input type="date" value={start} onChange={e => setStart(e.target.value)} className="border rounded px-2 py-1.5 text-sm bg-slate-50 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
@@ -524,15 +524,6 @@ const LessonCalculator = ({ data, calendarSettings }) => {
         <div className="flex flex-col">
           <label className="text-xs font-semibold text-slate-600 mb-1">Fim do Período</label>
           <input type="date" value={end} onChange={e => setEnd(e.target.value)} className="border rounded px-2 py-1.5 text-sm bg-slate-50 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
-        </div>
-        <div className="flex flex-col justify-end">
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => handleQuickRange(0)} className="px-2 py-1.5 text-xs rounded bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">1º Bimestre</button>
-            <button onClick={() => handleQuickRange(1)} className="px-2 py-1.5 text-xs rounded bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">2º</button>
-            <button onClick={() => handleQuickRange(2)} className="px-2 py-1.5 text-xs rounded bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">3º</button>
-            <button onClick={() => handleQuickRange(3)} className="px-2 py-1.5 text-xs rounded bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">4º</button>
-            <button onClick={() => handleQuickRange('year')} className="px-2 py-1.5 text-xs rounded bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100">Ano todo</button>
-          </div>
         </div>
       </div>
 
@@ -543,7 +534,7 @@ const LessonCalculator = ({ data, calendarSettings }) => {
         </div>
         <div className="bg-slate-50 border border-slate-200 rounded p-3 lg:col-span-2 flex items-center justify-between">
           <div className="text-xs text-slate-500">Exportação</div>
-          <button onClick={exportPDF} className="flex items-center gap-2 bg-violet-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-violet-700"><FileText size={14}/> PDF (todas as matérias)</button>
+          <button onClick={exportPDF} className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-slate-900"><FileText size={14}/> PDF (todas as matérias)</button>
         </div>
       </div>
 
