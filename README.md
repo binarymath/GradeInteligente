@@ -254,6 +254,12 @@ Contribuições são bem-vindas! Siga estas etapas:
 
 ---
 
+## 📬 Contato
+
+[![GitHub](https://img.shields.io/badge/GitHub-binarymath-181717?style=for-the-badge&logo=github)](https://github.com/binarymath)
+
+---
+
 ## 📄 Licença
 
 Este projeto está sob análise de licenciamento. Para uso comercial ou distribuição, entre em contato.
