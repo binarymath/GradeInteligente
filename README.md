@@ -70,10 +70,10 @@ src/
 
 ```powershell
 # Clone o repositório
-git clone https://github.com/binarymath/Grade-Inteligente.git
+git clone https://github.com/binarymath/GradeInteligente.git
 
 # Entre na pasta do projeto
-cd Grade-Inteligente
+cd GradeInteligente
 
 # Instale as dependências
 npm install
@@ -296,6 +296,6 @@ Desenvolvido com foco em resolver desafios reais de coordenação escolar, combi
 
 **Feito com ❤️ para facilitar a vida de coordenadores e diretores escolares**
 
-[⭐ Star no GitHub](https://github.com/binarymath/Grade-Inteligente) • [🐛 Reportar Bug](https://github.com/binarymath/Grade-Inteligente/issues) • [💡 Sugerir Feature](https://github.com/binarymath/Grade-Inteligente/issues)
+[⭐ Star no GitHub](https://github.com/binarymath/GradeInteligente) • [🐛 Reportar Bug](https://github.com/binarymath/GradeInteligente/issues) • [💡 Sugerir Feature](https://github.com/binarymath/GradeInteligente/issues)
 
 </div>
