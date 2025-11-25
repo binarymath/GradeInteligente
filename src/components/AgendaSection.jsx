@@ -534,7 +534,7 @@ const LessonCalculator = ({ data, calendarSettings }) => {
         </div>
         <div className="bg-slate-50 border border-slate-200 rounded p-3 lg:col-span-2 flex items-center justify-between">
           <div className="text-xs text-slate-500">Exportação</div>
-          <button onClick={exportPDF} className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-slate-900"><FileText size={14}/> PDF (todas as matérias)</button>
+          <button onClick={exportPDF} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><FileText size={14}/> PDF (todas as matérias)</button>
         </div>
       </div>
 
