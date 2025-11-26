@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar, Plus, Trash2, Download, Calculator, FileText } from 'lucide-react';
+import { Calendar, Plus, Trash2, Download, Calculator, FileText, BookOpen } from 'lucide-react';
 import { uid, DAYS } from '../utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -607,22 +607,25 @@ const LessonCalculator = ({ data, calendarSettings }) => {
                   {isExpanded && subjectDetails && (
                     <tr>
                       <td colSpan="3" className="border-0 bg-slate-50">
-                        <div className="px-8 py-2">
-                          <table className="w-full text-xs">
-                            <tbody>
+                        <div className="px-6 py-3">
+                          <div className="border border-slate-200 rounded-md bg-white p-3 shadow-sm">
+                            <div className="text-[11px] text-slate-500 mb-2">Distribuição por dia da semana</div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                               {Array.from(subjectDetails.entries()).map(([dayIdx, info]) => {
                                 const daysQty = info.dates?.size || 0;
                                 const lessonsQty = info.lessons || 0;
                                 return (
-                                  <tr key={dayIdx} className="border-t border-slate-200">
-                                    <td className="py-1 text-slate-700">
-                                      {DAYS[dayIdx]} — {daysQty} {daysQty === 1 ? 'dia' : 'dias'}, {lessonsQty} {lessonsQty === 1 ? 'aula' : 'aulas'}
-                                    </td>
-                                  </tr>
+                                  <div key={dayIdx} className="flex items-center justify-between px-3 py-2 rounded bg-slate-50 border border-slate-200">
+                                    <span className="text-xs font-medium text-slate-700">{DAYS[dayIdx]}</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-indigo-100 text-indigo-700"><Calendar size={12}/> {daysQty} {daysQty === 1 ? 'dia' : 'dias'}</span>
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-violet-100 text-violet-700"><BookOpen size={12}/> {lessonsQty} {lessonsQty === 1 ? 'aula' : 'aulas'}</span>
+                                    </div>
+                                  </div>
                                 );
                               })}
-                            </tbody>
-                          </table>
+                            </div>
+                          </div>
                         </div>
                       </td>
                     </tr>
