@@ -15,48 +15,11 @@ import { exportBackup, importBackup } from './services/stateService';
 import { generateScheduleAsync } from './services/scheduleService';
 
 const INITIAL_STATE = {
-  timeSlots: [
-    { id: 'ts1', start: '07:00', end: '07:50', type: 'aula' },
-    { id: 'ts2', start: '07:50', end: '08:40', type: 'aula' },
-    { id: 'ts3', start: '08:40', end: '09:30', type: 'aula' },
-    { id: 'ts4', start: '09:30', end: '09:50', type: 'intervalo' }, 
-    { id: 'ts5', start: '09:50', end: '10:40', type: 'aula' },
-    { id: 'ts6', start: '10:40', end: '11:30', type: 'aula' },
-    { id: 'ts7', start: '12:00', end: '13:00', type: 'almoco' },
-    { id: 'ts8', start: '13:00', end: '13:50', type: 'aula' },
-    { id: 'ts9', start: '19:00', end: '20:00', type: 'jantar' },
-  ],
-  teachers: [
-    { id: 't1', name: 'Marisa N. S.', unavailable: [], shifts: ['Manhã'] }, 
-    { id: 't2', name: 'Carlos Souza', unavailable: [], shifts: ['Integral (Manhã e Tarde)'] },
-    { id: 't3', name: 'Maria Oliveira', unavailable: [], shifts: ['Tarde'] },
-    { id: 't4', name: 'Roberto Santos', unavailable: [], shifts: ['Noite'] },
-  ],
-  subjects: [
-    { id: 's1', name: 'Matemática', colorIndex: 1, unavailable: [], preferred: [] }, 
-    { id: 's2', name: 'Português', colorIndex: 0, unavailable: [], preferred: [] },
-    { id: 's3', name: 'História', colorIndex: 6, unavailable: [], preferred: [] },
-    { id: 's4', name: 'Geografia', colorIndex: 2, unavailable: [], preferred: [] },
-    { id: 's5', name: 'Ciências', colorIndex: 4, unavailable: [], preferred: [] },
-  ],
-  classes: [
-    { 
-      id: 'c1', 
-      name: '6º Ano A', 
-      shift: 'Manhã',
-      activeSlots: ['ts1', 'ts2', 'ts3', 'ts4', 'ts5', 'ts6']
-    },
-    { 
-      id: 'c2', 
-      name: '9º Ano Int', 
-      shift: 'Integral',
-      activeSlots: ['ts1', 'ts2', 'ts3', 'ts4', 'ts5', 'ts6', 'ts7', 'ts8']
-    },
-  ],
-  activities: [
-    { id: 'a1', teacherId: 't1', subjectId: 's1', classId: 'c1', quantity: 5, split: 1, doubleLesson: true }, 
-    { id: 'a2', teacherId: 't2', subjectId: 's3', classId: 'c1', quantity: 2, split: 1, doubleLesson: true },
-  ],
+  timeSlots: [],
+  teachers: [],
+  subjects: [],
+  classes: [],
+  activities: [],
   schedule: {},
   scheduleConflicts: []
 };
