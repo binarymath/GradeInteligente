@@ -35,7 +35,7 @@ const App = () => {
         // Always start collapsed (mobile/tablet/desktop)
         const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 1024;
         return {
-          view: parsed.view || 'generate',
+          view: parsed.view || 'about',
           subView: parsed.subView || 'teachers',
           viewMode: parsed.viewMode || 'class',
           selectedEntity: parsed.selectedEntity || '',
@@ -45,8 +45,8 @@ const App = () => {
     } catch (e) {
       // ignore and fall back to defaults
     }
-    // Default: collapsed for all screen sizes
-    return { view: 'generate', subView: 'teachers', viewMode: 'class', selectedEntity: '', sidebarOpen: false };
+    // Default first load: open "Sobre o Sistema" (about) and sidebar collapsed
+    return { view: 'about', subView: 'teachers', viewMode: 'class', selectedEntity: '', sidebarOpen: false };
   };
   const initialNav = getInitialNav();
   // Default view changed to 'generate' so Grade Inteligente is homepage
