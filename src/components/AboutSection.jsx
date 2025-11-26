@@ -38,7 +38,7 @@ const AboutSection = () => {
             <p className="font-semibold">Atenção: salve um backup</p>
             <p className="mt-1">Seus dados ficam guardados só neste computador e neste navegador.</p>
             <ul className="list-disc pl-5 mt-2 space-y-1">
-              <li>Se você limpar os dados, usar janela anônima ou trocar de computador, pode perder tudo.</li>
+              <li>Se você limpar os dados ou trocar de computador, pode perder tudo.</li>
               <li>Para guardar: clique em <span className="font-medium">Backup</span> (no topo) e salve o arquivo (.json).</li>
               <li>Para recuperar: clique em <span className="font-medium">Restaurar</span> e escolha o arquivo salvo.</li>
             </ul>
