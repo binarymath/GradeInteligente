@@ -24,24 +24,16 @@ const TimeSettingsSection = ({ data, setData }) => {
 
   const filteredSlots = useMemo(() => {
     if (shiftFilter === 'Todos') return data.timeSlots;
-    // Heurística por horário (quando turno não for explicitamente definido no slot):
-    // Manhã: < 12:00 | Tarde: 12:00–18:00 | Noite: >= 18:00
     // Para turnos explícitos, respeitamos o valor salvo no slot, incluindo integrais.
     return data.timeSlots.filter(slot => {
       const slotShift = slot.shift || getShiftLabel(slot.start);
-      const explicit = Boolean(slot.shift);
-      const startMin = toMinutes(slot.start);
-      const isMorning = (explicit ? slotShift.includes('Manhã') : startMin < 12*60);
-      const isAfternoon = (explicit ? slotShift.includes('Tarde') : (startMin >= 12*60 && startMin < 18*60));
-      const isNight = (explicit ? slotShift.includes('Noite') : startMin >= 18*60);
-      switch (shiftFilter) {
-        case 'Manhã': return isMorning;
-        case 'Tarde': return isAfternoon;
-        case 'Noite': return isNight;
-        case 'Integral (Manhã e Tarde)': return isMorning || isAfternoon;
-        case 'Integral (Tarde e Noite)': return isAfternoon || isNight;
-        default: return true;
-      }
+      // Turnos integrais são tratados como tipos distintos, não como soma de manhã/tarde/noite
+      if (shiftFilter === 'Integral (Manhã e Tarde)') return slotShift === 'Integral (Manhã e Tarde)';
+      if (shiftFilter === 'Integral (Tarde e Noite)') return slotShift === 'Integral (Tarde e Noite)';
+      if (shiftFilter === 'Manhã') return slotShift === 'Manhã';
+      if (shiftFilter === 'Tarde') return slotShift === 'Tarde';
+      if (shiftFilter === 'Noite') return slotShift === 'Noite';
+      return true;
     });
   }, [shiftFilter, data.timeSlots]);
 
@@ -106,6 +98,19 @@ const TimeSettingsSection = ({ data, setData }) => {
   return (
     <div className="flex flex-col gap-6">
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="mb-4">
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-100 text-amber-700 font-bold"><ArrowUp size={12}/> Manhã</span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-100 text-emerald-700 font-bold"><ArrowDown size={12}/> Tarde</span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-violet-100 text-violet-700 font-bold"><Moon size={12}/> Noite</span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-teal-100 text-teal-700 font-bold"><BookOpen size={12}/> Integral (Manhã e Tarde)</span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-fuchsia-100 text-fuchsia-700 font-bold"><BookOpen size={12}/> Integral (Tarde e Noite)</span>
+          </div>
+          <div className="mt-2 text-xs text-slate-500">
+            <span className="font-bold text-slate-700">Integral (Manhã e Tarde):</span> abrange todos os horários de manhã e tarde.<br/>
+            <span className="font-bold text-slate-700">Integral (Tarde e Noite):</span> abrange todos os horários de tarde e noite.
+          </div>
+        </div>
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 mb-4">
           <h2 className="text-lg font-bold text-slate-800">Configuração de Horários</h2>
           <div className="flex items-center gap-2">
