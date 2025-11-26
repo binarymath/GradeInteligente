@@ -106,8 +106,9 @@ const TimeSettingsSection = ({ data, setData }) => {
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-fuchsia-100 text-fuchsia-700 font-bold"><BookOpen size={12}/> Integral (Tarde e Noite)</span>
           </div>
           <div className="mt-2 text-xs text-slate-500">
-            <span className="font-bold text-slate-700">Integral (Manhã e Tarde):</span> abrange todos os horários de manhã e tarde.<br/>
-            <span className="font-bold text-slate-700">Integral (Tarde e Noite):</span> abrange todos os horários de tarde e noite.
+            <strong>Importante:</strong> Cada turno é independente. <span className="font-bold text-slate-700">Manhã</span> é diferente de <span className="font-bold text-slate-700">Integral (Manhã e Tarde)</span>.<br/>
+            <span className="font-bold text-slate-700">Integral (Manhã e Tarde)</span> é um turno próprio que funciona em período estendido (manhã + tarde).<br/>
+            <span className="font-bold text-slate-700">Integral (Tarde e Noite)</span> é um turno próprio que funciona em período estendido (tarde + noite).
           </div>
         </div>
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 mb-4">
