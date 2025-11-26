@@ -24,16 +24,15 @@ const TimeSettingsSection = ({ data, setData }) => {
 
   const filteredSlots = useMemo(() => {
     if (shiftFilter === 'Todos') return data.timeSlots;
-    // Para turnos explícitos, respeitamos o valor salvo no slot, incluindo integrais.
+    // Só mostra horários explicitamente marcados como o turno selecionado
     return data.timeSlots.filter(slot => {
-      const slotShift = slot.shift || getShiftLabel(slot.start);
-      // Turnos integrais são tratados como tipos distintos, não como soma de manhã/tarde/noite
-      if (shiftFilter === 'Integral (Manhã e Tarde)') return slotShift === 'Integral (Manhã e Tarde)';
-      if (shiftFilter === 'Integral (Tarde e Noite)') return slotShift === 'Integral (Tarde e Noite)';
-      if (shiftFilter === 'Manhã') return slotShift === 'Manhã';
-      if (shiftFilter === 'Tarde') return slotShift === 'Tarde';
-      if (shiftFilter === 'Noite') return slotShift === 'Noite';
-      return true;
+      if (!slot.shift) return false;
+      if (shiftFilter === 'Integral (Manhã e Tarde)') return slot.shift === 'Integral (Manhã e Tarde)';
+      if (shiftFilter === 'Integral (Tarde e Noite)') return slot.shift === 'Integral (Tarde e Noite)';
+      if (shiftFilter === 'Manhã') return slot.shift === 'Manhã';
+      if (shiftFilter === 'Tarde') return slot.shift === 'Tarde';
+      if (shiftFilter === 'Noite') return slot.shift === 'Noite';
+      return false;
     });
   }, [shiftFilter, data.timeSlots]);
 
