@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, BookOpen, Coffee, Utensils, ArrowUp, ArrowDown, Trash2, Pencil, X, Check, Moon } from 'lucide-react';
+import { Plus, BookOpen, Coffee, Utensils, ArrowUp, ArrowDown, Trash2, Pencil, X, Check, Moon, Sun, Sunset, Sunrise, CloudSun } from 'lucide-react';
 import { uid } from '../utils';
 
 const TimeSettingsSection = ({ data, setData }) => {
@@ -99,11 +99,11 @@ const TimeSettingsSection = ({ data, setData }) => {
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <div className="mb-4">
           <div className="flex flex-wrap gap-2 text-xs">
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-100 text-amber-700 font-bold"><ArrowUp size={12}/> Manhã</span>
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-100 text-emerald-700 font-bold"><ArrowDown size={12}/> Tarde</span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-100 text-amber-700 font-bold"><Sunrise size={12}/> Manhã</span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-100 text-emerald-700 font-bold"><Sun size={12}/> Tarde</span>
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-violet-100 text-violet-700 font-bold"><Moon size={12}/> Noite</span>
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-teal-100 text-teal-700 font-bold"><BookOpen size={12}/> Integral (Manhã e Tarde)</span>
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-fuchsia-100 text-fuchsia-700 font-bold"><BookOpen size={12}/> Integral (Tarde e Noite)</span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-teal-100 text-teal-700 font-bold"><CloudSun size={12}/> Integral (Manhã e Tarde)</span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-fuchsia-100 text-fuchsia-700 font-bold"><Sunset size={12}/> Integral (Tarde e Noite)</span>
           </div>
           <div className="mt-2 text-xs text-slate-500">
             <strong>Importante:</strong> Cada turno é independente. <span className="font-bold text-slate-700">Manhã</span> é diferente de <span className="font-bold text-slate-700">Integral (Manhã e Tarde)</span>.<br/>
