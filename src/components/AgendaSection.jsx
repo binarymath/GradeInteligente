@@ -437,7 +437,8 @@ const LessonCalculator = ({ data, calendarSettings }) => {
     if (!schoolStart || !schoolEnd) return { map: new Map(), total: 0, details: new Map() };
     const [rs, re] = clampRange(parseDate(start), parseDate(end));
     const counts = new Map();
-    const details = new Map(); // subjectId -> { dayIdx -> count }
+    // details: subjectId -> Map(dayIdx -> { dates: Set(YYYY-MM-DD), lessons: number })
+    const details = new Map();
     let total = 0;
 
     Object.entries(data.schedule || {}).forEach(([key, slot]) => {
@@ -453,25 +454,24 @@ const LessonCalculator = ({ data, calendarSettings }) => {
       const subjectId = slot.subjectId;
       if (!subjectId) return;
 
-      // Map our internal weekdays (0..4 for Mon..Fri) to JS weekday (1..5)
       const jsWeekday = (dayIdx + 1) % 7; // 1..5 (Mon..Fri)
       const first = getFirstWeekdayOnOrAfter(rs, jsWeekday);
-      let dayCount = 0;
+
       for (let cursor = new Date(first); cursor <= re; cursor.setDate(cursor.getDate() + 7)) {
         if (cursor < rs) continue;
         if (isExcluded(cursor)) continue;
-        dayCount++;
+
+        // total e total por matéria
+        counts.set(subjectId, (counts.get(subjectId) || 0) + 1);
         total += 1;
-      }
-      
-      if (dayCount > 0) {
-        counts.set(subjectId, (counts.get(subjectId) || 0) + dayCount);
-        
-        if (!details.has(subjectId)) {
-          details.set(subjectId, new Map());
-        }
-        const subjectDetails = details.get(subjectId);
-        subjectDetails.set(dayIdx, (subjectDetails.get(dayIdx) || 0) + dayCount);
+
+        // detalhes por dia da semana
+        if (!details.has(subjectId)) details.set(subjectId, new Map());
+        const subjectMap = details.get(subjectId);
+        if (!subjectMap.has(dayIdx)) subjectMap.set(dayIdx, { dates: new Set(), lessons: 0 });
+        const info = subjectMap.get(dayIdx);
+        info.lessons += 1;
+        info.dates.add(fmt(cursor));
       }
     });
 
@@ -610,13 +610,17 @@ const LessonCalculator = ({ data, calendarSettings }) => {
                         <div className="px-8 py-2">
                           <table className="w-full text-xs">
                             <tbody>
-                              {Array.from(subjectDetails.entries()).map(([dayIdx, count]) => (
-                                <tr key={dayIdx} className="border-t border-slate-200">
-                                  <td className="py-1 text-slate-700">
-                                    {DAYS[dayIdx]} — {count} {count === 1 ? 'dia' : 'dias'}
-                                  </td>
-                                </tr>
-                              ))}
+                              {Array.from(subjectDetails.entries()).map(([dayIdx, info]) => {
+                                const daysQty = info.dates?.size || 0;
+                                const lessonsQty = info.lessons || 0;
+                                return (
+                                  <tr key={dayIdx} className="border-t border-slate-200">
+                                    <td className="py-1 text-slate-700">
+                                      {DAYS[dayIdx]} — {daysQty} {daysQty === 1 ? 'dia' : 'dias'}, {lessonsQty} {lessonsQty === 1 ? 'aula' : 'aulas'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
