@@ -32,21 +32,21 @@ const App = () => {
       const raw = localStorage.getItem('app_nav');
       if (raw) {
         const parsed = JSON.parse(raw);
-        // For large screens always start collapsed now (override stored sidebarOpen)
+        // Always start collapsed (mobile/tablet/desktop)
         const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 1024;
         return {
           view: parsed.view || 'generate',
           subView: parsed.subView || 'teachers',
           viewMode: parsed.viewMode || 'class',
           selectedEntity: parsed.selectedEntity || '',
-          sidebarOpen: isDesktop ? false : (typeof parsed.sidebarOpen === 'boolean' ? parsed.sidebarOpen : true)
+          sidebarOpen: false
         };
       }
     } catch (e) {
       // ignore and fall back to defaults
     }
-    const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 1024;
-    return { view: 'generate', subView: 'teachers', viewMode: 'class', selectedEntity: '', sidebarOpen: !isDesktop };
+    // Default: collapsed for all screen sizes
+    return { view: 'generate', subView: 'teachers', viewMode: 'class', selectedEntity: '', sidebarOpen: false };
   };
   const initialNav = getInitialNav();
   // Default view changed to 'generate' so Grade Inteligente is homepage
