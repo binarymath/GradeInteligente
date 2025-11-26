@@ -114,13 +114,13 @@ const TimeSettingsSection = ({ data, setData }) => {
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 mb-4">
           <h2 className="text-lg font-bold text-slate-800">Configuração de Horários</h2>
           <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold text-slate-500">Turno:</label>
+            <label className="text-xs font-semibold text-slate-500">Filtrar por Turno:</label>
             <select value={shiftFilter} onChange={e => setShiftFilter(e.target.value)} className="text-xs border border-slate-300 rounded px-2 py-1 outline-none focus:border-blue-500 bg-slate-50">
               {shiftOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
           </div>
         </div>
-        <p className="text-sm text-slate-500 mb-6">Defina os blocos de tempo e o tipo global. Você pode filtrar pelos turnos para facilitar a visualização.</p>
+        <p className="text-sm text-slate-500 mb-6">Defina os blocos de tempo, tipo e turno. <strong>Atenção:</strong> Ao filtrar por um turno, só aparecem horários explicitamente marcados com aquele turno (não os automáticos).</p>
         
         <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200">
            <div className="col-span-1">
