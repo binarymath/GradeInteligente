@@ -99,7 +99,6 @@ const App = () => {
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans text-slate-900 overflow-hidden">
-      {isMobile && !sidebarOpen && (<button onClick={() => setSidebarOpen(true)} className="fixed top-3 left-4 z-50 p-2 bg-indigo-600 text-white rounded shadow-lg lg:hidden"><Menu size={20} /></button>)}
       {isMobile && sidebarOpen && (<div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)}/>)}
 
       <aside className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-slate-200 flex flex-col shadow-lg transition-all duration-300 ease-in-out ${isMobile ? (sidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64') : sidebarOpen ? 'w-64' : 'w-16'} lg:relative lg:translate-x-0 relative`}>
@@ -108,6 +107,11 @@ const App = () => {
              <Layout className="w-6 h-6 shrink-0" />
              {sidebarOpen && <span className="font-extrabold text-xl tracking-tight">Grade Inteligente</span>}
            </div>
+           {sidebarOpen && isMobile && (
+             <button onClick={() => setSidebarOpen(false)} className="text-slate-400 hover:text-slate-600" title="Fechar">
+               <X size={20} />
+             </button>
+           )}
            {sidebarOpen && !isMobile && (
              <button onClick={() => setSidebarOpen(false)} className="text-slate-400 hover:text-slate-600" title="Colapsar">
                <ChevronLeft size={20} />
@@ -117,9 +121,6 @@ const App = () => {
              <button onClick={() => setSidebarOpen(true)} className="text-slate-400 hover:text-slate-600" title="Expandir">
                <ChevronRight size={20} />
              </button>
-           )}
-           {isMobile && sidebarOpen && (
-             <button onClick={() => setSidebarOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
            )}
         </div>
         {/* Botão de toggle lateral (desktop) */}
@@ -164,6 +165,11 @@ const App = () => {
       <main className="flex-1 flex flex-col min-w-0 bg-slate-100 transition-all duration-300">
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-8 shadow-sm z-0 relative shrink-0">
           <div className="flex items-center gap-4 min-w-0">
+            {(!sidebarOpen || isMobile) && (
+              <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-md" title="Abrir menu">
+                <Menu size={24} />
+              </button>
+            )}
             <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2 truncate">{view === 'about' ? 'Sobre o Sistema' : view === 'data' && subView === 'timeSettings' ? 'Configuração de Horários' : view === 'data' ? 'Dados Institucionais' : view === 'activities' ? 'Atribuições' : view === 'manualEdit' ? 'Edição Manual da Grade' : view === 'agenda' ? 'Agenda e Grade' : 'Gerar/Visualizar Grade'}</h1>
           </div>
           <div className="flex items-center gap-4 shrink-0">
