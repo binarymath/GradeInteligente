@@ -620,18 +620,18 @@ const LessonCalculator = ({ data, calendarSettings }) => {
                     <tr>
                       <td colSpan="3" className="border-0 bg-slate-50">
                         <div className="px-6 py-3">
-                          <div className="border border-slate-200 rounded-md bg-white p-3 shadow-sm">
-                            <div className="text-[11px] text-slate-500 mb-2">Distribuição por dia da semana</div>
+                          <div className="border border-slate-200 rounded-md bg-white p-3 shadow-sm text-[12px]">
+                            <div className="text-[12px] text-slate-500 mb-2">Distribuição por dia da semana</div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                               {Array.from(subjectDetails.entries()).map(([dayIdx, info]) => {
                                 const daysQty = info.dates?.size || 0;
                                 const lessonsQty = info.lessons || 0;
                                 return (
                                   <div key={dayIdx} className="flex items-center justify-between px-3 py-2 rounded bg-slate-50 border border-slate-200">
-                                    <span className="text-xs font-medium text-slate-700">{DAYS[dayIdx]}</span>
+                                    <span className="text-[12px] font-medium text-slate-700">{DAYS[dayIdx]}</span>
                                     <div className="flex items-center gap-2">
-                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] ${colorByDay(dayIdx)}`}><Calendar size={12}/> {daysQty} {daysQty === 1 ? 'dia' : 'dias'}</span>
-                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] ${colorByDay(dayIdx)}`}><BookOpen size={12}/> {lessonsQty} {lessonsQty === 1 ? 'aula' : 'aulas'}</span>
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] ${colorByDay(dayIdx)}`}><Calendar size={12}/> {daysQty} {daysQty === 1 ? 'dia' : 'dias'}</span>
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] ${colorByDay(dayIdx)}`}><BookOpen size={12}/> {lessonsQty} {lessonsQty === 1 ? 'aula' : 'aulas'}</span>
                                     </div>
                                   </div>
                                 );
