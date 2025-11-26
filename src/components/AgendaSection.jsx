@@ -400,6 +400,7 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
 const LessonCalculator = ({ data, calendarSettings }) => {
   const [start, setStart] = useState(calendarSettings.schoolYearStart || '');
   const [end, setEnd] = useState(calendarSettings.schoolYearEnd || '');
+  const [selectedClass, setSelectedClass] = useState('all');
 
   const parseDate = (str) => {
     if (!str) return null;
@@ -444,6 +445,9 @@ const LessonCalculator = ({ data, calendarSettings }) => {
       const timeSlot = data.timeSlots[slotIdx];
       if (!timeSlot || timeSlot.type !== 'aula') return;
 
+      // Filtrar por turma se selecionada
+      if (selectedClass !== 'all' && slot.classId !== selectedClass) return;
+
       const subjectId = slot.subjectId;
       if (!subjectId) return;
 
@@ -459,7 +463,7 @@ const LessonCalculator = ({ data, calendarSettings }) => {
     });
 
     return { map: counts, total };
-  }, [data.schedule, data.timeSlots, start, end, events, schoolStart, schoolEnd]);
+  }, [data.schedule, data.timeSlots, start, end, events, schoolStart, schoolEnd, selectedClass]);
 
   // Year and 4 bimesters (split into 4 equal ranges)
   const bimesterRanges = useMemo(() => {
@@ -491,32 +495,43 @@ const LessonCalculator = ({ data, calendarSettings }) => {
 
   const exportPDF = () => {
     const doc = new jsPDF();
+    const classLabel = selectedClass === 'all' ? 'Todas as Turmas' : (data.classes.find(c => c.id === selectedClass)?.name || 'Turma');
     const periodStr = `${start || fmt(schoolStart)} a ${end || fmt(schoolEnd)}`;
     doc.setFontSize(14);
     doc.text('Contagem de Aulas por Matéria', 14, 16);
     doc.setFontSize(10);
-    doc.text(`Período: ${periodStr}`, 14, 22);
+    doc.text(`Turma: ${classLabel}`, 14, 22);
+    doc.text(`Período: ${periodStr}`, 14, 27);
 
     const rows = subjectsList.map(s => [s.name, countBySubject.map.get(s.id) || 0]);
     autoTable(doc, {
       head: [['Matéria', 'Aulas no Período']],
       body: rows,
-      startY: 28,
+      startY: 32,
       styles: { fontSize: 10 }
     });
 
-    const finalY = doc.lastAutoTable.finalY || 28;
+    const finalY = doc.lastAutoTable.finalY || 32;
     doc.setFontSize(10);
     doc.text(`Total de aulas: ${countBySubject.total}`, 14, finalY + 8);
 
-    doc.save('Contagem_Aulas.pdf');
+    doc.save(`Contagem_Aulas_${classLabel.replace(/\s+/g, '_')}.pdf`);
   };
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
       <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calculator className="w-5 h-5 text-violet-600"/> Calculadora de Aulas</h4>
-      <p className="text-[11px] text-slate-500">Selecione o período (bimestre) para contar aulas por matéria, já considerando eventos de exclusão.</p>
-      <div className="grid md:grid-cols-2 gap-3">
+      <p className="text-[11px] text-slate-500">Selecione o período (bimestre) e a turma para contar aulas por matéria, já considerando eventos de exclusão.</p>
+      <div className="grid md:grid-cols-3 gap-3">
+        <div className="flex flex-col">
+          <label className="text-xs font-semibold text-slate-600 mb-1">Turma</label>
+          <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="border rounded px-2 py-1.5 text-sm bg-slate-50 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500">
+            <option value="all">Todas as Turmas</option>
+            {data.classes.map(cls => (
+              <option key={cls.id} value={cls.id}>{cls.name}</option>
+            ))}
+          </select>
+        </div>
         <div className="flex flex-col">
           <label className="text-xs font-semibold text-slate-600 mb-1">Início do Período</label>
           <input type="date" value={start} onChange={e => setStart(e.target.value)} className="border rounded px-2 py-1.5 text-sm bg-slate-50 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500" />
@@ -534,7 +549,7 @@ const LessonCalculator = ({ data, calendarSettings }) => {
         </div>
         <div className="bg-slate-50 border border-slate-200 rounded p-3 lg:col-span-2 flex items-center justify-between">
           <div className="text-xs text-slate-500">Exportação</div>
-          <button onClick={exportPDF} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><FileText size={14}/> PDF (todas as matérias)</button>
+          <button onClick={exportPDF} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><FileText size={14}/> PDF ({selectedClass === 'all' ? 'todas as turmas' : data.classes.find(c => c.id === selectedClass)?.name || 'turma'})</button>
         </div>
       </div>
 
