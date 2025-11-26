@@ -401,6 +401,7 @@ const LessonCalculator = ({ data, calendarSettings }) => {
   const [start, setStart] = useState(calendarSettings.schoolYearStart || '');
   const [end, setEnd] = useState(calendarSettings.schoolYearEnd || '');
   const [selectedClass, setSelectedClass] = useState('all');
+  const [expandedSubjects, setExpandedSubjects] = useState(new Set());
 
   const parseDate = (str) => {
     if (!str) return null;
@@ -433,9 +434,10 @@ const LessonCalculator = ({ data, calendarSettings }) => {
   };
 
   const countBySubject = useMemo(() => {
-    if (!schoolStart || !schoolEnd) return { map: new Map(), total: 0 };
+    if (!schoolStart || !schoolEnd) return { map: new Map(), total: 0, details: new Map() };
     const [rs, re] = clampRange(parseDate(start), parseDate(end));
     const counts = new Map();
+    const details = new Map(); // subjectId -> { dayIdx -> count }
     let total = 0;
 
     Object.entries(data.schedule || {}).forEach(([key, slot]) => {
@@ -454,15 +456,26 @@ const LessonCalculator = ({ data, calendarSettings }) => {
       // Map our internal weekdays (0..4 for Mon..Fri) to JS weekday (1..5)
       const jsWeekday = (dayIdx + 1) % 7; // 1..5 (Mon..Fri)
       const first = getFirstWeekdayOnOrAfter(rs, jsWeekday);
+      let dayCount = 0;
       for (let cursor = new Date(first); cursor <= re; cursor.setDate(cursor.getDate() + 7)) {
         if (cursor < rs) continue;
         if (isExcluded(cursor)) continue;
-        counts.set(subjectId, (counts.get(subjectId) || 0) + 1);
+        dayCount++;
         total += 1;
+      }
+      
+      if (dayCount > 0) {
+        counts.set(subjectId, (counts.get(subjectId) || 0) + dayCount);
+        
+        if (!details.has(subjectId)) {
+          details.set(subjectId, new Map());
+        }
+        const subjectDetails = details.get(subjectId);
+        subjectDetails.set(dayIdx, (subjectDetails.get(dayIdx) || 0) + dayCount);
       }
     });
 
-    return { map: counts, total };
+    return { map: counts, total, details };
   }, [data.schedule, data.timeSlots, start, end, events, schoolStart, schoolEnd, selectedClass]);
 
   // Year and 4 bimesters (split into 4 equal ranges)
@@ -518,6 +531,18 @@ const LessonCalculator = ({ data, calendarSettings }) => {
     doc.save(`Contagem_Aulas_${classLabel.replace(/\s+/g, '_')}.pdf`);
   };
 
+  const toggleSubject = (subjectId) => {
+    setExpandedSubjects(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(subjectId)) {
+        newSet.delete(subjectId);
+      } else {
+        newSet.add(subjectId);
+      }
+      return newSet;
+    });
+  };
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
       <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calculator className="w-5 h-5 text-violet-600"/> Calculadora de Aulas</h4>
@@ -557,17 +582,55 @@ const LessonCalculator = ({ data, calendarSettings }) => {
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr>
+              <th className="border p-2 bg-slate-50 w-8"></th>
               <th className="border p-2 bg-slate-50">Matéria</th>
               <th className="border p-2 bg-slate-50 w-32 text-right">Aulas</th>
             </tr>
           </thead>
           <tbody>
-            {subjectsList.map(s => (
-              <tr key={s.id}>
-                <td className="border p-2">{s.name}</td>
-                <td className="border p-2 text-right font-semibold">{countBySubject.map.get(s.id) || 0}</td>
-              </tr>
-            ))}
+            {subjectsList.map(s => {
+              const isExpanded = expandedSubjects.has(s.id);
+              const subjectDetails = countBySubject.details.get(s.id);
+              const totalCount = countBySubject.map.get(s.id) || 0;
+              
+              return (
+                <React.Fragment key={s.id}>
+                  <tr className="hover:bg-slate-50 cursor-pointer" onClick={() => totalCount > 0 && toggleSubject(s.id)}>
+                    <td className="border p-2 text-center text-slate-400">
+                      {totalCount > 0 && (
+                        <span className="text-xs">{isExpanded ? '▼' : '▶'}</span>
+                      )}
+                    </td>
+                    <td className="border p-2 font-medium">{s.name}</td>
+                    <td className="border p-2 text-right font-semibold">{totalCount}</td>
+                  </tr>
+                  {isExpanded && subjectDetails && (
+                    <tr>
+                      <td colSpan="3" className="border-0 bg-slate-50">
+                        <div className="px-8 py-2">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-slate-500">
+                                <th className="text-left py-1">Dia da Semana</th>
+                                <th className="text-right py-1">Quantidade</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {Array.from(subjectDetails.entries()).map(([dayIdx, count]) => (
+                                <tr key={dayIdx} className="border-t border-slate-200">
+                                  <td className="py-1 text-slate-700">{DAYS[dayIdx]}</td>
+                                  <td className="text-right py-1 text-slate-700 font-medium">{count}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
