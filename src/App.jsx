@@ -164,8 +164,6 @@ const App = () => {
       <main className="flex-1 flex flex-col min-w-0 bg-slate-100 transition-all duration-300">
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-8 shadow-sm z-0 relative shrink-0">
           <div className="flex items-center gap-4 min-w-0">
-            <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-md"><Menu size={24} /></button>
-            {/* Toggle removido do header em telas grandes; controle agora dentro do sidebar */}
             <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2 truncate">{view === 'about' ? 'Sobre o Sistema' : view === 'data' && subView === 'timeSettings' ? 'Configuração de Horários' : view === 'data' ? 'Dados Institucionais' : view === 'activities' ? 'Atribuições' : view === 'manualEdit' ? 'Edição Manual da Grade' : view === 'agenda' ? 'Agenda e Grade' : 'Gerar/Visualizar Grade'}</h1>
           </div>
           <div className="flex items-center gap-4 shrink-0">
@@ -174,7 +172,7 @@ const App = () => {
              <button onClick={handleExportState} className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-1.5 rounded hover:bg-indigo-700 transition-colors text-sm font-medium" title="Salvar Backup"><Download size={16} /> <span className="hidden sm:inline">Backup</span></button>
           </div>
         </header>
-        <div className="flex-1 p-4 lg:p-8 overflow-y-auto">
+        <div className="flex-1 p-2 lg:p-4 overflow-y-auto">
            {view === 'about' && <AboutSection />}
            {view === 'data' && subView === 'timeSettings' && <TimeSettingsSection data={data} setData={setData} />}
            {view === 'data' && subView !== 'timeSettings' && <DataInputSection data={data} setData={setData} subView={subView} setSubView={setSubView} />}
