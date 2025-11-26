@@ -35,12 +35,12 @@ const AboutSection = () => {
         <div className="flex items-start gap-3">
           <div className="text-amber-600 mt-0.5"><AlertTriangle className="w-5 h-5"/></div>
           <div className="text-sm text-amber-900">
-            <p className="font-semibold">Aviso Importante: faça backup regularmente</p>
-            <p className="mt-1">Os dados são armazenados localmente no seu navegador (client‑side). Limpeza de cache, uso de navegação anônima, troca de dispositivo/navegador ou reinstalações podem apagar suas informações.</p>
+            <p className="font-semibold">Atenção: salve um backup</p>
+            <p className="mt-1">Seus dados ficam guardados só neste computador e neste navegador.</p>
             <ul className="list-disc pl-5 mt-2 space-y-1">
-              <li>Use o botão <span className="font-medium">Backup</span> (topo da página) para salvar um arquivo .json.</li>
-              <li>Guarde o arquivo em local seguro (ex.: nuvem/pasta pessoal).</li>
-              <li>Para recuperar, use o botão <span className="font-medium">Restaurar</span> e selecione o arquivo salvo.</li>
+              <li>Se você limpar os dados, usar janela anônima ou trocar de computador, pode perder tudo.</li>
+              <li>Para guardar: clique em <span className="font-medium">Backup</span> (no topo) e salve o arquivo (.json).</li>
+              <li>Para recuperar: clique em <span className="font-medium">Restaurar</span> e escolha o arquivo salvo.</li>
             </ul>
           </div>
         </div>
