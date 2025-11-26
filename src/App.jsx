@@ -99,7 +99,15 @@ const App = () => {
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans text-slate-900 overflow-hidden">
-      <aside className={`bg-white border-r border-slate-200 flex flex-col shadow-lg transition-all duration-300 ease-in-out ${isMobile ? (sidebarOpen ? 'w-64' : 'w-0') : sidebarOpen ? 'w-64' : 'w-16'} lg:relative shrink-0`}>
+      {/* Overlay para fechar sidebar em mobile/tablet */}
+      {isMobile && sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/30 z-40" 
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Fechar menu"
+        />
+      )}
+      <aside className={`bg-white border-r border-slate-200 flex flex-col shadow-lg transition-all duration-300 ease-in-out ${isMobile ? (sidebarOpen ? 'w-64 z-50' : 'w-0') : sidebarOpen ? 'w-64' : 'w-16'} lg:relative shrink-0`}>
         <div className={`border-b border-slate-100 flex items-center ${sidebarOpen ? 'p-6 justify-between' : 'p-3 justify-center'} overflow-hidden whitespace-nowrap ${isMobile && !sidebarOpen ? 'hidden' : ''}`}>
            <div className="flex items-center gap-2 text-indigo-700 mb-1">
              <Layout className="w-6 h-6 shrink-0" />
