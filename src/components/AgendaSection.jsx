@@ -609,17 +609,12 @@ const LessonCalculator = ({ data, calendarSettings }) => {
                       <td colSpan="3" className="border-0 bg-slate-50">
                         <div className="px-8 py-2">
                           <table className="w-full text-xs">
-                            <thead>
-                              <tr className="text-slate-500">
-                                <th className="text-left py-1">Dia da Semana</th>
-                                <th className="text-right py-1">Quantidade</th>
-                              </tr>
-                            </thead>
                             <tbody>
                               {Array.from(subjectDetails.entries()).map(([dayIdx, count]) => (
                                 <tr key={dayIdx} className="border-t border-slate-200">
-                                  <td className="py-1 text-slate-700">{DAYS[dayIdx]}</td>
-                                  <td className="text-right py-1 text-slate-700 font-medium">{count}</td>
+                                  <td className="py-1 text-slate-700">
+                                    {DAYS[dayIdx]} — {count} {count === 1 ? 'dia' : 'dias'}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
