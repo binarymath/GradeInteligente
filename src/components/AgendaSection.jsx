@@ -543,9 +543,21 @@ const LessonCalculator = ({ data, calendarSettings }) => {
     });
   };
 
+  // Cores por dia da semana sem usar verde/roxo/rosa
+  const colorByDay = (idx) => {
+    switch (idx) {
+      case 0: return 'bg-blue-100 text-blue-700';      // Segunda
+      case 1: return 'bg-sky-100 text-sky-700';        // Terça
+      case 2: return 'bg-amber-100 text-amber-700';    // Quarta
+      case 3: return 'bg-orange-100 text-orange-700';  // Quinta
+      case 4: return 'bg-cyan-100 text-cyan-700';      // Sexta
+      default: return 'bg-slate-100 text-slate-700';
+    }
+  };
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
-      <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calculator className="w-5 h-5 text-violet-600"/> Calculadora de Aulas</h4>
+      <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calculator className="w-5 h-5 text-blue-600"/> Calculadora de Aulas</h4>
       <p className="text-[11px] text-slate-500">Selecione o período (bimestre) e a turma para contar aulas por matéria, já considerando eventos de exclusão.</p>
       <div className="grid md:grid-cols-3 gap-3">
         <div className="flex flex-col">
@@ -618,8 +630,8 @@ const LessonCalculator = ({ data, calendarSettings }) => {
                                   <div key={dayIdx} className="flex items-center justify-between px-3 py-2 rounded bg-slate-50 border border-slate-200">
                                     <span className="text-xs font-medium text-slate-700">{DAYS[dayIdx]}</span>
                                     <div className="flex items-center gap-2">
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-indigo-100 text-indigo-700"><Calendar size={12}/> {daysQty} {daysQty === 1 ? 'dia' : 'dias'}</span>
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-violet-100 text-violet-700"><BookOpen size={12}/> {lessonsQty} {lessonsQty === 1 ? 'aula' : 'aulas'}</span>
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] ${colorByDay(dayIdx)}`}><Calendar size={12}/> {daysQty} {daysQty === 1 ? 'dia' : 'dias'}</span>
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] ${colorByDay(dayIdx)}`}><BookOpen size={12}/> {lessonsQty} {lessonsQty === 1 ? 'aula' : 'aulas'}</span>
                                     </div>
                                   </div>
                                 );
