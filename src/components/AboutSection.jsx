@@ -18,7 +18,7 @@ const Card = ({ icon: Icon, title, children }) => (
 
 const AboutSection = () => {
   return (
-    <div className="max-w-5xl mx-auto space-y-10">
+    <div className="max-w-5xl mx-auto space-y-6 md:space-y-10">
       {/* HERO */}
       <section className="rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white p-8 shadow-lg">
         <div className="flex items-center gap-3 mb-3">
