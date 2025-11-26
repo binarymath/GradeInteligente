@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, BookOpen, Coffee, Utensils, ArrowUp, ArrowDown, Trash2, Pencil, X, Check } from 'lucide-react';
+import { Plus, BookOpen, Coffee, Utensils, ArrowUp, ArrowDown, Trash2, Pencil, X, Check, Moon } from 'lucide-react';
 import { uid } from '../utils';
 
 const TimeSettingsSection = ({ data, setData }) => {
