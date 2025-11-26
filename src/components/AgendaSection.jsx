@@ -302,7 +302,7 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
         </div>
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm flex flex-col gap-3">
-            <h4 className="font-semibold text-slate-700 text-sm">Período do Ano Letivo</h4>
+            <h4 className="font-semibold text-slate-700 text-sm">Período Letivo</h4>
             <div className="flex flex-col gap-3">
               <div className="flex flex-col">
                 <label className="text-xs font-semibold text-slate-600 mb-1">Início</label>
