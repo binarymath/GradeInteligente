@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Settings, Calendar, Download, Users, HelpCircle, CheckCircle, Github, BookOpen, ExternalLink } from 'lucide-react';
+import { Sparkles, Settings, Calendar, Download, Users, HelpCircle, CheckCircle, Github, BookOpen, ExternalLink, AlertTriangle } from 'lucide-react';
 
 // Componente "Sobre o Sistema" simplificado e altamente escaneável.
 // Objetivo: transmitir rapidamente o valor, funcionamento e regras principais sem excesso de texto.
@@ -28,6 +28,22 @@ const AboutSection = () => {
         <p className="text-indigo-100 text-lg max-w-2xl">
           Gere automaticamente a grade escolar, equilibrando aulas, respeitando preferências e evitando conflitos — simples, claro e eficiente.
         </p>
+      </section>
+
+      {/* AVISO DE BACKUP */}
+      <section className="border border-amber-200 bg-amber-50 rounded-xl p-4 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="text-amber-600 mt-0.5"><AlertTriangle className="w-5 h-5"/></div>
+          <div className="text-sm text-amber-900">
+            <p className="font-semibold">Aviso Importante: faça backup regularmente</p>
+            <p className="mt-1">Os dados são armazenados localmente no seu navegador (client‑side). Limpeza de cache, uso de navegação anônima, troca de dispositivo/navegador ou reinstalações podem apagar suas informações.</p>
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li>Use o botão <span className="font-medium">Backup</span> (topo da página) para salvar um arquivo .json.</li>
+              <li>Guarde o arquivo em local seguro (ex.: nuvem/pasta pessoal).</li>
+              <li>Para recuperar, use o botão <span className="font-medium">Restaurar</span> e selecione o arquivo salvo.</li>
+            </ul>
+          </div>
+        </div>
       </section>
 
       {/* RESUMO RÁPIDO */}
