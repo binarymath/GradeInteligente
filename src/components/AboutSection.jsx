@@ -38,8 +38,8 @@ const AboutSection = () => {
             <p className="font-semibold">Atenção: salve um backup</p>
             <p className="mt-1">Seus dados ficam guardados só neste computador e neste navegador. Se você fechar a página, atualizar, limpar os dados ou trocar de computador, pode perder tudo.</p>
             <ul className="list-disc pl-5 mt-2 space-y-1">
-              <li>Para guardar: clique em <span className="font-medium">Backup</span> (no topo) e salve o arquivo (.json).</li>
-              <li>Para recuperar: clique em <span className="font-medium">Restaurar</span> e escolha o arquivo salvo.</li>
+              <li>Para guardar: clique em <span className="font-medium">Backup</span> (no canto direito do topo da página) e salve o arquivo (.json).</li>
+              <li>Para recuperar: clique em <span className="font-medium">Restaurar</span> (ao lado do Backup) e escolha o arquivo salvo.</li>
             </ul>
           </div>
         </div>
