@@ -18,9 +18,12 @@ export function computeSlotShift(slot) {
 export function expandShifts(shifts) {
   const expanded = new Set();
   (shifts || []).forEach(s => {
-    if (s === 'Integral (Manhã e Tarde)') { expanded.add('Manhã'); expanded.add('Tarde'); }
-    else if (s === 'Integral (Tarde e Noite)') { expanded.add('Tarde'); expanded.add('Noite'); }
-    else { expanded.add(s); }
+    // Mantém turnos integrais como distintos (não expande para simples)
+    if (s === 'Integral (Manhã e Tarde)' || s === 'Integral (Tarde e Noite)') {
+      expanded.add(s); // adiciona somente o rótulo integral
+    } else {
+      expanded.add(s);
+    }
   });
   return expanded;
 }

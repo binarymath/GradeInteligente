@@ -8,9 +8,11 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const [newTeacherShifts, setNewTeacherShifts] = useState([]);
   const [isAddingSubject, setIsAddingSubject] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
+  const [newSubjectShifts, setNewSubjectShifts] = useState([]);
   // Subject editing state
   const [editingSubjectId, setEditingSubjectId] = useState(null);
   const [editingSubjectName, setEditingSubjectName] = useState('');
+  const [editingSubjectShifts, setEditingSubjectShifts] = useState([]);
   
   const [isAddingClass, setIsAddingClass] = useState(false);
   const [editingClassId, setEditingClassId] = useState(null);
@@ -94,20 +96,42 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
     }));
     cancelEditTeacher();
   };
-  const handleAddSubject = () => { if (newSubjectName.trim()) { setData(prev => ({...prev, subjects: [...prev.subjects, { id: uid(), name: newSubjectName, colorIndex: Math.floor(Math.random() * COLORS.length), unavailable: [], preferred: [] }]})); setNewSubjectName(''); setIsAddingSubject(false); }};
+  const handleAddSubject = () => {
+    if (newSubjectName.trim()) {
+      setData(prev => ({
+        ...prev,
+        subjects: [
+          ...prev.subjects,
+          {
+            id: uid(),
+            name: newSubjectName.trim(),
+            colorIndex: Math.floor(Math.random() * COLORS.length),
+            unavailable: [],
+            preferred: [],
+            shifts: newSubjectShifts.length ? newSubjectShifts : []
+          }
+        ]
+      }));
+      setNewSubjectName('');
+      setNewSubjectShifts([]);
+      setIsAddingSubject(false);
+    }
+  };
   const startEditSubject = (subject) => {
     setEditingSubjectId(subject.id);
     setEditingSubjectName(subject.name);
+    setEditingSubjectShifts(subject.shifts || []);
   };
   const cancelEditSubject = () => {
     setEditingSubjectId(null);
     setEditingSubjectName('');
+    setEditingSubjectShifts([]);
   };
   const saveEditSubject = () => {
     if (!editingSubjectName.trim()) return;
     setData(prev => ({
       ...prev,
-      subjects: prev.subjects.map(s => s.id === editingSubjectId ? { ...s, name: editingSubjectName.trim() } : s)
+      subjects: prev.subjects.map(s => s.id === editingSubjectId ? { ...s, name: editingSubjectName.trim(), shifts: editingSubjectShifts } : s)
     }));
     cancelEditSubject();
   };
@@ -355,10 +379,32 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
              {!isAddingSubject ? (
                <button onClick={() => setIsAddingSubject(true)} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 flex items-center gap-1 transition-colors w-full sm:w-auto justify-center"><Plus size={16} /> Nova Matéria</button>
               ) : (
-                <div className="flex items-center gap-2 animate-fadeIn w-full sm:w-auto">
-                  <input type="text" autoFocus placeholder="Nome" className="flex-1 sm:w-auto border border-slate-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddSubject()}/>
-                  <button onClick={handleAddSubject} className="bg-emerald-500 text-white p-1 rounded hover:bg-emerald-600"><Check size={16} /></button>
-                  <button onClick={() => setIsAddingSubject(false)} className="bg-slate-300 text-slate-600 p-1 rounded hover:bg-slate-400"><X size={16} /></button>
+                <div className="flex flex-col gap-3 animate-fadeIn w-full sm:w-auto bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <input type="text" autoFocus placeholder="Nome da Matéria" className="flex-1 sm:w-auto border border-slate-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddSubject()}/>
+                    <button onClick={handleAddSubject} className="bg-emerald-500 text-white p-2 rounded hover:bg-emerald-600"><Check size={16} /></button>
+                    <button onClick={() => { setIsAddingSubject(false); setNewSubjectName(''); setNewSubjectShifts([]); }} className="bg-slate-300 text-slate-600 p-2 rounded hover:bg-slate-400"><X size={16} /></button>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Turnos da Matéria</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {['Manhã','Tarde','Noite','Integral (Manhã e Tarde)','Integral (Tarde e Noite)'].map(shift => {
+                        const active = newSubjectShifts.includes(shift);
+                        return (
+                          <button
+                            type="button"
+                            key={shift}
+                            onClick={() => setNewSubjectShifts(prev => prev.includes(shift) ? prev.filter(s => s !== shift) : [...prev, shift])}
+                            className={`text-[11px] px-2 py-2 rounded-md border transition-colors flex items-center justify-between ${active ? 'bg-violet-600 text-white border-violet-600 shadow-sm' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}
+                          >
+                            <span className="truncate">{shift}</span>
+                            {active && <Check size={12} className="opacity-90" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-2 text-[10px] text-slate-400">Selecione todos os turnos em que esta matéria pode ocorrer.</p>
+                  </div>
                 </div>
               )}
              </div>
@@ -395,21 +441,52 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                         <BookOpen size={16} className={COLORS[subject.colorIndex].text} />
                       </div>
                       {!isEditing ? (
-                        <h4 className="font-bold text-slate-700 flex items-center gap-2">{subject.name}
-                          <button onClick={() => startEditSubject(subject)} className="text-slate-400 hover:text-blue-600 transition-colors" title="Editar"><Edit2 size={14}/></button>
-                        </h4>
+                        <div>
+                          <h4 className="font-bold text-slate-700 flex items-center gap-2">{subject.name}
+                            <button onClick={() => startEditSubject(subject)} className="text-slate-400 hover:text-blue-600 transition-colors" title="Editar"><Edit2 size={14}/></button>
+                          </h4>
+                          {subject.shifts && subject.shifts.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {subject.shifts.map(s => (
+                                <span key={s} className="bg-violet-50 text-violet-700 border border-violet-100 rounded px-1.5 py-0.5 text-[10px] font-medium">{s}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ) : (
-                        <div className="flex items-center gap-2 w-full">
-                          <input
-                            type="text"
-                            value={editingSubjectName}
-                            onChange={e => setEditingSubjectName(e.target.value)}
-                            className="flex-1 border border-slate-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"
-                            placeholder="Nome da Matéria"
-                            autoFocus
-                          />
-                          <button onClick={saveEditSubject} className="bg-emerald-500 text-white p-1 rounded hover:bg-emerald-600" title="Salvar"><Check size={16}/></button>
-                          <button onClick={cancelEditSubject} className="bg-slate-300 text-slate-600 p-1 rounded hover:bg-slate-400" title="Cancelar"><X size={16}/></button>
+                        <div className="flex flex-col gap-3 w-full">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={editingSubjectName}
+                              onChange={e => setEditingSubjectName(e.target.value)}
+                              className="flex-1 border border-slate-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"
+                              placeholder="Nome da Matéria"
+                              autoFocus
+                            />
+                            <button onClick={saveEditSubject} className="bg-emerald-500 text-white p-1 rounded hover:bg-emerald-600" title="Salvar"><Check size={16}/></button>
+                            <button onClick={cancelEditSubject} className="bg-slate-300 text-slate-600 p-1 rounded hover:bg-slate-400" title="Cancelar"><X size={16}/></button>
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1">Turnos</label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-1">
+                              {['Manhã','Tarde','Noite','Integral (Manhã e Tarde)','Integral (Tarde e Noite)'].map(shift => {
+                                const active = editingSubjectShifts.includes(shift);
+                                return (
+                                  <button
+                                    type="button"
+                                    key={shift}
+                                    onClick={() => setEditingSubjectShifts(prev => prev.includes(shift) ? prev.filter(s => s !== shift) : [...prev, shift])}
+                                    className={`text-[11px] px-2 py-2 rounded-md border transition-colors flex items-center justify-between ${active ? 'bg-violet-600 text-white border-violet-600 shadow-sm' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}
+                                  >
+                                    <span className="truncate">{shift}</span>
+                                    {active && <Check size={12} className="opacity-90" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <p className="text-[10px] text-slate-400">Ajuste os turnos em que esta matéria pode ocorrer.</p>
+                          </div>
                         </div>
                       )}
                     </div>

@@ -22,7 +22,11 @@ export function useDisplayPeriods({ data, viewMode, selectedEntity }) {
       return periods;
     }
     if (viewMode === 'subject') {
-      // Matérias não têm restrição de período; mostramos todos.
+      const subject = data.subjects.find(s => s.id === selectedEntity);
+      if (subject?.shifts?.length) {
+        const expanded = expandShifts(subject.shifts);
+        return periods.filter(p => expanded.has(computeSlotShift(p)) || expanded.has(p.shift));
+      }
       return periods;
     }
     return periods;
