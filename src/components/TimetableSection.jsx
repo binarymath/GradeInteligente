@@ -4,7 +4,7 @@ import { DAYS } from '../utils';
 import ExportButtons from './ExportButtons';
 import { useDisplayPeriods } from '../hooks/useDisplayPeriods';
 
-const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, setCalendarSettings, showAgendaControls = true }) => {
+const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, setCalendarSettings, showAgendaControls = true, filterShift = 'Todos' }) => {
   const displayPeriods = useDisplayPeriods({ data, viewMode, selectedEntity });
   // Estado local do formulário de ano letivo e eventos
   const [schoolStart, setSchoolStart] = useState(calendarSettings.schoolYearStart || '');
@@ -124,7 +124,13 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
             </tr>
           </thead>
           <tbody>
-            {displayPeriods.map((slot, idx) => {
+            {displayPeriods
+              .filter(slot => {
+                if (filterShift === 'Todos') return true;
+                // respeita apenas slots explicitamente marcados com o turno selecionado
+                return slot.shift === filterShift;
+              })
+              .map((slot, idx) => {
               const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
               return (
                 <tr key={slot.id}>

@@ -57,6 +57,7 @@ const App = () => {
   const [generationLog, setGenerationLog] = useState([]);
   const [viewMode, setViewMode] = useState(initialNav.viewMode);
   const [selectedEntity, setSelectedEntity] = useState(initialNav.selectedEntity);
+  const [selectedShift, setSelectedShift] = useState('Todos');
   const [calendarSettings, setCalendarSettings] = useState({
     schoolYearStart: '2025-02-01',
     schoolYearEnd: '2025-12-15',
@@ -236,6 +237,17 @@ const App = () => {
                    </select>
                  </div>
                  <div className="flex flex-col">
+                   <label className="text-xs font-semibold text-slate-600 mb-1">Turno</label>
+                   <select value={selectedShift} onChange={e => setSelectedShift(e.target.value)} className="border p-2 rounded text-sm bg-white shadow-sm min-w-[180px]">
+                     <option value="Todos">Todos</option>
+                     <option value="Manhã">Manhã</option>
+                     <option value="Tarde">Tarde</option>
+                     <option value="Noite">Noite</option>
+                     <option value="Integral (Manhã e Tarde)">Integral (Manhã e Tarde)</option>
+                     <option value="Integral (Tarde e Noite)">Integral (Tarde e Noite)</option>
+                   </select>
+                 </div>
+                 <div className="flex flex-col">
                    <label className="text-xs font-semibold text-slate-600 mb-1">{viewMode === 'class' ? 'Selecione a Turma' : viewMode === 'teacher' ? 'Selecione o Professor' : 'Selecione a Matéria'}</label>
                    <select value={selectedEntity} onChange={e => setSelectedEntity(e.target.value)} className="border p-2 rounded text-sm bg-white shadow-sm min-w-[180px]">
                      <option value="">{viewMode === 'class' ? 'Escolha a turma...' : viewMode === 'teacher' ? 'Escolha o professor...' : 'Escolha a matéria...'}</option>
@@ -253,6 +265,7 @@ const App = () => {
                    selectedEntity={selectedEntity} 
                    calendarSettings={calendarSettings} 
                    setCalendarSettings={setCalendarSettings} 
+                   filterShift={selectedShift}
                     showAgendaControls={false}
                   />
                )}
@@ -269,6 +282,7 @@ const App = () => {
                              selectedEntity={cls.id} 
                              calendarSettings={calendarSettings} 
                              setCalendarSettings={setCalendarSettings} 
+                             filterShift={selectedShift}
                              showAgendaControls={false}
                            />
                          </div>
@@ -284,6 +298,7 @@ const App = () => {
                              selectedEntity={teacher.id} 
                              calendarSettings={calendarSettings} 
                              setCalendarSettings={setCalendarSettings} 
+                             filterShift={selectedShift}
                              showAgendaControls={false}
                            />
                          </div>
@@ -299,6 +314,7 @@ const App = () => {
                           selectedEntity={subject.id} 
                           calendarSettings={calendarSettings} 
                           setCalendarSettings={setCalendarSettings} 
+                          filterShift={selectedShift}
                           showAgendaControls={false}
                         />
                       </div>
