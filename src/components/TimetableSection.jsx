@@ -3,9 +3,24 @@ import { Calendar, Plus, Trash2 } from 'lucide-react';
 import { DAYS } from '../utils';
 import ExportButtons from './ExportButtons';
 import { useDisplayPeriods } from '../hooks/useDisplayPeriods';
+import { computeSlotShift } from '../utils/time';
 
 const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, setCalendarSettings, showAgendaControls = true, filterShift = 'Todos' }) => {
   const displayPeriods = useDisplayPeriods({ data, viewMode, selectedEntity });
+  // Se o filtro global for "Todos", aplica por padrão o Turno da entidade (quando disponível)
+  let effectiveShift = filterShift;
+  if (filterShift === 'Todos') {
+    if (viewMode === 'class') {
+      const cls = data.classes.find(c => c.id === selectedEntity);
+      if (cls?.shift) effectiveShift = cls.shift;
+    } else if (viewMode === 'teacher') {
+      // Para professor, manter Todos por padrão (pode atuar em múltiplos turnos)
+      effectiveShift = 'Todos';
+    } else if (viewMode === 'subject') {
+      // Matéria não possui turno próprio; manter Todos
+      effectiveShift = 'Todos';
+    }
+  }
   // Estado local do formulário de ano letivo e eventos
   const [schoolStart, setSchoolStart] = useState(calendarSettings.schoolYearStart || '');
   const [schoolEnd, setSchoolEnd] = useState(calendarSettings.schoolYearEnd || '');
@@ -126,9 +141,13 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
           <tbody>
             {displayPeriods
               .filter(slot => {
-                if (filterShift === 'Todos') return true;
-                // respeita apenas slots explicitamente marcados com o turno selecionado
-                return slot.shift === filterShift;
+                if (effectiveShift === 'Todos') return true;
+                // Integral deve ser distinto: só aceita se explicitamente marcado
+                if (effectiveShift.startsWith('Integral')) {
+                  return slot.shift === effectiveShift;
+                }
+                // Para turnos simples usa classificação automática caso não haja override
+                return computeSlotShift(slot) === effectiveShift;
               })
               .map((slot, idx) => {
               const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
@@ -193,6 +212,17 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
                 </tr>
               );
             })}
+            {displayPeriods.filter(slot => {
+              if (effectiveShift === 'Todos') return true;
+              if (effectiveShift.startsWith('Integral')) return slot.shift === effectiveShift;
+              return computeSlotShift(slot) === effectiveShift;
+            }).length === 0 && (
+              <tr>
+                <td colSpan={6} className="border p-4 text-center text-slate-500 bg-slate-50">
+                  Nenhum horário para o Turno selecionado.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -238,7 +238,7 @@ const App = () => {
                  </div>
                  <div className="flex flex-col">
                    <label className="text-xs font-semibold text-slate-600 mb-1">Turno</label>
-                   <select value={selectedShift} onChange={e => setSelectedShift(e.target.value)} className="border p-2 rounded text-sm bg-white shadow-sm min-w-[180px]">
+                   <select value={selectedShift} onChange={e => { setSelectedShift(e.target.value); setSelectedEntity(''); }} className="border p-2 rounded text-sm bg-white shadow-sm min-w-[180px]">
                      <option value="Todos">Todos</option>
                      <option value="Manhã">Manhã</option>
                      <option value="Tarde">Tarde</option>
@@ -252,8 +252,12 @@ const App = () => {
                    <select value={selectedEntity} onChange={e => setSelectedEntity(e.target.value)} className="border p-2 rounded text-sm bg-white shadow-sm min-w-[180px]">
                      <option value="">{viewMode === 'class' ? 'Escolha a turma...' : viewMode === 'teacher' ? 'Escolha o professor...' : 'Escolha a matéria...'}</option>
                      <option value="all">📋 Todos</option>
-                     {viewMode === 'class' && data.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                     {viewMode === 'teacher' && data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                     {viewMode === 'class' && data.classes
+                       .filter(c => selectedShift === 'Todos' ? true : c.shift === selectedShift)
+                       .map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                     {viewMode === 'teacher' && data.teachers
+                       .filter(t => selectedShift === 'Todos' ? true : (t.shifts || []).includes(selectedShift))
+                       .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                      {viewMode === 'subject' && data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                    </select>
                  </div>
@@ -271,7 +275,9 @@ const App = () => {
                )}
                {selectedEntity === 'all' && (
                  <div className="space-y-4">
-                   {viewMode === 'class' && data.classes.map(cls => (
+                   {viewMode === 'class' && data.classes
+                       .filter(cls => selectedShift === 'Todos' ? true : cls.shift === selectedShift)
+                       .map(cls => (
                          <div key={cls.id} className="border-t-4 border-indigo-500 pt-4">
                            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
                              <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm">{cls.name}</span>
@@ -287,7 +293,9 @@ const App = () => {
                            />
                          </div>
                        ))}
-                   {viewMode === 'teacher' && data.teachers.map(teacher => (
+                   {viewMode === 'teacher' && data.teachers
+                       .filter(teacher => selectedShift === 'Todos' ? true : (teacher.shifts || []).includes(selectedShift))
+                       .map(teacher => (
                          <div key={teacher.id} className="border-t-4 border-emerald-500 pt-4">
                            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
                              <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-sm">{teacher.name}</span>
