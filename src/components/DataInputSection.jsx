@@ -256,32 +256,26 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
             </div>
             {data.teachers.map(teacher => {
               const isEditing = editingTeacherId === teacher.id;
-              // Build filtered slot list based on teacher shifts
-              const classifySlotShift = (start) => {
-                const [h,m] = start.split(':').map(Number);
-                const minutes = h*60+m;
-                if (minutes < 12*60) return 'Manhã';
-                if (minutes < 18*60) return 'Tarde';
-                return 'Noite';
-              };
-              const expandedShifts = new Set();
-              (teacher.shifts || []).forEach(s => {
-                if (s === 'Manhã' || s === 'Tarde' || s === 'Noite') {
-                  expandedShifts.add(s);
-                } else if (s === 'Integral (Manhã e Tarde)') {
-                  expandedShifts.add('Manhã');
-                  expandedShifts.add('Tarde');
-                } else if (s === 'Integral (Tarde e Noite)') {
-                  expandedShifts.add('Tarde');
-                  expandedShifts.add('Noite');
-                }
-              });
+              // Filtra apenas slots compatíveis com os turnos do professor (mantém integrais distintos)
+              const teacherHasShifts = (teacher.shifts || []).length > 0;
+              const teacherShiftSet = new Set(teacher.shifts || []);
               const filteredSlotsWithIndex = allSlots
                 .map((slot, idx) => ({ slot, idx }))
                 .filter(({ slot }) => {
-                  if (expandedShifts.size === 0) return true; // No shifts defined => show all
-                  const cat = classifySlotShift(slot.start);
-                  return expandedShifts.has(cat);
+                  if (!teacherHasShifts) return true; // Sem turnos definidos => mostra todos
+                  if (slot.shift && (slot.shift.startsWith('Integral'))) {
+                    // Slot integral só aparece se professor tiver exatamente aquele integral
+                    return teacherShiftSet.has(slot.shift);
+                  }
+                  // Slot simples ou automático: classificar e comparar
+                  const label = slot.shift || ( () => {
+                    const [h,m] = slot.start.split(':').map(Number);
+                    const minutes = h*60+m;
+                    if (minutes < 12*60) return 'Manhã';
+                    if (minutes < 18*60) return 'Tarde';
+                    return 'Noite';
+                  })();
+                  return teacherShiftSet.has(label);
                 });
               return (
                 <div key={teacher.id} className="border border-slate-200 rounded-lg p-4 hover:border-blue-200 transition-colors">
