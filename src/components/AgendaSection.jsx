@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar, Plus, Trash2, Download, Calculator, FileText, BookOpen } from 'lucide-react';
+import { Calendar, Plus, Trash2, Download, Calculator, FileText, BookOpen, Clock } from 'lucide-react';
 import { uid, DAYS } from '../utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -391,8 +391,322 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
         </div>
       </div>
 
+      {/* Eventos Pontuais (Dias Específicos) */}
+      <SpecificDayEvents 
+        data={data} 
+        calendarSettings={calendarSettings} 
+        setCalendarSettings={setCalendarSettings} 
+      />
+
       {/* Calculadora de Aulas */}
       <LessonCalculator data={data} calendarSettings={calendarSettings} />
+    </div>
+  );
+};
+
+const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
+  const [isAddingSpecificDay, setIsAddingSpecificDay] = useState(false);
+  const [specificDayDate, setSpecificDayDate] = useState('');
+  const [specificDayEndDate, setSpecificDayEndDate] = useState('');
+  const [specificDayTitle, setSpecificDayTitle] = useState('');
+  const [specificDayDescription, setSpecificDayDescription] = useState('');
+  const [modificationMode, setModificationMode] = useState(''); // '', 'replace', 'add', 'partial' — none pre-selected
+  const [startTime, setStartTime] = useState('08:00');
+  const [endTime, setEndTime] = useState('12:00');
+  const [isMultipleDays, setIsMultipleDays] = useState(false);
+
+  const addSpecificDayEvent = () => {
+    if (!specificDayDate.trim()) {
+      alert('Por favor, selecione uma data inicial para o evento específico.');
+      return;
+    }
+    if (isMultipleDays && !specificDayEndDate.trim()) {
+      alert('Por favor, selecione uma data final para o evento de múltiplos dias.');
+      return;
+    }
+    if (!specificDayTitle.trim()) {
+      alert('Por favor, informe um título para o evento específico.');
+      return;
+    }
+    if (!modificationMode) {
+      alert('Selecione o Tipo de Modificação (Substituir/Acrescentar/Parcial).');
+      return;
+    }
+    if (!startTime || !endTime) {
+      alert('Por favor, informe o horário de início e fim do evento.');
+      return;
+    }
+
+    const newEvent = {
+      id: uid(),
+      type: 'DiaEspecifico',
+      date: specificDayDate,
+      endDate: isMultipleDays ? (specificDayEndDate || specificDayDate) : specificDayDate,
+      title: specificDayTitle,
+      description: specificDayDescription,
+      modificationMode: modificationMode,
+      startTime: startTime,
+      endTime: endTime,
+      customSchedule: []
+    };
+
+    setCalendarSettings(prev => ({
+      ...prev,
+      specificDayEvents: [...(prev.specificDayEvents || []), newEvent]
+    }));
+
+    // Reset form
+    setSpecificDayDate('');
+    setSpecificDayEndDate('');
+    setSpecificDayTitle('');
+    setSpecificDayDescription('');
+    setModificationMode('');
+    setStartTime('08:00');
+    setEndTime('12:00');
+    setIsMultipleDays(false);
+    setIsAddingSpecificDay(false);
+  };
+
+  const removeSpecificDayEvent = (id) => {
+    setCalendarSettings(prev => ({
+      ...prev,
+      specificDayEvents: (prev.specificDayEvents || []).filter(e => e.id !== id)
+    }));
+  };
+
+  const formatDateBR = (dateStr) => {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}/${y}`;
+  };
+
+  const getModeModeLabel = (mode) => {
+    switch(mode) {
+      case 'replace': return 'Substituir tudo';
+      case 'add': return 'Acrescentar';
+      case 'partial': return 'Modificar parcialmente';
+      default: return mode;
+    }
+  };
+
+  const getModeColor = (mode) => {
+    switch(mode) {
+      case 'replace': return 'bg-red-100 text-red-700';
+      case 'add': return 'bg-blue-100 text-blue-700';
+      case 'partial': return 'bg-amber-100 text-amber-700';
+      default: return 'bg-slate-100 text-slate-700';
+    }
+  };
+
+  const specificDayEvents = calendarSettings.specificDayEvents || [];
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
+      <div className="flex justify-between items-center">
+        <h4 className="font-bold text-slate-700 flex items-center gap-2">
+          <Calendar className="w-5 h-5 text-blue-600"/> 
+          Eventos de Dias Específicos
+        </h4>
+        <button 
+          onClick={() => setIsAddingSpecificDay(!isAddingSpecificDay)}
+          className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-blue-700"
+        >
+          <Plus size={14}/> {isAddingSpecificDay ? 'Cancelar' : 'Novo Evento'}
+        </button>
+      </div>
+
+      <p className="text-[11px] text-slate-500">
+        Crie eventos pontuais para modificar a agenda em dias específicos (reuniões, eventos especiais, etc). 
+        Após criar, exporte o ICS incremental para sobrescrever o dia no seu calendário.
+      </p>
+
+      {isAddingSpecificDay && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+          <h5 className="font-semibold text-blue-800 text-sm">Adicionar Evento Específico</h5>
+          
+          <div className="flex items-center gap-2 bg-white border border-blue-200 rounded p-2">
+            <input 
+              type="checkbox" 
+              id="isMultipleDays"
+              checked={isMultipleDays}
+              onChange={e => setIsMultipleDays(e.target.checked)}
+              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+            />
+            <label htmlFor="isMultipleDays" className="text-sm font-medium text-slate-700 cursor-pointer">
+              Aplicar em múltiplos dias consecutivos
+            </label>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-3">
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-slate-600 mb-1">
+                {isMultipleDays ? 'Data Inicial' : 'Data do Evento'}
+              </label>
+              <input 
+                type="date" 
+                value={specificDayDate} 
+                onChange={e => setSpecificDayDate(e.target.value)}
+                className="border rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            {isMultipleDays && (
+              <div className="flex flex-col">
+                <label className="text-xs font-semibold text-slate-600 mb-1">Data Final</label>
+                <input 
+                  type="date" 
+                  value={specificDayEndDate} 
+                  onChange={e => setSpecificDayEndDate(e.target.value)}
+                  className="border rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            )}
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-slate-600 mb-1">Título do Evento</label>
+              <input 
+                type="text" 
+                value={specificDayTitle} 
+                onChange={e => setSpecificDayTitle(e.target.value)}
+                placeholder="Ex: Reunião de Pais, Dia da Escola"
+                className="border rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-3">
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-slate-600 mb-1">Horário de Início</label>
+              <input 
+                type="time" 
+                value={startTime} 
+                onChange={e => setStartTime(e.target.value)}
+                className="border rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-slate-600 mb-1">Horário de Término</label>
+              <input 
+                type="time" 
+                value={endTime} 
+                onChange={e => setEndTime(e.target.value)}
+                className="border rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          
+          <div className="flex flex-col">
+            <label className="text-xs font-semibold text-slate-600 mb-2">Tipo de Modificação</label>
+            <div className="grid md:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setModificationMode('replace')}
+                className={`px-3 py-2 rounded text-xs font-medium border transition-colors ${
+                  modificationMode === 'replace' 
+                    ? 'bg-red-600 text-white border-red-600' 
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <div className="font-semibold">Substituir Tudo</div>
+                <div className="text-[10px] opacity-80 mt-0.5">Remove horário normal nas datas de evento</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModificationMode('add')}
+                className={`px-3 py-2 rounded text-xs font-medium border transition-colors ${
+                  modificationMode === 'add' 
+                    ? 'bg-blue-600 text-white border-blue-600' 
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <div className="font-semibold">Acrescentar</div>
+                <div className="text-[10px] opacity-80 mt-0.5">Mantém horário + novo</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModificationMode('partial')}
+                className={`px-3 py-2 rounded text-xs font-medium border transition-colors ${
+                  modificationMode === 'partial' 
+                    ? 'bg-amber-600 text-white border-amber-600' 
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <div className="font-semibold">Modificar Parcialmente</div>
+                <div className="text-[10px] opacity-80 mt-0.5">Altera períodos específicos</div>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-xs font-semibold text-slate-600 mb-1">Descrição (opcional)</label>
+            <textarea 
+              value={specificDayDescription}
+              onChange={e => setSpecificDayDescription(e.target.value)}
+              placeholder="Detalhes adicionais sobre o evento..."
+              rows={3}
+              className="border rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <button 
+            onClick={addSpecificDayEvent}
+            className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700"
+          >
+            <Plus size={16}/> Adicionar Evento
+          </button>
+        </div>
+      )}
+
+      {specificDayEvents.length > 0 && (
+        <div>
+          <div className="text-xs font-bold text-slate-600 mb-2">Eventos Cadastrados</div>
+          <div className="space-y-2">
+            {specificDayEvents.map(evt => {
+              const isMultiDay = evt.endDate && evt.endDate !== evt.date;
+              return (
+                <div 
+                  key={evt.id} 
+                  className="bg-sky-50 border border-sky-200 rounded-lg p-3 flex items-start justify-between"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-700">
+                        <Calendar size={12}/> 
+                        {isMultiDay 
+                          ? `${formatDateBR(evt.date)} a ${formatDateBR(evt.endDate)}`
+                          : formatDateBR(evt.date)
+                        }
+                      </span>
+                      {evt.startTime && evt.endTime && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
+                          <Clock size={12}/> {evt.startTime} - {evt.endTime}
+                        </span>
+                      )}
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${getModeColor(evt.modificationMode || 'replace')}`}>
+                        {getModeModeLabel(evt.modificationMode || 'replace')}
+                      </span>
+                    </div>
+                    <div className="font-semibold text-slate-800 text-sm mb-1">{evt.title}</div>
+                    {evt.description && (
+                      <p className="text-xs text-slate-600">{evt.description}</p>
+                    )}
+                  </div>
+                  <button 
+                    onClick={() => removeSpecificDayEvent(evt.id)}
+                    className="text-red-600 hover:text-red-700 p-1 shrink-0" 
+                    title="Remover"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {specificDayEvents.length === 0 && !isAddingSpecificDay && (
+        <div className="text-center py-6 text-slate-400 text-sm">
+          Nenhum evento de dia específico cadastrado ainda.
+        </div>
+      )}
     </div>
   );
 };

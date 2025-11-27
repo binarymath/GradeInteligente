@@ -150,3 +150,78 @@ export function exportICS({ viewMode, selectedEntity, data, calendarSettings }) 
   link.click();
   document.body.removeChild(link);
 }
+
+/**
+ * Gera e dispara download do ICS incremental contendo APENAS eventos de dias específicos.
+ * Usado para sobrescrever dias já importados quando há mudanças pontuais (reuniões, eventos especiais).
+ * @param {Object} params
+ * @param {'class'|'teacher'} params.viewMode
+ * @param {string} params.selectedEntity
+ * @param {Object} params.data
+ * @param {Object} params.calendarSettings { specificDayEvents }
+ */
+export function exportIncrementalICS({ viewMode, selectedEntity, data, calendarSettings }) {
+  let entity = null;
+  if (viewMode === 'class') entity = data.classes.find(c => c.id === selectedEntity);
+  else if (viewMode === 'teacher') entity = data.teachers.find(t => t.id === selectedEntity);
+  else if (viewMode === 'subject') entity = data.subjects.find(s => s.id === selectedEntity);
+  if (!entity) return;
+
+  const specificDayEvents = calendarSettings.specificDayEvents || [];
+  if (specificDayEvents.length === 0) {
+    alert('Nenhum evento de dia específico cadastrado. Adicione eventos antes de exportar o ICS incremental.');
+    return;
+  }
+
+  const now = new Date();
+  const nowString = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+  const icsLines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//AutoGrade//SchoolTimetable//PT',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    `X-WR-CALNAME:Eventos Especiais - ${cleanText(entity.name)}`,
+    'BEGIN:VTIMEZONE',
+    'TZID:America/Sao_Paulo',
+    'X-LIC-LOCATION:America/Sao_Paulo',
+    'BEGIN:STANDARD',
+    'TZOFFSETFROM:-0300',
+    'TZOFFSETTO:-0300',
+    'TZNAME:-03',
+    'DTSTART:19700101T000000',
+    'END:STANDARD',
+    'END:VTIMEZONE'
+  ];
+
+  // Para cada evento de dia específico, criar um evento de dia inteiro
+  specificDayEvents.forEach(evt => {
+    const eventDate = parseDateInput(evt.date);
+    const eventStartStr = formatICSTime(eventDate, '00', '00');
+    const eventEndStr = formatICSTime(eventDate, '23', '59');
+
+    icsLines.push('BEGIN:VEVENT');
+    icsLines.push(`UID:${evt.id}@autograde.com`);
+    icsLines.push(`DTSTAMP:${nowString}`);
+    icsLines.push(`SUMMARY:${cleanText(evt.title)}`);
+    if (evt.description) {
+      icsLines.push(`DESCRIPTION:${cleanText(evt.description)}`);
+    }
+    icsLines.push(`DTSTART;VALUE=DATE:${eventDate.toISOString().split('T')[0].replace(/-/g, '')}`);
+    icsLines.push(`DTEND;VALUE=DATE:${new Date(eventDate.getTime() + 86400000).toISOString().split('T')[0].replace(/-/g, '')}`);
+    icsLines.push('TRANSP:OPAQUE');
+    icsLines.push('END:VEVENT');
+  });
+
+  icsLines.push('END:VCALENDAR');
+  const finalContent = icsLines.map(foldLine).join('\r\n');
+  const blob = new Blob([finalContent], { type: 'text/calendar;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = window.URL.createObjectURL(blob);
+  link.setAttribute('download', `Eventos_Especiais_${entity.name.replace(/\s+/g, '_')}.ics`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+

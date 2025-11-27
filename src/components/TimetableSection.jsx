@@ -27,6 +27,12 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
   const [eventTitle, setEventTitle] = useState('');
   const [eventStart, setEventStart] = useState('');
   const [eventEnd, setEventEnd] = useState('');
+  
+  // Estado para eventos de dia específico (customização de grade)
+  const [isAddingSpecificDay, setIsAddingSpecificDay] = useState(false);
+  const [specificDayDate, setSpecificDayDate] = useState('');
+  const [specificDayTitle, setSpecificDayTitle] = useState('');
+  const [specificDayDescription, setSpecificDayDescription] = useState('');
 
   const syncSchoolYear = () => {
     setCalendarSettings(prev => ({ ...prev, schoolYearStart: schoolStart, schoolYearEnd: schoolEnd }));
@@ -50,6 +56,44 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
 
   const removeEvent = (id) => {
     setCalendarSettings(prev => ({ ...prev, events: prev.events.filter(e => e.id === id) }));
+  };
+  
+  const addSpecificDayEvent = () => {
+    if (!specificDayDate) {
+      alert('Selecione a data do evento específico.');
+      return;
+    }
+    if (!specificDayTitle.trim()) {
+      alert('Informe um título para o evento.');
+      return;
+    }
+    
+    const newEvent = {
+      id: Date.now().toString(),
+      type: 'DiaEspecifico',
+      date: specificDayDate,
+      title: specificDayTitle.trim(),
+      description: specificDayDescription.trim(),
+      customSchedule: [] // Será preenchido na próxima etapa
+    };
+    
+    setCalendarSettings(prev => ({
+      ...prev,
+      specificDayEvents: [...(prev.specificDayEvents || []), newEvent]
+    }));
+    
+    // Reset form
+    setSpecificDayDate('');
+    setSpecificDayTitle('');
+    setSpecificDayDescription('');
+    setIsAddingSpecificDay(false);
+  };
+  
+  const removeSpecificDayEvent = (id) => {
+    setCalendarSettings(prev => ({
+      ...prev,
+      specificDayEvents: (prev.specificDayEvents || []).filter(e => e.id !== id)
+    }));
   };
 
   // Handlers movidos para componente de botões.
@@ -122,6 +166,117 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
             <div className="flex-1">
               <p className="text-xs text-slate-600 leading-relaxed"><span className="font-semibold text-slate-700">Como funciona:</span> Cada aula prevista no horário é exportada semanalmente para o arquivo .ics até o fim do ano letivo. Os períodos marcados como <span className="font-semibold">Férias</span> ou <span className="font-semibold">Feriado</span> excluem essas aulas automaticamente, mantendo sua agenda limpa.</p>
             </div>
+          </div>
+          
+          {/* NOVA SEÇÃO: Eventos de Dia Específico */}
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-200 rounded-xl p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar className="w-5 h-5 text-emerald-600"/>
+              <h4 className="font-bold text-emerald-800 text-base">Eventos de Dia Específico</h4>
+            </div>
+            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+              <span className="font-semibold text-emerald-700">Sobrescrever grade de um dia:</span> Crie eventos para dias específicos (ex: reunião, formatura, apresentação) que substituem a grade normal. 
+              Depois baixe um .ics incremental apenas com esse dia para atualizar sua agenda.
+            </p>
+            
+            {!isAddingSpecificDay ? (
+              <button 
+                onClick={() => setIsAddingSpecificDay(true)}
+                className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 shadow-sm flex items-center gap-2 transition-colors"
+              >
+                <Plus size={16} /> Criar Evento de Dia Específico
+              </button>
+            ) : (
+              <div className="bg-white rounded-lg p-4 border border-emerald-300 shadow-sm space-y-3">
+                <div className="grid md:grid-cols-2 gap-3">
+                  <div className="flex flex-col">
+                    <label className="text-xs font-semibold text-slate-700 mb-1">Data do Evento</label>
+                    <input 
+                      type="date" 
+                      value={specificDayDate} 
+                      onChange={e => setSpecificDayDate(e.target.value)}
+                      className="border rounded px-3 py-2 text-sm bg-slate-50 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <label className="text-xs font-semibold text-slate-700 mb-1">Título do Evento</label>
+                    <input 
+                      type="text" 
+                      value={specificDayTitle} 
+                      onChange={e => setSpecificDayTitle(e.target.value)}
+                      placeholder="Ex: Reunião de Pais, Formatura, etc."
+                      className="border rounded px-3 py-2 text-sm bg-slate-50 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col">
+                  <label className="text-xs font-semibold text-slate-700 mb-1">Descrição (Opcional)</label>
+                  <textarea 
+                    value={specificDayDescription} 
+                    onChange={e => setSpecificDayDescription(e.target.value)}
+                    placeholder="Descreva o evento e como a grade será modificada..."
+                    rows="2"
+                    className="border rounded px-3 py-2 text-sm bg-slate-50 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={addSpecificDayEvent}
+                    className="bg-emerald-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-emerald-700 flex items-center gap-1"
+                  >
+                    <Plus size={16} /> Adicionar
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setIsAddingSpecificDay(false);
+                      setSpecificDayDate('');
+                      setSpecificDayTitle('');
+                      setSpecificDayDescription('');
+                    }}
+                    className="bg-slate-300 text-slate-700 px-4 py-2 rounded text-sm font-medium hover:bg-slate-400"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Lista de eventos específicos cadastrados */}
+            {calendarSettings.specificDayEvents && calendarSettings.specificDayEvents.length > 0 && (
+              <div className="mt-4">
+                <div className="text-xs font-bold text-emerald-700 mb-2">Eventos Específicos Cadastrados</div>
+                <ul className="divide-y divide-emerald-100 bg-white border border-emerald-200 rounded-lg shadow-sm">
+                  {calendarSettings.specificDayEvents.map(ev => (
+                    <li key={ev.id} className="flex items-start justify-between px-4 py-3 hover:bg-emerald-50 transition-colors">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Calendar size={14} className="text-emerald-600" />
+                          <span className="font-bold text-slate-800 text-sm">{ev.title}</span>
+                        </div>
+                        <div className="text-xs text-slate-600">
+                          <span className="font-semibold">Data:</span> {new Date(ev.date + 'T12:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                        </div>
+                        {ev.description && (
+                          <p className="text-xs text-slate-500 mt-1 italic">{ev.description}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 ml-4">
+                        <button 
+                          onClick={() => removeSpecificDayEvent(ev.id)}
+                          className="text-red-500 hover:text-red-700 p-1 transition-colors" 
+                          title="Remover evento"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[10px] text-slate-500 mt-2 italic">
+                  💡 Dica: Após criar eventos, vá em "Agenda e Grade" para baixar o .ics incremental apenas com esses dias.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       ) : (
