@@ -433,6 +433,27 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
 
              {data.subjects.map(subject => {
                const isEditing = editingSubjectId === subject.id;
+               // Filtra visualmente apenas slots compatíveis com os turnos da matéria para evitar ambiguidade
+               const subjectHasShifts = (subject.shifts || []).length > 0;
+               const subjectShiftSet = new Set(subject.shifts || []);
+               const filteredSlotsWithIndex = allSlots
+                 .map((slot, idx) => ({ slot, idx }))
+                 .filter(({ slot }) => {
+                   if (!subjectHasShifts) return true; // Sem turnos definidos => mostra todos
+                   if (slot.shift && (slot.shift.startsWith('Integral'))) {
+                     // Slot integral só aparece se matéria também tiver exatamente aquele integral
+                     return subjectShiftSet.has(slot.shift);
+                   }
+                   // Slot simples ou automático: classificar e comparar
+                   const label = slot.shift || ( () => {
+                     const [h,m] = slot.start.split(':').map(Number);
+                     const minutes = h*60+m;
+                     if (minutes < 12*60) return 'Manhã';
+                     if (minutes < 18*60) return 'Tarde';
+                     return 'Noite';
+                   })();
+                   return subjectShiftSet.has(label);
+                 });
                return (
                <div key={subject.id} className="border border-slate-200 rounded-lg p-4 hover:border-blue-200 transition-colors bg-white">
                   <div className="flex justify-between items-start mb-3">
@@ -500,7 +521,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                         <div className="grid grid-cols-6 gap-1">
                           <div className="text-[10px] font-bold text-slate-400"></div>
                           {DAYS.map(d => <div key={d} className="text-[10px] font-bold text-center text-slate-400 uppercase">{d.substring(0,3)}</div>)}
-                          {allSlots.map((slot, idx) => (
+                          {filteredSlotsWithIndex.map(({ slot, idx }) => (
                             <React.Fragment key={idx}>
                               <div className="text-[10px] text-slate-400 flex items-center justify-end pr-2">{slot.start}</div>
                               {DAYS.map((d, di) => {
