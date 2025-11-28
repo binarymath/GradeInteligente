@@ -7,6 +7,9 @@ node_modules/
 .esbuild/
 .vite/
 
+# Electron desktop packaging (não commitar)
+/electron/
+
 # Cache & tooling
 .cache/
 .turbo/
