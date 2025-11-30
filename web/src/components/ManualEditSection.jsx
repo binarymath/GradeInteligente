@@ -10,7 +10,7 @@ const ManualEditSection = ({ data, setData }) => {
   const [newEntry, setNewEntry] = useState({ teacherId: '', subjectId: '' });
 
   // Filtrar apenas slots de aula
-  const lessonSlots = useMemo(() => 
+  const lessonSlots = useMemo(() =>
     data.timeSlots.filter(slot => slot.type === 'aula'),
     [data.timeSlots]
   );
@@ -25,9 +25,9 @@ const ManualEditSection = ({ data, setData }) => {
   const handleRemoveLesson = (dayIdx, slotIdx, classId = null) => {
     const targetClass = classId || selectedClass;
     if (!targetClass || targetClass === 'all') return;
-    const timeKey = `${dayIdx}-${slotIdx}`;
+    const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
     const scheduleKey = `${targetClass}-${timeKey}`;
-    
+
     setData(prev => {
       const newSchedule = { ...prev.schedule };
       delete newSchedule[scheduleKey];
@@ -37,12 +37,12 @@ const ManualEditSection = ({ data, setData }) => {
 
   const handleAddLesson = () => {
     if (!newEntry.teacherId || !newEntry.subjectId || !selectedCell) return;
-    
+
     const { dayIdx, slotIdx, classId } = selectedCell;
     const targetClass = classId || selectedClass;
     if (!targetClass || targetClass === 'all') return;
-    
-    const timeKey = `${dayIdx}-${slotIdx}`;
+
+    const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
     const scheduleKey = `${targetClass}-${timeKey}`;
 
     // Verificar conflito de professor
@@ -78,7 +78,7 @@ const ManualEditSection = ({ data, setData }) => {
     const targetClass = classId || selectedClass;
     if (!targetClass || targetClass === 'all') return null;
     const absoluteIndex = data.timeSlots.findIndex(s => s.id === lessonSlots[slotIdx].id);
-    const timeKey = `${dayIdx}-${absoluteIndex}`;
+    const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
     const scheduleKey = `${targetClass}-${timeKey}`;
     return data.schedule[scheduleKey];
   };
@@ -99,11 +99,10 @@ const ManualEditSection = ({ data, setData }) => {
           </div>
           <button
             onClick={() => setEditMode(!editMode)}
-            className={`px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2 ${
-              editMode 
-                ? 'bg-white text-indigo-600 hover:bg-indigo-50' 
-                : 'bg-indigo-800 text-white hover:bg-indigo-900'
-            }`}
+            className={`px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2 ${editMode
+              ? 'bg-white text-indigo-600 hover:bg-indigo-50'
+              : 'bg-indigo-800 text-white hover:bg-indigo-900'
+              }`}
           >
             {editMode ? (
               <>
@@ -176,13 +175,12 @@ const ManualEditSection = ({ data, setData }) => {
                       {DAYS.map((_, dayIdx) => {
                         const entry = getScheduleEntry(dayIdx, slotIdx);
                         const isEmpty = !entry;
-                        
+
                         return (
                           <td
                             key={dayIdx}
-                            className={`border border-slate-300 p-2 relative group ${
-                              editMode ? 'cursor-pointer hover:bg-indigo-50' : ''
-                            } ${isEmpty ? 'bg-slate-50' : ''}`}
+                            className={`border border-slate-300 p-2 relative group ${editMode ? 'cursor-pointer hover:bg-indigo-50' : ''
+                              } ${isEmpty ? 'bg-slate-50' : ''}`}
                             onClick={() => editMode && !isEmpty && handleCellClick(dayIdx, absoluteIndex)}
                           >
                             {entry ? (
@@ -273,13 +271,12 @@ const ManualEditSection = ({ data, setData }) => {
                           {DAYS.map((_, dayIdx) => {
                             const entry = getScheduleEntry(dayIdx, slotIdx, cls.id);
                             const isEmpty = !entry;
-                            
+
                             return (
                               <td
                                 key={dayIdx}
-                                className={`border border-slate-300 p-2 relative group ${
-                                  editMode ? 'cursor-pointer hover:bg-indigo-50' : ''
-                                } ${isEmpty ? 'bg-slate-50' : ''}`}
+                                className={`border border-slate-300 p-2 relative group ${editMode ? 'cursor-pointer hover:bg-indigo-50' : ''
+                                  } ${isEmpty ? 'bg-slate-50' : ''}`}
                                 onClick={() => editMode && !isEmpty && handleCellClick(dayIdx, absoluteIndex, cls.id)}
                               >
                                 {entry ? (
@@ -349,7 +346,7 @@ const ManualEditSection = ({ data, setData }) => {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
