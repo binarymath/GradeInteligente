@@ -60,9 +60,9 @@ class ScheduleManager {
         let isShiftCompatible = false;
 
         if (classShift === 'Integral (Manhã e Tarde)') {
-          isShiftCompatible = (slotShift === 'Manhã' || slotShift === 'Tarde');
+          isShiftCompatible = (slotShift === 'Manhã' || slotShift === 'Tarde' || slotShift === 'Integral (Manhã e Tarde)');
         } else if (classShift === 'Integral (Tarde e Noite)') {
-          isShiftCompatible = (slotShift === 'Tarde' || slotShift === 'Noite');
+          isShiftCompatible = (slotShift === 'Tarde' || slotShift === 'Noite' || slotShift === 'Integral (Tarde e Noite)');
         } else {
           isShiftCompatible = (slotShift === classShift);
         }
