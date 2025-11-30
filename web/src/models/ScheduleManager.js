@@ -88,6 +88,14 @@ class ScheduleManager {
       ).length;
       if (sameSubjectInClassOnDay >= 2) return false; // Máximo 2 aulas da mesma matéria na mesma turma
 
+      // Limite de 3 aulas TOTAIS do professor NA MESMA TURMA por dia
+      const teacherLessonsInClassOnDay = bookedEntries.filter(e =>
+        e.teacherId === teacherId &&
+        e.classId === classId &&
+        e.dayIdx === dayIdx
+      ).length;
+      if (teacherLessonsInClassOnDay >= 3) return false; // Máximo 3 aulas do professor na mesma turma no dia
+
       return true;
     };
 
