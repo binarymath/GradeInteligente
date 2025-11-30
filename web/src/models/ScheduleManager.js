@@ -79,7 +79,14 @@ class ScheduleManager {
       if (classSchedule[classId]?.[timeKey]) return false;
 
       // (Removido limite rígido de aulas por dia para permitir flexibilidade)
-      // (Removido limite rígido de mesma matéria por dia)
+
+      // Limite de 2 aulas da mesma matéria por dia NA MESMA TURMA
+      const sameSubjectInClassOnDay = bookedEntries.filter(e =>
+        e.classId === classId &&
+        e.dayIdx === dayIdx &&
+        e.subjectId === subjectId
+      ).length;
+      if (sameSubjectInClassOnDay >= 2) return false; // Máximo 2 aulas da mesma matéria na mesma turma
 
       return true;
     };
