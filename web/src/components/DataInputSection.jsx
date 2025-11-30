@@ -148,7 +148,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
 
   const handleEditClass = (cls) => {
     setNewClassName(cls.name);
-    setNewClassShift(cls.shift);
+    setNewClassShift(cls.shift || 'Manhã');
     setSelectedClassSlots(cls.activeSlots || []);
     setEditingClassId(cls.id);
     setClassNames([cls.name]);

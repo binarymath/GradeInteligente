@@ -46,7 +46,7 @@ const ClassForm = ({
     );
   }
 
-  import { computeSlotShift } from '../utils/time';
+
 
   const filteredSlots = allSlots.filter(slot => {
     const slotShift = computeSlotShift(slot);
