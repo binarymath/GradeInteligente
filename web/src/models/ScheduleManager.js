@@ -113,7 +113,7 @@ class ScheduleManager {
       // Preferência da matéria
       const subject = this.data.subjects.find(s => s.id === subjectId);
       if (subject && subject.preferred && subject.preferred.includes(timeKey)) {
-        score += 10; // Alta preferência
+        score += 1000; // Alta preferência (prioridade máxima sobre heurísticas de carga)
       }
 
       // Penalizar dias com mais aulas do professor (preferência por distribuir melhor)
