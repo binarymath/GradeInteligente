@@ -78,17 +78,8 @@ class ScheduleManager {
       if (teacherSchedule[teacherId]?.[timeKey]) return false;
       if (classSchedule[classId]?.[timeKey]) return false;
 
-      // Verificar limite de aulas por dia para o professor (máximo 3, preferencial 2)
-      const lessonsOnDay = bookedEntries.filter(e => e.teacherId === teacherId && e.dayIdx === dayIdx).length;
-      if (lessonsOnDay >= 3) return false; // Nunca mais de 3 aulas por dia
-
-      // Verificar se o professor já deu 2 aulas dessa matéria neste dia (máximo 2 aulas da mesma matéria por dia)
-      const sameSubjectOnDay = bookedEntries.filter(e =>
-        e.teacherId === teacherId &&
-        e.dayIdx === dayIdx &&
-        e.subjectId === subjectId
-      ).length;
-      if (sameSubjectOnDay >= 2) return false; // Nunca mais de 2 aulas da mesma matéria por dia
+      // (Removido limite rígido de aulas por dia para permitir flexibilidade)
+      // (Removido limite rígido de mesma matéria por dia)
 
       return true;
     };
@@ -173,9 +164,7 @@ class ScheduleManager {
             isAvailable(activity.teacherId, activity.classId, activity.subjectId, dayIdx, slot1) &&
             isAvailable(activity.teacherId, activity.classId, activity.subjectId, dayIdx, slot2)) {
 
-            // Verificar se após alocar a dupla não ultrapassará o limite preferencial
-            const lessonsOnDay = getTeacherLessonsOnDay(activity.teacherId, dayIdx);
-            if (lessonsOnDay + 2 > 3) continue; // Pular se a dupla ultrapassar 3 aulas
+            // (Removido verificação de limite rígido de 3 aulas)
 
             const score = getPreferenceScore(activity.teacherId, activity.subjectId, dayIdx, slot1) +
               getPreferenceScore(activity.teacherId, activity.subjectId, dayIdx, slot2);
