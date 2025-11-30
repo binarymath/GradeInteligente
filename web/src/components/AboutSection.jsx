@@ -44,7 +44,7 @@ const AboutSection = () => {
       </section>
 
       {/* SEÇÃO DE AVISOS IMPORTANTES */}
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-6">
 
         {/* AVISO DE BACKUP (ONLINE) */}
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 shadow-sm relative overflow-hidden">
