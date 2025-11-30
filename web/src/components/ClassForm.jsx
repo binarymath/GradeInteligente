@@ -1,14 +1,15 @@
 import React from 'react';
 import { Plus, Check, X, Clock } from 'lucide-react';
+import { computeSlotShift } from '../utils/time';
 
 /**
  * Formulário de adição/edição de turma
  */
-const ClassForm = ({ 
-  isAdding, 
+const ClassForm = ({
+  isAdding,
   setIsAdding,
   isEditing,
-  name, 
+  name,
   setName,
   shift,
   setShift,
@@ -21,9 +22,9 @@ const ClassForm = ({
   const availableShifts = ['Manhã', 'Tarde', 'Noite', 'Integral'];
 
   const toggleSlot = (slotId) => {
-    setSelectedSlots(prev => 
-      prev.includes(slotId) 
-        ? prev.filter(id => id !== slotId) 
+    setSelectedSlots(prev =>
+      prev.includes(slotId)
+        ? prev.filter(id => id !== slotId)
         : [...prev, slotId]
     );
   };
@@ -36,8 +37,8 @@ const ClassForm = ({
 
   if (!isAdding) {
     return (
-      <button 
-        onClick={() => setIsAdding(true)} 
+      <button
+        onClick={() => setIsAdding(true)}
         className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 flex items-center gap-1 transition-colors"
       >
         <Plus size={16} /> Nova Turma
@@ -45,12 +46,25 @@ const ClassForm = ({
     );
   }
 
+  import { computeSlotShift } from '../utils/time';
+
+  const filteredSlots = allSlots.filter(slot => {
+    const slotShift = computeSlotShift(slot);
+    if (shift === 'Integral (Manhã e Tarde)') {
+      return slotShift === 'Manhã' || slotShift === 'Tarde';
+    }
+    if (shift === 'Integral (Tarde e Noite)') {
+      return slotShift === 'Tarde' || slotShift === 'Noite';
+    }
+    return slotShift === shift;
+  });
+
   return (
     <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-4 animate-fadeIn">
       <h4 className="text-sm font-bold text-slate-700">
         {isEditing ? 'Editar Turma' : 'Nova Turma'}
       </h4>
-      
+
       <div className="flex gap-2 mb-3">
         <label htmlFor="class-name-input" className="sr-only">Nome da Turma</label>
         <input
@@ -64,7 +78,7 @@ const ClassForm = ({
           className="border p-2 rounded flex-1 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
         />
-        
+
         <label htmlFor="class-shift-select" className="sr-only">Turno da Turma</label>
         <select
           id="class-shift-select"
@@ -84,9 +98,9 @@ const ClassForm = ({
           <Clock size={12} /> Horários Ativos para esta Turma
         </label>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 max-h-48 overflow-y-auto p-2 bg-white rounded border border-slate-200">
-          {allSlots.map(slot => (
-            <label 
-              key={slot.id} 
+          {filteredSlots.map(slot => (
+            <label
+              key={slot.id}
               className="flex items-center gap-2 cursor-pointer p-2 rounded border border-slate-200 hover:bg-slate-50 transition-colors text-xs"
             >
               <input
@@ -107,14 +121,14 @@ const ClassForm = ({
       </div>
 
       <div className="flex gap-2 justify-end">
-        <button 
-          onClick={onCancel} 
+        <button
+          onClick={onCancel}
           className="bg-slate-300 text-slate-700 px-4 py-2 rounded text-sm hover:bg-slate-400 transition-colors"
         >
           Cancelar
         </button>
-        <button 
-          onClick={handleSubmit} 
+        <button
+          onClick={handleSubmit}
           className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 transition-colors flex items-center gap-1"
         >
           <Check size={16} /> {isEditing ? 'Salvar' : 'Adicionar'}

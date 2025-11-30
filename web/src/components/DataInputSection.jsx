@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Check, X, Trash2, Clock, BookOpen, Star, Save, Coffee, Utensils, Sun, Sunset, Moon, Layers, Users, Edit2 } from 'lucide-react';
 import { uid, DAYS, COLORS, getAllSlots } from '../utils';
+import { computeSlotShift } from '../utils/time';
 
 const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
@@ -13,13 +14,13 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const [editingSubjectId, setEditingSubjectId] = useState(null);
   const [editingSubjectName, setEditingSubjectName] = useState('');
   const [editingSubjectShifts, setEditingSubjectShifts] = useState([]);
-  
+
   const [isAddingClass, setIsAddingClass] = useState(false);
   const [editingClassId, setEditingClassId] = useState(null);
   const [newClassName, setNewClassName] = useState('');
   const [newClassShift, setNewClassShift] = useState('Manhã');
   const [selectedClassSlots, setSelectedClassSlots] = useState([]);
-  const [classNames, setClassNames] = useState(['']); 
+  const [classNames, setClassNames] = useState(['']);
 
   const allSlots = getAllSlots(data.timeSlots);
 
@@ -135,7 +136,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
     }));
     cancelEditSubject();
   };
-  
+
   const resetClassForm = () => {
     setNewClassName('');
     setNewClassShift('Manhã');
@@ -188,9 +189,9 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   };
 
   const toggleClassSlot = (slotId) => {
-    setSelectedClassSlots(prev => 
-      prev.includes(slotId) 
-        ? prev.filter(id => id !== slotId) 
+    setSelectedClassSlots(prev =>
+      prev.includes(slotId)
+        ? prev.filter(id => id !== slotId)
         : [...prev, slotId]
     );
   };
@@ -234,7 +235,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-2">Turnos do Professor (um ou mais)</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {['Manhã','Tarde','Noite','Integral (Manhã e Tarde)','Integral (Tarde e Noite)'].map(shift => {
+                      {['Manhã', 'Tarde', 'Noite', 'Integral (Manhã e Tarde)', 'Integral (Tarde e Noite)'].map(shift => {
                         const active = newTeacherShifts.includes(shift);
                         return (
                           <button
@@ -268,11 +269,11 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                     return teacherShiftSet.has(slot.shift);
                   }
                   // Slot simples ou automático: classificar e comparar
-                  const label = slot.shift || ( () => {
-                    const [h,m] = slot.start.split(':').map(Number);
-                    const minutes = h*60+m;
-                    if (minutes < 12*60) return 'Manhã';
-                    if (minutes < 18*60) return 'Tarde';
+                  const label = slot.shift || (() => {
+                    const [h, m] = slot.start.split(':').map(Number);
+                    const minutes = h * 60 + m;
+                    if (minutes < 12 * 60) return 'Manhã';
+                    if (minutes < 18 * 60) return 'Tarde';
                     return 'Noite';
                   })();
                   return teacherShiftSet.has(label);
@@ -309,7 +310,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                             <div>
                               <label className="block text-xs font-bold text-slate-600 mb-1">Turnos</label>
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                {['Manhã','Tarde','Noite','Integral (Manhã e Tarde)','Integral (Tarde e Noite)'].map(shift => {
+                                {['Manhã', 'Tarde', 'Noite', 'Integral (Manhã e Tarde)', 'Integral (Tarde e Noite)'].map(shift => {
                                   const active = editingTeacherShifts.includes(shift);
                                   return (
                                     <button
@@ -327,14 +328,14 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                               <p className="mt-2 text-[10px] text-slate-400">Ajuste os turnos em que este professor atua.</p>
                             </div>
                             <div className="flex gap-2">
-                              <button onClick={saveEditTeacher} className="bg-emerald-600 text-white px-3 py-2 rounded text-sm font-bold hover:bg-emerald-700 flex items-center gap-1"><Check size={16}/> Salvar</button>
-                              <button onClick={cancelEditTeacher} className="bg-slate-300 text-slate-700 px-3 py-2 rounded text-sm font-bold hover:bg-slate-400 flex items-center gap-1"><X size={16}/> Cancelar</button>
+                              <button onClick={saveEditTeacher} className="bg-emerald-600 text-white px-3 py-2 rounded text-sm font-bold hover:bg-emerald-700 flex items-center gap-1"><Check size={16} /> Salvar</button>
+                              <button onClick={cancelEditTeacher} className="bg-slate-300 text-slate-700 px-3 py-2 rounded text-sm font-bold hover:bg-slate-400 flex items-center gap-1"><X size={16} /> Cancelar</button>
                             </div>
                           </div>
                         )}
                       </div>
                       {!isEditing && (
-                        <button onClick={() => setData(prev => ({...prev, teachers: prev.teachers.filter(t => t.id !== teacher.id)}))} className="text-slate-300 hover:text-red-500 transition-colors" title="Excluir"><Trash2 size={16} /></button>
+                        <button onClick={() => setData(prev => ({ ...prev, teachers: prev.teachers.filter(t => t.id !== teacher.id) }))} className="text-slate-300 hover:text-red-500 transition-colors" title="Excluir"><Trash2 size={16} /></button>
                       )}
                     </div>
                   </div>
@@ -344,7 +345,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                       <div className="min-w-[300px]">
                         <div className="grid grid-cols-6 gap-1">
                           <div className="text-[10px] font-bold text-slate-400"></div>
-                          {DAYS.map(d => <div key={d} className="text-[10px] font-bold text-center text-slate-400 uppercase">{d.substring(0,3)}</div>)}
+                          {DAYS.map(d => <div key={d} className="text-[10px] font-bold text-center text-slate-400 uppercase">{d.substring(0, 3)}</div>)}
                           {filteredSlotsWithIndex.map(({ slot, idx }) => (
                             <React.Fragment key={idx}>
                               <div className="text-[10px] text-slate-400 flex items-center justify-end pr-2">{slot.start}</div>
@@ -369,20 +370,20 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
         {subView === 'subjects' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-             <h3 className="text-lg font-bold text-slate-700">Matérias e Preferências</h3>
-             {!isAddingSubject ? (
-               <button onClick={() => setIsAddingSubject(true)} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 flex items-center gap-1 transition-colors w-full sm:w-auto justify-center"><Plus size={16} /> Nova Matéria</button>
+              <h3 className="text-lg font-bold text-slate-700">Matérias e Preferências</h3>
+              {!isAddingSubject ? (
+                <button onClick={() => setIsAddingSubject(true)} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 flex items-center gap-1 transition-colors w-full sm:w-auto justify-center"><Plus size={16} /> Nova Matéria</button>
               ) : (
                 <div className="flex flex-col gap-3 animate-fadeIn w-full sm:w-auto bg-slate-50 border border-slate-200 rounded-lg p-3">
                   <div className="flex items-center gap-2">
-                    <input type="text" autoFocus placeholder="Nome da Matéria" className="flex-1 sm:w-auto border border-slate-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddSubject()}/>
+                    <input type="text" autoFocus placeholder="Nome da Matéria" className="flex-1 sm:w-auto border border-slate-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddSubject()} />
                     <button onClick={handleAddSubject} className="bg-emerald-500 text-white p-2 rounded hover:bg-emerald-600"><Check size={16} /></button>
                     <button onClick={() => { setIsAddingSubject(false); setNewSubjectName(''); setNewSubjectShifts([]); }} className="bg-slate-300 text-slate-600 p-2 rounded hover:bg-slate-400"><X size={16} /></button>
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">Turnos da Matéria</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {['Manhã','Tarde','Noite','Integral (Manhã e Tarde)','Integral (Tarde e Noite)'].map(shift => {
+                      {['Manhã', 'Tarde', 'Noite', 'Integral (Manhã e Tarde)', 'Integral (Tarde e Noite)'].map(shift => {
                         const active = newSubjectShifts.includes(shift);
                         return (
                           <button
@@ -401,55 +402,55 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                   </div>
                 </div>
               )}
-             </div>
-             
-             {/* LEGEND BLOCK */}
-             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs text-slate-600 mb-4">
-               <strong className="block mb-2 font-bold text-slate-700">Legenda de Preferências:</strong>
-               <div className="flex flex-wrap gap-4">
-                 <span className="flex items-center gap-1">
-                   <div className="w-4 h-4 border border-slate-300 bg-white rounded"></div> 
-                   <span>Disponível</span>
-                 </span>
-                 <span className="flex items-center gap-1">
-                   <div className="w-4 h-4 bg-rose-100 border border-rose-300 text-rose-600 rounded flex items-center justify-center font-bold text-[10px]">X</div> 
-                   <span>Bloqueado</span>
-                 </span>
-                 <span className="flex items-center gap-1">
-                   <div className="w-4 h-4 bg-emerald-100 border border-emerald-300 text-emerald-600 rounded flex items-center justify-center">
-                     <Star size={10} fill="currentColor"/>
-                   </div> 
-                   <span>Preferencial</span>
-                 </span>
-               </div>
-               <p className="mt-2 text-[10px] text-slate-400">Clique nos horários abaixo para alternar.</p>
-             </div>
+            </div>
 
-             {data.subjects.map(subject => {
-               const isEditing = editingSubjectId === subject.id;
-               // Filtra visualmente apenas slots compatíveis com os turnos da matéria para evitar ambiguidade
-               const subjectHasShifts = (subject.shifts || []).length > 0;
-               const subjectShiftSet = new Set(subject.shifts || []);
-               const filteredSlotsWithIndex = allSlots
-                 .map((slot, idx) => ({ slot, idx }))
-                 .filter(({ slot }) => {
-                   if (!subjectHasShifts) return true; // Sem turnos definidos => mostra todos
-                   if (slot.shift && (slot.shift.startsWith('Integral'))) {
-                     // Slot integral só aparece se matéria também tiver exatamente aquele integral
-                     return subjectShiftSet.has(slot.shift);
-                   }
-                   // Slot simples ou automático: classificar e comparar
-                   const label = slot.shift || ( () => {
-                     const [h,m] = slot.start.split(':').map(Number);
-                     const minutes = h*60+m;
-                     if (minutes < 12*60) return 'Manhã';
-                     if (minutes < 18*60) return 'Tarde';
-                     return 'Noite';
-                   })();
-                   return subjectShiftSet.has(label);
-                 });
-               return (
-               <div key={subject.id} className="border border-slate-200 rounded-lg p-4 hover:border-blue-200 transition-colors bg-white">
+            {/* LEGEND BLOCK */}
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs text-slate-600 mb-4">
+              <strong className="block mb-2 font-bold text-slate-700">Legenda de Preferências:</strong>
+              <div className="flex flex-wrap gap-4">
+                <span className="flex items-center gap-1">
+                  <div className="w-4 h-4 border border-slate-300 bg-white rounded"></div>
+                  <span>Disponível</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-rose-100 border border-rose-300 text-rose-600 rounded flex items-center justify-center font-bold text-[10px]">X</div>
+                  <span>Bloqueado</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <div className="w-4 h-4 bg-emerald-100 border border-emerald-300 text-emerald-600 rounded flex items-center justify-center">
+                    <Star size={10} fill="currentColor" />
+                  </div>
+                  <span>Preferencial</span>
+                </span>
+              </div>
+              <p className="mt-2 text-[10px] text-slate-400">Clique nos horários abaixo para alternar.</p>
+            </div>
+
+            {data.subjects.map(subject => {
+              const isEditing = editingSubjectId === subject.id;
+              // Filtra visualmente apenas slots compatíveis com os turnos da matéria para evitar ambiguidade
+              const subjectHasShifts = (subject.shifts || []).length > 0;
+              const subjectShiftSet = new Set(subject.shifts || []);
+              const filteredSlotsWithIndex = allSlots
+                .map((slot, idx) => ({ slot, idx }))
+                .filter(({ slot }) => {
+                  if (!subjectHasShifts) return true; // Sem turnos definidos => mostra todos
+                  if (slot.shift && (slot.shift.startsWith('Integral'))) {
+                    // Slot integral só aparece se matéria também tiver exatamente aquele integral
+                    return subjectShiftSet.has(slot.shift);
+                  }
+                  // Slot simples ou automático: classificar e comparar
+                  const label = slot.shift || (() => {
+                    const [h, m] = slot.start.split(':').map(Number);
+                    const minutes = h * 60 + m;
+                    if (minutes < 12 * 60) return 'Manhã';
+                    if (minutes < 18 * 60) return 'Tarde';
+                    return 'Noite';
+                  })();
+                  return subjectShiftSet.has(label);
+                });
+              return (
+                <div key={subject.id} className="border border-slate-200 rounded-lg p-4 hover:border-blue-200 transition-colors bg-white">
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex items-center gap-3 flex-1">
                       <div className={`w-8 h-8 rounded-full ${COLORS[subject.colorIndex].bg} border ${COLORS[subject.colorIndex].border} flex items-center justify-center`}>
@@ -458,7 +459,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                       {!isEditing ? (
                         <div>
                           <h4 className="font-bold text-slate-700 flex items-center gap-2">{subject.name}
-                            <button onClick={() => startEditSubject(subject)} className="text-slate-400 hover:text-blue-600 transition-colors" title="Editar"><Edit2 size={14}/></button>
+                            <button onClick={() => startEditSubject(subject)} className="text-slate-400 hover:text-blue-600 transition-colors" title="Editar"><Edit2 size={14} /></button>
                           </h4>
                           {subject.shifts && subject.shifts.length > 0 && (
                             <div className="mt-1 flex flex-wrap gap-1">
@@ -479,13 +480,13 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                               placeholder="Nome da Matéria"
                               autoFocus
                             />
-                            <button onClick={saveEditSubject} className="bg-emerald-500 text-white p-1 rounded hover:bg-emerald-600" title="Salvar"><Check size={16}/></button>
-                            <button onClick={cancelEditSubject} className="bg-slate-300 text-slate-600 p-1 rounded hover:bg-slate-400" title="Cancelar"><X size={16}/></button>
+                            <button onClick={saveEditSubject} className="bg-emerald-500 text-white p-1 rounded hover:bg-emerald-600" title="Salvar"><Check size={16} /></button>
+                            <button onClick={cancelEditSubject} className="bg-slate-300 text-slate-600 p-1 rounded hover:bg-slate-400" title="Cancelar"><X size={16} /></button>
                           </div>
                           <div>
                             <label className="block text-[11px] font-bold text-slate-600 mb-1">Turnos</label>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-1">
-                              {['Manhã','Tarde','Noite','Integral (Manhã e Tarde)','Integral (Tarde e Noite)'].map(shift => {
+                              {['Manhã', 'Tarde', 'Noite', 'Integral (Manhã e Tarde)', 'Integral (Tarde e Noite)'].map(shift => {
                                 const active = editingSubjectShifts.includes(shift);
                                 return (
                                   <button
@@ -506,7 +507,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                       )}
                     </div>
                     {!isEditing && (
-                      <button onClick={() => setData(prev => ({...prev, subjects: prev.subjects.filter(s => s.id !== subject.id)}))} className="text-slate-300 hover:text-red-500 transition-colors" title="Excluir"><Trash2 size={16} /></button>
+                      <button onClick={() => setData(prev => ({ ...prev, subjects: prev.subjects.filter(s => s.id !== subject.id) }))} className="text-slate-300 hover:text-red-500 transition-colors" title="Excluir"><Trash2 size={16} /></button>
                     )}
                   </div>
                   <div className="bg-slate-50 rounded p-3">
@@ -514,7 +515,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                       <div className="min-w-[300px]">
                         <div className="grid grid-cols-6 gap-1">
                           <div className="text-[10px] font-bold text-slate-400"></div>
-                          {DAYS.map(d => <div key={d} className="text-[10px] font-bold text-center text-slate-400 uppercase">{d.substring(0,3)}</div>)}
+                          {DAYS.map(d => <div key={d} className="text-[10px] font-bold text-center text-slate-400 uppercase">{d.substring(0, 3)}</div>)}
                           {filteredSlotsWithIndex.map(({ slot, idx }) => (
                             <React.Fragment key={idx}>
                               <div className="text-[10px] text-slate-400 flex items-center justify-end pr-2">{slot.start}</div>
@@ -540,17 +541,18 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                       </div>
                     </div>
                   </div>
-               </div>
-             )})}
+                </div>
+              )
+            })}
           </div>
         )}
 
-         {subView === 'classes' && (
+        {subView === 'classes' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-             <h3 className="text-lg font-bold text-slate-700">Turmas / Classes</h3>
-             {!isAddingClass ? (
-               <button onClick={() => setIsAddingClass(true)} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 flex items-center gap-1 transition-colors w-full sm:w-auto justify-center"><Plus size={16} /> Nova Turma</button>
+              <h3 className="text-lg font-bold text-slate-700">Turmas / Classes</h3>
+              {!isAddingClass ? (
+                <button onClick={() => setIsAddingClass(true)} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 flex items-center gap-1 transition-colors w-full sm:w-auto justify-center"><Plus size={16} /> Nova Turma</button>
               ) : (
                 <div className="w-full bg-slate-50 p-4 rounded-lg border border-slate-200 animate-fadeIn">
                   <div className="flex flex-col gap-4">
@@ -560,12 +562,12 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                           {editingClassId ? 'Nome da Turma' : 'Nomes das Turmas (uma por linha)'}
                         </label>
                         {editingClassId ? (
-                          <input 
-                            type="text" 
-                            placeholder="Ex: 6º Ano A" 
-                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500" 
-                            value={newClassName} 
-                            onChange={e => setNewClassName(e.target.value)} 
+                          <input
+                            type="text"
+                            placeholder="Ex: 6º Ano A"
+                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
+                            value={newClassName}
+                            onChange={e => setNewClassName(e.target.value)}
                           />
                         ) : (
                           <div className="space-y-2">
@@ -621,20 +623,29 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                       <h4 className="text-xs font-bold text-slate-700 mb-2">Seleção de Horários da Turma (Marque os usados)</h4>
                       <div className="max-h-48 overflow-y-auto border rounded p-2 bg-white scrollbar-elegant">
                         <div className="grid grid-cols-1 gap-1">
-                          {data.timeSlots.map(slot => (
+                          {data.timeSlots.filter(slot => {
+                            const slotShift = computeSlotShift(slot);
+                            if (newClassShift === 'Integral (Manhã e Tarde)') {
+                              return slotShift === 'Manhã' || slotShift === 'Tarde';
+                            }
+                            if (newClassShift === 'Integral (Tarde e Noite)') {
+                              return slotShift === 'Tarde' || slotShift === 'Noite';
+                            }
+                            return slotShift === newClassShift;
+                          }).map(slot => (
                             <label key={`cls-slot-${slot.id}`} className={`flex items-center gap-3 p-2 rounded cursor-pointer border ${selectedClassSlots.includes(slot.id) ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent hover:bg-slate-50'}`}>
-                              <input 
-                                type="checkbox" 
-                                checked={selectedClassSlots.includes(slot.id)} 
-                                onChange={() => toggleClassSlot(slot.id)} 
-                                className="text-blue-500 rounded focus:ring-blue-500" 
+                              <input
+                                type="checkbox"
+                                checked={selectedClassSlots.includes(slot.id)}
+                                onChange={() => toggleClassSlot(slot.id)}
+                                className="text-blue-500 rounded focus:ring-blue-500"
                               />
                               <div className="flex items-center gap-2 text-xs">
                                 <span className="font-bold text-slate-700 w-20">{slot.start} - {slot.end}</span>
                                 {slot.type === 'aula' && <span className="text-slate-500 bg-slate-100 px-1 rounded">Aula</span>}
-                                {slot.type === 'intervalo' && <span className="text-orange-600 bg-orange-50 px-1 rounded flex items-center gap-1"><Coffee size={10}/> Intervalo</span>}
-                                {slot.type === 'almoco' && <span className="text-red-600 bg-red-50 px-1 rounded flex items-center gap-1"><Utensils size={10}/> Almoço</span>}
-                                {slot.type === 'jantar' && <span className="text-indigo-600 bg-indigo-50 px-1 rounded flex items-center gap-1"><Utensils size={10}/> Jantar</span>}
+                                {slot.type === 'intervalo' && <span className="text-orange-600 bg-orange-50 px-1 rounded flex items-center gap-1"><Coffee size={10} /> Intervalo</span>}
+                                {slot.type === 'almoco' && <span className="text-red-600 bg-red-50 px-1 rounded flex items-center gap-1"><Utensils size={10} /> Almoço</span>}
+                                {slot.type === 'jantar' && <span className="text-indigo-600 bg-indigo-50 px-1 rounded flex items-center gap-1"><Utensils size={10} /> Jantar</span>}
                               </div>
                             </label>
                           ))}
@@ -643,39 +654,39 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                     </div>
 
                     <div className="flex justify-end gap-2">
-                      <button onClick={handleSaveClass} className="bg-emerald-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2"><Save size={16}/> {editingClassId ? 'Salvar Alterações' : 'Criar Turma'}</button>
+                      <button onClick={handleSaveClass} className="bg-emerald-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2"><Save size={16} /> {editingClassId ? 'Salvar Alterações' : 'Criar Turma'}</button>
                       <button onClick={resetClassForm} className="bg-slate-300 text-slate-700 px-4 py-2 rounded text-sm font-bold hover:bg-slate-400 transition-colors">Cancelar</button>
                     </div>
                   </div>
                 </div>
               )}
             </div>
-             
-             {Object.entries(classesByShift).map(([shiftName, classes]) => (
-               <div key={shiftName} className="mb-6">
-                 <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                   {shiftName === 'Manhã' ? <Sun size={16} /> : shiftName === 'Tarde' ? <Sunset size={16} /> : shiftName === 'Noite' ? <Moon size={16} /> : <Layers size={16} />}
-                   {shiftName} ({classes.length})
-                 </h4>
-                 <div className="grid grid-cols-1 gap-3">
-                   {classes.map(cls => (
-                     <div key={cls.id} className="flex items-center justify-between p-3 border border-slate-200 rounded-lg bg-white">
-                        <div className="flex items-center gap-3">
-                          <Users size={18} className="text-slate-400" />
-                          <div>
-                            <span className="font-medium text-slate-700 block">{cls.name}</span>
-                            <span className="text-[10px] text-slate-400">{cls.activeSlots.length} horários ativos</span>
-                          </div>
+
+            {Object.entries(classesByShift).map(([shiftName, classes]) => (
+              <div key={shiftName} className="mb-6">
+                <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  {shiftName === 'Manhã' ? <Sun size={16} /> : shiftName === 'Tarde' ? <Sunset size={16} /> : shiftName === 'Noite' ? <Moon size={16} /> : <Layers size={16} />}
+                  {shiftName} ({classes.length})
+                </h4>
+                <div className="grid grid-cols-1 gap-3">
+                  {classes.map(cls => (
+                    <div key={cls.id} className="flex items-center justify-between p-3 border border-slate-200 rounded-lg bg-white">
+                      <div className="flex items-center gap-3">
+                        <Users size={18} className="text-slate-400" />
+                        <div>
+                          <span className="font-medium text-slate-700 block">{cls.name}</span>
+                          <span className="text-[10px] text-slate-400">{cls.activeSlots.length} horários ativos</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => handleEditClass(cls)} className="text-slate-400 hover:text-blue-500 transition-colors p-2" title="Editar Turma"><Edit2 size={16} /></button>
-                          <button onClick={() => setData(prev => ({...prev, classes: prev.classes.filter(c => c.id !== cls.id)}))} className="text-slate-400 hover:text-red-500 transition-colors p-2" title="Remover Turma"><Trash2 size={16} /></button>
-                        </div>
-                     </div>
-                   ))}
-                 </div>
-               </div>
-             ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => handleEditClass(cls)} className="text-slate-400 hover:text-blue-500 transition-colors p-2" title="Editar Turma"><Edit2 size={16} /></button>
+                        <button onClick={() => setData(prev => ({ ...prev, classes: prev.classes.filter(c => c.id !== cls.id) }))} className="text-slate-400 hover:text-red-500 transition-colors p-2" title="Remover Turma"><Trash2 size={16} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
