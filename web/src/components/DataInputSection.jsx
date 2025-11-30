@@ -626,10 +626,10 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                           {data.timeSlots.filter(slot => {
                             const slotShift = computeSlotShift(slot);
                             if (newClassShift === 'Integral (Manhã e Tarde)') {
-                              return slotShift === 'Manhã' || slotShift === 'Tarde';
+                              return slotShift === 'Manhã' || slotShift === 'Tarde' || slotShift === 'Integral (Manhã e Tarde)';
                             }
                             if (newClassShift === 'Integral (Tarde e Noite)') {
-                              return slotShift === 'Tarde' || slotShift === 'Noite';
+                              return slotShift === 'Tarde' || slotShift === 'Noite' || slotShift === 'Integral (Tarde e Noite)';
                             }
                             return slotShift === newClassShift;
                           }).map(slot => (

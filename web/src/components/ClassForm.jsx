@@ -51,10 +51,10 @@ const ClassForm = ({
   const filteredSlots = allSlots.filter(slot => {
     const slotShift = computeSlotShift(slot);
     if (shift === 'Integral (Manhã e Tarde)') {
-      return slotShift === 'Manhã' || slotShift === 'Tarde';
+      return slotShift === 'Manhã' || slotShift === 'Tarde' || slotShift === 'Integral (Manhã e Tarde)';
     }
     if (shift === 'Integral (Tarde e Noite)') {
-      return slotShift === 'Tarde' || slotShift === 'Noite';
+      return slotShift === 'Tarde' || slotShift === 'Noite' || slotShift === 'Integral (Tarde e Noite)';
     }
     return slotShift === shift;
   });
