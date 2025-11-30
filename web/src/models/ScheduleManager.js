@@ -39,9 +39,11 @@ class ScheduleManager {
     const timeSlots = this.data.timeSlots;
     const lessonIndices = timeSlots.map((_, i) => i).filter(i => timeSlots[i].type === 'aula');
 
+    const bookedEntries = []; // rastreia para validação de conflitos por intervalo real
+
     // Helper to check availability
     const isAvailable = (teacherId, classId, subjectId, dayIdx, slotIdx) => {
-      const timeKey = `${dayIdx}-${slotIdx}`;
+      const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
 
       // Check teacher availability (constraints)
       const teacher = this.data.teachers.find(t => t.id === teacherId);
@@ -77,7 +79,6 @@ class ScheduleManager {
       if (classSchedule[classId]?.[timeKey]) return false;
 
       // Verificar limite de aulas por dia para o professor (máximo 3, preferencial 2)
-      const teacherDayKey = `${teacherId}-${dayIdx}`;
       const lessonsOnDay = bookedEntries.filter(e => e.teacherId === teacherId && e.dayIdx === dayIdx).length;
       if (lessonsOnDay >= 3) return false; // Nunca mais de 3 aulas por dia
 
@@ -106,7 +107,7 @@ class ScheduleManager {
 
     // Calcular score de preferência para um slot
     const getPreferenceScore = (teacherId, subjectId, dayIdx, slotIdx) => {
-      const timeKey = `${dayIdx}-${slotIdx}`;
+      const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
       let score = 0;
 
       // Preferência da matéria
@@ -128,10 +129,8 @@ class ScheduleManager {
       return score;
     };
 
-    const bookedEntries = []; // rastreia para validação de conflitos por intervalo real
-
     const book = (activity, dayIdx, slotIdx, isDoubleSecondPart = false) => {
-      const timeKey = `${dayIdx}-${slotIdx}`;
+      const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
       const scheduleKey = `${activity.classId}-${timeKey}`;
 
       this.schedule[scheduleKey] = {
@@ -291,8 +290,8 @@ class ScheduleManager {
           const dayIdx = A.dayIdx;
 
           // Capturar subjects se disponíveis no schedule já montado
-          const timeKeyA = `${dayIdx}-${A.slotIdx}`;
-          const timeKeyB = `${dayIdx}-${B.slotIdx}`;
+          const timeKeyA = `${DAYS[dayIdx]}-${A.slotIdx}`;
+          const timeKeyB = `${DAYS[dayIdx]}-${B.slotIdx}`;
           const scheduleKeyA = `${A.classId}-${timeKeyA}`;
           const scheduleKeyB = `${B.classId}-${timeKeyB}`;
           const subjAId = this.schedule[scheduleKeyA]?.subjectId;
