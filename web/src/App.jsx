@@ -228,7 +228,7 @@ const App = () => {
             <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2 truncate">{view === 'about' ? 'Sobre o Sistema' : view === 'data' && subView === 'timeSettings' ? 'Configuração de Horários' : view === 'data' ? 'Dados Institucionais' : view === 'activities' ? 'Atribuições' : view === 'manualEdit' ? 'Edição Manual da Grade' : view === 'agenda' ? 'Agenda e Grade' : 'Gerar/Visualizar Grade'}</h1>
           </div>
           <div className="flex items-center gap-4 shrink-0">
-            <a href="https://github.com/binarymath/GradeInteligente/releases/download/v0.0.0/Grade-Inteligente-0.0.0-Setup.exe" className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 transition-colors text-sm font-medium" title="Baixar para Windows">
+            <a href="https://github.com/binarymath/GradeInteligenteExecutavel/releases/download/V.0.0.0/Grade-Inteligente-0.0.0-Setup.exe" className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 transition-colors text-sm font-medium" title="Baixar para Windows">
               <svg className="w-4 h-4 fill-current" viewBox="0 0 88 88" xmlns="http://www.w3.org/2000/svg">
                 <path d="M0 12.402l35.687-4.86.016 34.423-35.67.203zm35.67 33.529l.028 34.453L.028 75.48l-.028-29.28zm5.975-39.053l46.3-6.68V39.88l-46.3.265zm0 37.323l46.29 2.19v35.416l-46.273-6.55z" />
               </svg>
