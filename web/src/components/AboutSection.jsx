@@ -99,7 +99,7 @@ const AboutSection = () => {
                 <div className="flex items-center gap-2 font-mono text-[10px] bg-white p-1.5 rounded border border-indigo-100 opacity-90">
                   <span>Mais informações</span>
                   <span className="text-slate-400">→</span>
-                  <span className="font-bold text-indigo-700">Executar mesmo assim</span>
+                  <span className="font-bold text-indigo-700">Executar assim mesmo</span>
                 </div>
               </div>
             </div>
