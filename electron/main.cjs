@@ -1,8 +1,28 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
+// electron-store is ESM in v11+, use dynamic import to avoid ERR_REQUIRE_ESM
 
 let win;
 const isDev = !app.isPackaged;
+let storePromise;
+function getStore() {
+  if (!storePromise) {
+    storePromise = import('electron-store').then(mod => {
+      const Store = mod.default || mod;
+      return new Store({ name: 'grade-data-clean' });
+    }).catch(err => {
+      console.error('Failed to load electron-store:', err);
+      // Fallback shim (no persistence) to avoid crashes
+      return {
+        get: () => undefined,
+        set: () => { },
+        has: () => false,
+        delete: () => { }
+      };
+    });
+  }
+  return storePromise;
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -25,10 +45,17 @@ function createWindow() {
   if (isDev) {
     const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
     win.loadURL(devUrl);
-    // Optional devtools
     win.webContents.openDevTools({ mode: 'detach' });
   } else {
-    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
+    win.loadFile(indexPath);
+    // win.webContents.openDevTools(); // Removed as requested
+    win.webContents.on('did-fail-load', (_e, ec, desc, url) => {
+      console.error('Load failed', { ec, desc, url, indexPath });
+    });
+    win.webContents.on('crashed', () => {
+      console.error('Renderer crashed');
+    });
   }
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -57,14 +84,8 @@ if (!gotLock) {
   });
 }
 
-// Optional electron-store IPC bridge
-try {
-  const Store = require('electron-store');
-  const store = new Store({ name: 'grade-settings' });
-  ipcMain.handle('grade:get', (_e, key) => store.get(key));
-  ipcMain.handle('grade:set', (_e, key, value) => { store.set(key, value); return true; });
-  ipcMain.handle('grade:has', (_e, key) => store.has(key));
-  ipcMain.handle('grade:delete', (_e, key) => { store.delete(key); return true; });
-} catch (e) {
-  // electron-store optional
-}
+// Register IPC handlers for persistence
+ipcMain.handle('grade:get', async (_e, key) => (await getStore()).get(key));
+ipcMain.handle('grade:set', async (_e, key, value) => { (await getStore()).set(key, value); return true; });
+ipcMain.handle('grade:has', async (_e, key) => (await getStore()).has(key));
+ipcMain.handle('grade:delete', async (_e, key) => { (await getStore()).delete(key); return true; });

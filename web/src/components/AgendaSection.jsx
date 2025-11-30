@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Calendar, Plus, Trash2, Download, Calculator, FileText, BookOpen, Clock } from 'lucide-react';
 import { uid, DAYS } from '../utils';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// Removidos imports pesados para lazy import dentro da função de exportação.
 
 // Generates ICS for a specific class (turma) using global events
 const generateICSForClass = (data, calendarSettings, classId) => {
@@ -820,7 +819,9 @@ const LessonCalculator = ({ data, calendarSettings }) => {
     }
   };
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
     const classLabel = selectedClass === 'all' ? 'Todas as Turmas' : (data.classes.find(c => c.id === selectedClass)?.name || 'Turma');
     const periodStr = `${start || fmt(schoolStart)} a ${end || fmt(schoolEnd)}`;

@@ -3,12 +3,12 @@ node_modules/
 
 # Build output
 /dist/
-/build/
+# /build/
 .esbuild/
 .vite/
 
 # Electron desktop packaging (não commitar)
-/electron/
+# /electron/
 
 # Cache & tooling
 .cache/
@@ -79,3 +79,12 @@ temp/
 /*.xlsx
 
 .vercel
+
+# Local scripts
+# Local scripts
+build-installer.bat
+
+# Build output (executables)
+executaveis/
+
+get_hashes.py

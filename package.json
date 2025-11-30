@@ -4,6 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "main": "electron/main.cjs",
+  "author": "Professor Fabião",
+  "description": "Grade Inteligente — agenda escolar com exportação ICS/PDF e empacotamento desktop",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -13,12 +18,16 @@
     "preview:web": "vite preview",
     "dev:electron": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "start:electron": "electron .",
-    "build:electron": "npm run build:web && electron-builder --win nsis",
+    "build:electron": "$env:ELECTRON='true'; npm run build:web; electron-builder --win nsis",
+    "build:electron:dir": "$env:ELECTRON='true'; npm run build:web; electron-builder --win dir",
+    "icon:generate": "powershell -ExecutionPolicy Bypass -File ./build/make-icon.ps1",
+    "build:electron:nsis": "$env:ELECTRON='true'; $env:CSC_IDENTITY_AUTO_DISCOVERY='false'; $env:ELECTRON_BUILDER_DISABLE_WIN_CODE_SIGNING='true'; npm run build:web; electron-builder --win nsis",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage"
   },
   "dependencies": {
+    "electron-store": "^11.0.2",
     "file-saver": "^2.0.5",
     "jspdf": "^3.0.4",
     "jspdf-autotable": "^5.0.2",
@@ -33,37 +42,61 @@
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/ui": "^2.1.8",
     "autoprefixer": "^10.4.18",
+    "concurrently": "^8.2.2",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.0.0",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "vite": "^7.2.4",
     "vitest": "^2.1.8",
-    "electron": "^30.0.0",
-    "electron-builder": "^24.0.0",
-    "concurrently": "^8.2.2",
     "wait-on": "^7.2.0"
-    },
+  },
   "build": {
     "appId": "com.gradeinteligente.app",
     "productName": "Grade Inteligente",
+    "copyright": "© 2025 drackercompany",
+    "directories": {
+      "output": "executaveis"
+    },
     "files": [
       "dist/**/*",
-      "electron/**/*",
-      "package.json"
+      "electron/**/*.cjs",
+      "package.json",
+      "node_modules/electron-store/**/*"
     ],
     "asar": true,
+    "asarUnpack": [
+      "node_modules/electron-store/**/*"
+    ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
-      "artifactName": "Grade-Inteligente-${version}-Setup.exe"
+      "artifactName": "Grade-Inteligente-${version}-Setup.exe",
+      "publisherName": "drackercompany",
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
+      "sign": null,
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Grade Inteligente",
+      "runAfterFinish": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "license": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     }
   }
 }

@@ -1,0 +1,43 @@
+Colocar o ícone da aplicação aqui como build/icon.ico
+
+Passos para gerar o ICO multi-tamanho a partir do PNG do dragão:
+
+1. Garanta tamanhos (quadrados) recomendados:
+   - 16x16
+   - 24x24
+   - 32x32
+   - 48x48
+   - 64x64
+   - 128x128
+   - 256x256 (principal)
+
+2. Ferramentas possíveis:
+   A) Via PowerShell + ImageMagick (se instalado):
+      magick dragon.png -resize 256x256 build/icon-256.png
+      magick dragon.png -resize 128x128 build/icon-128.png
+      magick dragon.png -resize 64x64 build/icon-64.png
+      magick dragon.png -resize 48x48 build/icon-48.png
+      magick dragon.png -resize 32x32 build/icon-32.png
+      magick dragon.png -resize 24x24 build/icon-24.png
+      magick dragon.png -resize 16x16 build/icon-16.png
+      magick build/icon-256.png build/icon-128.png build/icon-64.png build/icon-48.png build/icon-32.png build/icon-24.png build/icon-16.png build/icon.ico
+
+   B) Site online (ex: icoconvert.com):
+      - Envie o PNG
+      - Escolha múltiplos tamanhos
+      - Converta e faça o download
+      - Renomeie para icon.ico e coloque em build/
+
+3. Após adicionar build/icon.ico, execute:
+   $env:ELECTRON='true'
+   npm run build:web
+   npx electron-builder --win nsis
+
+4. Verificação:
+   - Instalador: dist/Grade-Inteligente-<versao>-Setup.exe
+   - Atalho Desktop deve mostrar o ícone
+
+Se o instalador não achar o ícone, confirme o caminho:
+   Test-Path build/icon.ico
+
+Observação: O ícone precisa ser realmente um arquivo .ico (não .png renomeado).

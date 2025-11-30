@@ -1,8 +1,6 @@
 // Serviços de exportação (PDF, Excel) seguindo princípios de responsabilidade única.
 // Cada função recebe o estado mínimo necessário.
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+// Lazy imports serão usados dentro das funções para reduzir bundle inicial.
 import { saveAs } from 'file-saver';
 import { DAYS } from '../utils';
 
@@ -14,7 +12,9 @@ import { DAYS } from '../utils';
  * @param {Object} params.data Estado completo (classes, teachers, subjects, timeSlots, schedule)
  * @param {Array} params.displayPeriods Períodos filtrados para exibição
  */
-export function exportPDF({ viewMode, selectedEntity, data, displayPeriods }) {
+export async function exportPDF({ viewMode, selectedEntity, data, displayPeriods }) {
+  const { jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
   const doc = new jsPDF({ orientation: 'landscape' });
   let titleText = '';
   if (viewMode === 'class') {
@@ -93,7 +93,7 @@ export function exportPDF({ viewMode, selectedEntity, data, displayPeriods }) {
  * @param {string} params.selectedEntity
  * @param {Object} params.data Estado completo
  */
-export function exportExcel({ viewMode, selectedEntity, data }) {
+export async function exportExcel({ viewMode, selectedEntity, data }) {
   const rows = [["Turma", "Dia", "Início", "Fim", "Matéria", "Professor"]];
 
   Object.entries(data.schedule).forEach(([key, slot]) => {
@@ -122,6 +122,7 @@ export function exportExcel({ viewMode, selectedEntity, data }) {
     }
   });
 
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, ws, 'Grade Horária');
