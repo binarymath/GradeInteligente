@@ -84,10 +84,10 @@ const AboutSection = () => {
               </p>
 
               <div className="flex flex-wrap gap-3 my-2">
-                <a href="https://github.com/binarymath/GradeInteligente/releases/download/v0.0.0/Grade-Inteligente-0.0.0-Setup.exe" className="flex-1 bg-indigo-600 text-white text-center px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm flex items-center justify-center gap-2">
+                <a href="https://github.com/binarymath/GradeInteligenteExecutavel/releases/download/V0.0.0/Grade-Inteligente-0.0.0-Setup.exe" className="flex-1 bg-indigo-600 text-white text-center px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm flex items-center justify-center gap-2">
                   <Download className="w-4 h-4" /> Instalador (.exe)
                 </a>
-                <a href="https://github.com/binarymath/GradeInteligente/releases/download/v0.0.0/Grade-Inteligente-0.0.0-Portable.zip" className="flex-1 bg-white text-indigo-700 border border-indigo-200 text-center px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-50 transition-colors shadow-sm flex items-center justify-center gap-2">
+                <a href="https://github.com/binarymath/GradeInteligenteExecutavel/releases/download/V0.0.0/Grade-Inteligente-0.0.0-Portable.zip" className="flex-1 bg-white text-indigo-700 border border-indigo-200 text-center px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-50 transition-colors shadow-sm flex items-center justify-center gap-2">
                   <BookOpen className="w-4 h-4" /> Portátil (.zip)
                 </a>
               </div>
