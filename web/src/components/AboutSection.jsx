@@ -71,7 +71,7 @@ const AboutSection = () => {
         </div>
 
         {/* DOWNLOAD & SMARTSCREEN */}
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-6 shadow-sm relative overflow-hidden">
+        <div className="hidden lg:block bg-indigo-50 border border-indigo-200 rounded-xl p-6 shadow-sm relative overflow-hidden">
           <div className="absolute top-0 right-0 -mt-2 -mr-2 w-16 h-16 bg-indigo-100 rounded-full opacity-50 blur-xl"></div>
           <div className="flex items-start gap-4 relative z-10">
             <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600 shrink-0">
