@@ -37,11 +37,11 @@ export async function exportPDF({ viewMode, selectedEntity, data, displayPeriods
 
     if (slot.type !== 'aula') {
       const label = slot.type === 'almoco' ? 'ALMOÇO' : slot.type === 'jantar' ? 'JANTAR' : 'INTERVALO';
-      return [row[0], { content: label, colSpan: 5, styles: { halign: 'center', fillColor: [240,240,240], textColor: [100,100,100], fontStyle: 'bold' } }];
+      return [row[0], { content: label, colSpan: 5, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: [100, 100, 100], fontStyle: 'bold' } }];
     }
 
     DAYS.forEach((_, dayIdx) => {
-      const timeKey = `${dayIdx}-${absoluteIndex}`;
+      const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
       let cellContent = '';
       if (viewMode === 'class') {
         const scheduleKey = `${selectedEntity}-${timeKey}`;
@@ -78,7 +78,7 @@ export async function exportPDF({ viewMode, selectedEntity, data, displayPeriods
     head, body,
     startY: 35,
     styles: { fontSize: 10, cellPadding: 3, valign: 'middle' },
-    headStyles: { fillColor: [79,70,229], textColor: 255, fontStyle: 'bold' },
+    headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
     theme: 'grid',
     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 35, halign: 'center' } }
   });
@@ -102,7 +102,7 @@ export async function exportExcel({ viewMode, selectedEntity, data }) {
     if (viewMode === 'subject' && slot.subjectId !== selectedEntity) return;
 
     const parts = key.split('-');
-    const dayIdx = parseInt(parts[1]);
+    const dayName = parts[1];
     const slotIdx = parseInt(parts[2]);
     const timeSlot = data.timeSlots[slotIdx];
     if (!timeSlot) return;
@@ -113,7 +113,7 @@ export async function exportExcel({ viewMode, selectedEntity, data }) {
     if (subject && teacher && clsObj) {
       rows.push([
         clsObj.name,
-        DAYS[dayIdx],
+        dayName,
         timeSlot.start,
         timeSlot.end,
         subject.name,
