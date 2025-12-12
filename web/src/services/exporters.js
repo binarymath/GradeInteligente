@@ -13,8 +13,11 @@ import { DAYS } from '../utils';
  * @param {Array} params.displayPeriods Períodos filtrados para exibição
  */
 export async function exportPDF({ viewMode, selectedEntity, data, displayPeriods }) {
-  const { jsPDF } = await import('jspdf');
-  const { default: autoTable } = await import('jspdf-autotable');
+  const jsPDFModule = await import('jspdf');
+  const jsPDF = jsPDFModule.default || jsPDFModule.jsPDF;
+  const autoTableModule = await import('jspdf-autotable');
+  const autoTable = autoTableModule.default || autoTableModule;
+
   const doc = new jsPDF({ orientation: 'landscape' });
   let titleText = '';
   if (viewMode === 'class') {
@@ -102,8 +105,13 @@ export async function exportExcel({ viewMode, selectedEntity, data }) {
     if (viewMode === 'subject' && slot.subjectId !== selectedEntity) return;
 
     const parts = key.split('-');
-    const dayName = parts[1];
-    const slotIdx = parseInt(parts[2]);
+    // Handle IDs with dashes: Day is always second to last, Index is last
+    // Format: ID-Day-Index
+    if (parts.length < 3) return;
+
+    const slotIdx = parseInt(parts[parts.length - 1]);
+    const dayName = parts[parts.length - 2];
+
     const timeSlot = data.timeSlots[slotIdx];
     if (!timeSlot) return;
 
