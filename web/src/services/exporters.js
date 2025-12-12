@@ -21,11 +21,11 @@ export async function exportPDF({ viewMode, selectedEntity, data, displayPeriods
   const doc = new jsPDF({ orientation: 'landscape' });
   let titleText = '';
   if (viewMode === 'class') {
-    titleText = `Grade Horária - ${data.classes.find(c => c.id === selectedEntity)?.name}`;
+    titleText = `Grade Horária - ${data.classes.find(c => c.id === selectedEntity)?.name || 'Turma'}`;
   } else if (viewMode === 'teacher') {
-    titleText = `Grade Horária - Professor(a) ${data.teachers.find(t => t.id === selectedEntity)?.name}`;
+    titleText = `Grade Horária - Professor(a) ${data.teachers.find(t => t.id === selectedEntity)?.name || 'Professor'}`;
   } else if (viewMode === 'subject') {
-    titleText = `Grade Horária - Matéria ${data.subjects.find(s => s.id === selectedEntity)?.name}`;
+    titleText = `Grade Horária - Matéria ${data.subjects.find(s => s.id === selectedEntity)?.name || 'Matéria'}`;
   }
 
   doc.setFontSize(18);
@@ -46,29 +46,32 @@ export async function exportPDF({ viewMode, selectedEntity, data, displayPeriods
     DAYS.forEach((_, dayIdx) => {
       const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
       let cellContent = '';
+
       if (viewMode === 'class') {
-        const scheduleKey = `${selectedEntity}-${timeKey}`;
-        const entry = data.schedule[scheduleKey];
+        const entry = Object.values(data.schedule).find(v => v.classId === selectedEntity && v.timeKey === timeKey);
         if (entry) {
           const subj = data.subjects.find(s => s.id === entry.subjectId);
           const teacher = data.teachers.find(t => t.id === entry.teacherId);
-          cellContent = `${subj.name}\n(${teacher.name})`;
+          if (subj && teacher) {
+            cellContent = `${subj.name}\n(${teacher.name})`;
+          }
         }
       } else if (viewMode === 'teacher') {
-        const entry = Object.entries(data.schedule).find(([_, val]) => val.teacherId === selectedEntity && val.timeKey === timeKey);
+        const entry = Object.values(data.schedule).find(v => v.teacherId === selectedEntity && v.timeKey === timeKey);
         if (entry) {
-          const item = entry[1];
-          const subj = data.subjects.find(s => s.id === item.subjectId);
-          const cls = data.classes.find(c => c.id === item.classId);
-          cellContent = `${subj.name}\n(${cls.name})`;
+          const subj = data.subjects.find(s => s.id === entry.subjectId);
+          const cls = data.classes.find(c => c.id === entry.classId);
+          if (subj && cls) {
+            cellContent = `${subj.name}\n(${cls.name})`;
+          }
         }
       } else if (viewMode === 'subject') {
-        const entries = Object.values(data.schedule).filter(val => val.subjectId === selectedEntity && val.timeKey === timeKey);
+        const entries = Object.values(data.schedule).filter(v => v.subjectId === selectedEntity && v.timeKey === timeKey);
         if (entries.length) {
           cellContent = entries.map(e => {
             const cls = data.classes.find(c => c.id === e.classId);
             const teacher = data.teachers.find(t => t.id === e.teacherId);
-            return `${cls?.name} (${teacher?.name})`;
+            return `${cls?.name || '?'} (${teacher?.name || '?'})`;
           }).join('\n');
         }
       }
@@ -99,18 +102,19 @@ export async function exportPDF({ viewMode, selectedEntity, data, displayPeriods
 export async function exportExcel({ viewMode, selectedEntity, data }) {
   const rows = [["Turma", "Dia", "Início", "Fim", "Matéria", "Professor"]];
 
-  Object.entries(data.schedule).forEach(([key, slot]) => {
+  Object.values(data.schedule).forEach(slot => {
     if (viewMode === 'class' && slot.classId !== selectedEntity) return;
     if (viewMode === 'teacher' && slot.teacherId !== selectedEntity) return;
     if (viewMode === 'subject' && slot.subjectId !== selectedEntity) return;
 
-    const parts = key.split('-');
-    // Handle IDs with dashes: Day is always second to last, Index is last
-    // Format: ID-Day-Index
-    if (parts.length < 3) return;
+    if (!slot.timeKey) return;
+
+    // Parse timeKey (Day-Index) which is safer than parsing the full schedule Key
+    const parts = slot.timeKey.split('-');
+    if (parts.length < 2) return;
 
     const slotIdx = parseInt(parts[parts.length - 1]);
-    const dayName = parts[parts.length - 2];
+    const dayName = parts.slice(0, parts.length - 1).join('-');
 
     const timeSlot = data.timeSlots[slotIdx];
     if (!timeSlot) return;
@@ -118,6 +122,7 @@ export async function exportExcel({ viewMode, selectedEntity, data }) {
     const subject = data.subjects.find(s => s.id === slot.subjectId);
     const teacher = data.teachers.find(t => t.id === slot.teacherId);
     const clsObj = data.classes.find(c => c.id === slot.classId);
+
     if (subject && teacher && clsObj) {
       rows.push([
         clsObj.name,
