@@ -1,0 +1,46 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Web App
+        run: npm run build:web
+
+      - name: Build Desktop Installer
+        env:
+          ELECTRON: 'true'
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          ELECTRON_BUILDER_DISABLE_WIN_CODE_SIGNING: 'true'
+        run: npx electron-builder --win nsis
+
+      - name: Create Portable Zip
+        run: |
+          Compress-Archive -Path 'executaveis\win-unpacked\*' -DestinationPath 'executaveis\GradeInteligente.zip' -Force
+
+      - name: Generate Hashes
+        run: |
+          Get-FileHash -Path 'executaveis\Grade-Inteligente-0.0.0-Setup.exe', 'executaveis\GradeInteligente.zip' -Algorithm SHA256 | ForEach-Object { $_.Path.Split('\')[-1] + ': ' + $_.Hash } | Out-File 'executaveis\hashes.txt' -Encoding UTF8
+
+      - name: Upload Release Assets
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          gh release upload V.0.0.0 executaveis/Grade-Inteligente-0.0.0-Setup.exe executaveis/GradeInteligente.zip executaveis/hashes.txt --repo binarymath/GradeInteligenteExecutavel --clobber

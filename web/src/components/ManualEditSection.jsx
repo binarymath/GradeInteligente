@@ -3,7 +3,7 @@ import { Edit3, Trash2, Plus, X, Save, AlertCircle } from 'lucide-react';
 import { DAYS, COLORS } from '../utils';
 
 const ManualEditSection = ({ data, setData }) => {
-  const [selectedClass, setSelectedClass] = useState('');
+  const [selectedClass, setSelectedClass] = useState('all');
   const [editMode, setEditMode] = useState(false);
   const [selectedCell, setSelectedCell] = useState(null); // { dayIdx, slotIdx }
   const [showAddModal, setShowAddModal] = useState(false);

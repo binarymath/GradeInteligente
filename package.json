@@ -75,6 +75,12 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "Grade-Inteligente-${version}-Setup.exe",
