@@ -15,17 +15,17 @@ const ActivitiesSection = ({ data, setData }) => {
 
   const debouncedFilter = useDebounce(filter, 300);
 
-  const totalLessons = useMemo(() => 
+  const totalLessons = useMemo(() =>
     data.activities.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0),
     [data.activities]
   );
-  
-  const uniqueTeachers = useMemo(() => 
+
+  const uniqueTeachers = useMemo(() =>
     new Set(data.activities.map(a => a.teacherId)).size,
     [data.activities]
   );
-  
-  const uniqueClasses = useMemo(() => 
+
+  const uniqueClasses = useMemo(() =>
     new Set(data.activities.map(a => a.classId)).size,
     [data.activities]
   );
@@ -43,12 +43,12 @@ const ActivitiesSection = ({ data, setData }) => {
 
   const filteredActivities = useMemo(() => {
     let activities = data.activities;
-    
+
     // Filtro por professor
     if (teacherFilter) {
       activities = activities.filter(a => a.teacherId === teacherFilter);
     }
-    
+
     // Filtro por texto
     if (!debouncedFilter) return activities;
     const searchLower = debouncedFilter.toLowerCase();
@@ -66,7 +66,7 @@ const ActivitiesSection = ({ data, setData }) => {
       if (!newActivity.teacherId) return;
       const validActivities = multipleActivities.filter(act => act.subjectId && act.classId && act.quantity);
       if (validActivities.length === 0) return;
-      
+
       const newActivities = validActivities.map(act => ({
         id: uid(),
         teacherId: newActivity.teacherId,
@@ -76,12 +76,12 @@ const ActivitiesSection = ({ data, setData }) => {
         doubleLesson: act.doubleLesson,
         split: 1
       }));
-      
+
       setData(prev => ({
         ...prev,
         activities: [...prev.activities, ...newActivities]
       }));
-      
+
       setNewActivity({ teacherId: '', subjectId: '', classId: '', quantity: '', doubleLesson: false });
       setMultipleActivities([{ subjectId: '', classId: '', quantity: '', doubleLesson: false }]);
       setBulkMode(false);
@@ -124,27 +124,27 @@ const ActivitiesSection = ({ data, setData }) => {
   return (
     <div className="flex flex-col gap-6 h-auto min-h-0 pb-10">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 shrink-0">
-         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-            <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><BookOpen size={24} /></div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium uppercase">Total de Aulas</p>
-              <h3 className="text-2xl font-bold text-slate-700">{totalLessons}</h3>
-            </div>
-         </div>
-         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg"><Users size={24} /></div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium uppercase">Professores Alocados</p>
-              <h3 className="text-2xl font-bold text-slate-700">{uniqueTeachers} <span className="text-sm font-normal text-slate-400">/ {data.teachers.length}</span></h3>
-            </div>
-         </div>
-         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg"><Layout size={24} /></div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium uppercase">Turmas Atendidas</p>
-              <h3 className="text-2xl font-bold text-slate-700">{uniqueClasses} <span className="text-sm font-normal text-slate-400">/ {data.classes.length}</span></h3>
-            </div>
-         </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><BookOpen size={24} /></div>
+          <div>
+            <p className="text-xs text-slate-500 font-medium uppercase">Total de Aulas</p>
+            <h3 className="text-2xl font-bold text-slate-700">{totalLessons}</h3>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg"><Users size={24} /></div>
+          <div>
+            <p className="text-xs text-slate-500 font-medium uppercase">Professores Alocados</p>
+            <h3 className="text-2xl font-bold text-slate-700">{uniqueTeachers} <span className="text-sm font-normal text-slate-400">/ {data.teachers.length}</span></h3>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg"><Layout size={24} /></div>
+          <div>
+            <p className="text-xs text-slate-500 font-medium uppercase">Turmas Atendidas</p>
+            <h3 className="text-2xl font-bold text-slate-700">{uniqueClasses} <span className="text-sm font-normal text-slate-400">/ {data.classes.length}</span></h3>
+          </div>
+        </div>
       </div>
 
       {/* Filtro por Professor */}
@@ -152,9 +152,9 @@ const ActivitiesSection = ({ data, setData }) => {
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
           <div className="flex-1">
             <label htmlFor="teacher-filter" className="text-xs font-semibold text-slate-600 mb-1 block">Filtrar por Professor</label>
-            <select 
+            <select
               id="teacher-filter"
-              value={teacherFilter} 
+              value={teacherFilter}
               onChange={e => setTeacherFilter(e.target.value)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
@@ -186,123 +186,123 @@ const ActivitiesSection = ({ data, setData }) => {
       <div className="bg-gradient-to-br from-white to-slate-50 p-6 rounded-2xl shadow-sm border border-slate-200 shrink-0 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none [mask-image:radial-gradient(circle_at_30%_20%,white,transparent)] bg-[linear-gradient(120deg,rgba(99,102,241,0.08)_0%,rgba(99,102,241,0)_60%)]"></div>
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-5 relative z-10">
-           <div>
-             <h2 className="text-xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2"><Plus size={18} className="text-blue-600"/> Nova Atividade</h2>
-             <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} className="text-slate-400"/> Vincule Professor, Matéria e Turma abaixo.</p>
-           </div>
-           <div className="flex items-center gap-3">
-             <button
-               onClick={() => setBulkMode(!bulkMode)}
-               className={`text-xs px-3 py-2 rounded-lg font-medium transition-all flex items-center gap-1 ${bulkMode ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-             >
-               <Layers size={14} />
-               {bulkMode ? 'Modo Múltiplo Ativo' : 'Cadastro Múltiplo'}
-             </button>
-             <div className="hidden md:flex items-center gap-2 text-[10px] text-slate-400">
-               <span className="inline-flex items-center gap-1"><Layers size={12} className="text-purple-500"/> Aulas Duplas</span>
-             </div>
-           </div>
+          <div>
+            <h2 className="text-xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2"><Plus size={18} className="text-blue-600" /> Nova Atividade</h2>
+            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><BookOpen size={12} className="text-slate-400" /> Vincule Professor, Matéria e Turma abaixo.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setBulkMode(!bulkMode)}
+              className={`text-xs px-3 py-2 rounded-lg font-medium transition-all flex items-center gap-1 ${bulkMode ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+            >
+              <Layers size={14} />
+              {bulkMode ? 'Modo Múltiplo Ativo' : 'Cadastro Múltiplo'}
+            </button>
+            <div className="hidden md:flex items-center gap-2 text-[10px] text-slate-400">
+              <span className="inline-flex items-center gap-1"><Layers size={12} className="text-purple-500" /> Aulas Duplas</span>
+            </div>
+          </div>
         </div>
         {!bulkMode ? (
           // MODO SIMPLES: Um formulário único
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-5 relative z-10">
-           <div className="xl:col-span-3 group">
-             <label htmlFor="new-activity-teacher" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><Users size={12} className="text-blue-500"/> Professor</label>
-             <div className="relative">
-               <select 
-                 id="new-activity-teacher"
-                 className="peer w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm transition-all focus:border-blue-500" 
-                 value={newActivity.teacherId} 
-                 onChange={e => setNewActivity({...newActivity, teacherId: e.target.value})}
-                 aria-label="Selecionar professor"
-               >
-                 <option value="">Selecione...</option>
-                 {data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-               </select>
-               <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none opacity-40"><Users size={16}/></div>
-             </div>
-           </div>
-           <div className="xl:col-span-3 group">
-             <label htmlFor="new-activity-subject" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><BookOpen size={12} className="text-emerald-500"/> Matéria</label>
-             <div className="relative">
-               <select 
-                 id="new-activity-subject"
-                 className="peer w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white/80 backdrop-blur-sm transition-all focus:border-emerald-500" 
-                 value={newActivity.subjectId} 
-                 onChange={e => setNewActivity({...newActivity, subjectId: e.target.value})}
-                 aria-label="Selecionar matéria"
-               >
-                 <option value="">Selecione...</option>
-                 {data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-               </select>
-               <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none opacity-40"><BookOpen size={16}/></div>
-             </div>
-           </div>
-           <div className="xl:col-span-2 group">
-             <label htmlFor="new-activity-class" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><Layout size={12} className="text-indigo-500"/> Turma</label>
-             <div className="relative">
-               <select 
-                 id="new-activity-class"
-                 className="peer w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white/80 backdrop-blur-sm transition-all focus:border-indigo-500" 
-                 value={newActivity.classId} 
-                 onChange={e => setNewActivity({...newActivity, classId: e.target.value})}
-                 aria-label="Selecionar turma"
-               >
-                 <option value="">Selecione...</option>
-                 {data.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-               </select>
-               <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none opacity-40"><Layout size={16}/></div>
-             </div>
-           </div>
-           <div className="xl:col-span-2 relative group">
-             <label htmlFor="new-activity-quantity" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center justify-between">
-               <span className="flex items-center gap-1"><Layers size={12} className="text-purple-500"/> Qtd. Aulas</span>
-             </label>
-             <input 
-               id="new-activity-quantity"
-               type="number" 
-               min="1" 
-               max="10" 
-               placeholder="0" 
-               aria-label="Quantidade de aulas semanais"
-               className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-white/80 backdrop-blur-sm transition-all font-semibold text-center tracking-wide" 
-               value={newActivity.quantity} 
-               onChange={e => { const val = e.target.value; setNewActivity({ ...newActivity, quantity: val === '' ? '' : parseInt(val) }); }} 
-             />
-           </div>
-           <div className="xl:col-span-2 flex flex-col items-center gap-4">
-             <div className="flex items-center gap-2 -mt-1">
-               <input
-                 type="checkbox"
-                 id="doubleLesson"
-                 checked={newActivity.doubleLesson}
-                 onChange={e => setNewActivity({ ...newActivity, doubleLesson: e.target.checked })}
-                 className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
-               />
-               <label
-                 htmlFor="doubleLesson"
-                 className={`text-[11px] font-semibold flex items-center gap-1 cursor-pointer px-2 py-1 rounded transition-colors ${newActivity.doubleLesson ? 'bg-purple-100 text-purple-700 border border-purple-300' : 'text-slate-600 hover:bg-slate-100'}`}
-               >
-                 <Layers size={12} className={newActivity.doubleLesson ? 'text-purple-600' : 'text-purple-500'} /> Aula dupla
-               </label>
-             </div>
-             <button onClick={handleAddActivity} className="group mx-auto bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl px-6 py-3 text-sm font-bold tracking-wide hover:from-blue-500 hover:to-indigo-500 transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-xl active:scale-[0.97]">
-               <Plus size={18} className="group-hover:rotate-12 transition-transform"/> Adicionar
-             </button>
-           </div>
+            <div className="xl:col-span-3 group">
+              <label htmlFor="new-activity-teacher" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><Users size={12} className="text-blue-500" /> Professor</label>
+              <div className="relative">
+                <select
+                  id="new-activity-teacher"
+                  className="peer w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 backdrop-blur-sm transition-all focus:border-blue-500"
+                  value={newActivity.teacherId}
+                  onChange={e => setNewActivity({ ...newActivity, teacherId: e.target.value })}
+                  aria-label="Selecionar professor"
+                >
+                  <option value="">Selecione...</option>
+                  {data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none opacity-40"><Users size={16} /></div>
+              </div>
+            </div>
+            <div className="xl:col-span-3 group">
+              <label htmlFor="new-activity-subject" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><BookOpen size={12} className="text-emerald-500" /> Matéria</label>
+              <div className="relative">
+                <select
+                  id="new-activity-subject"
+                  className="peer w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white/80 backdrop-blur-sm transition-all focus:border-emerald-500"
+                  value={newActivity.subjectId}
+                  onChange={e => setNewActivity({ ...newActivity, subjectId: e.target.value })}
+                  aria-label="Selecionar matéria"
+                >
+                  <option value="">Selecione...</option>
+                  {data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none opacity-40"><BookOpen size={16} /></div>
+              </div>
+            </div>
+            <div className="xl:col-span-2 group">
+              <label htmlFor="new-activity-class" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><Layout size={12} className="text-indigo-500" /> Turma</label>
+              <div className="relative">
+                <select
+                  id="new-activity-class"
+                  className="peer w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white/80 backdrop-blur-sm transition-all focus:border-indigo-500"
+                  value={newActivity.classId}
+                  onChange={e => setNewActivity({ ...newActivity, classId: e.target.value })}
+                  aria-label="Selecionar turma"
+                >
+                  <option value="">Selecione...</option>
+                  {data.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none opacity-40"><Layout size={16} /></div>
+              </div>
+            </div>
+            <div className="xl:col-span-2 relative group">
+              <label htmlFor="new-activity-quantity" className="text-[11px] font-semibold text-slate-600 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1"><Layers size={12} className="text-purple-500" /> Qtd. Aulas</span>
+              </label>
+              <input
+                id="new-activity-quantity"
+                type="number"
+                min="1"
+                max="10"
+                placeholder="0"
+                aria-label="Quantidade de aulas semanais"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 bg-white/80 backdrop-blur-sm transition-all font-semibold text-center tracking-wide"
+                value={newActivity.quantity}
+                onChange={e => { const val = e.target.value; setNewActivity({ ...newActivity, quantity: val === '' ? '' : parseInt(val) }); }}
+              />
+            </div>
+            <div className="xl:col-span-2 flex flex-col items-center gap-4">
+              <div className="flex items-center gap-2 -mt-1">
+                <input
+                  type="checkbox"
+                  id="doubleLesson"
+                  checked={newActivity.doubleLesson}
+                  onChange={e => setNewActivity({ ...newActivity, doubleLesson: e.target.checked })}
+                  className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                />
+                <label
+                  htmlFor="doubleLesson"
+                  className={`text-[11px] font-semibold flex items-center gap-1 cursor-pointer px-2 py-1 rounded transition-colors ${newActivity.doubleLesson ? 'bg-purple-100 text-purple-700 border border-purple-300' : 'text-slate-600 hover:bg-slate-100'}`}
+                >
+                  <Layers size={12} className={newActivity.doubleLesson ? 'text-purple-600' : 'text-purple-500'} /> Aula dupla
+                </label>
+              </div>
+              <button onClick={handleAddActivity} className="group mx-auto bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl px-6 py-3 text-sm font-bold tracking-wide hover:from-blue-500 hover:to-indigo-500 transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-xl active:scale-[0.97]">
+                <Plus size={18} className="group-hover:rotate-12 transition-transform" /> Adicionar
+              </button>
+            </div>
           </div>
         ) : (
           // MODO MÚLTIPLO: Professor único + múltiplas atribuições
           <div className="space-y-4 relative z-10">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <label htmlFor="bulk-teacher" className="text-xs font-semibold text-blue-700 mb-2 flex items-center gap-1">
-                <Users size={14} className="text-blue-600"/> Professor (aplicado a todas as atribuições)
+                <Users size={14} className="text-blue-600" /> Professor (aplicado a todas as atribuições)
               </label>
-              <select 
+              <select
                 id="bulk-teacher"
-                className="w-full border border-blue-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white" 
-                value={newActivity.teacherId} 
-                onChange={e => setNewActivity({...newActivity, teacherId: e.target.value})}
+                className="w-full border border-blue-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                value={newActivity.teacherId}
+                onChange={e => setNewActivity({ ...newActivity, teacherId: e.target.value })}
               >
                 <option value="">Selecione o professor...</option>
                 {data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -314,9 +314,9 @@ const ActivitiesSection = ({ data, setData }) => {
                 <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-3 p-3 bg-white/80 rounded-lg border border-slate-200">
                   <div className="md:col-span-4">
                     <label className="text-[10px] font-semibold text-slate-600 mb-1 block">Matéria</label>
-                    <select 
-                      className="w-full border border-slate-300 rounded px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500" 
-                      value={act.subjectId} 
+                    <select
+                      className="w-full border border-slate-300 rounded px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                      value={act.subjectId}
                       onChange={e => {
                         const updated = [...multipleActivities];
                         updated[idx].subjectId = e.target.value;
@@ -329,9 +329,9 @@ const ActivitiesSection = ({ data, setData }) => {
                   </div>
                   <div className="md:col-span-3">
                     <label className="text-[10px] font-semibold text-slate-600 mb-1 block">Turma</label>
-                    <select 
-                      className="w-full border border-slate-300 rounded px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" 
-                      value={act.classId} 
+                    <select
+                      className="w-full border border-slate-300 rounded px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={act.classId}
                       onChange={e => {
                         const updated = [...multipleActivities];
                         updated[idx].classId = e.target.value;
@@ -344,18 +344,18 @@ const ActivitiesSection = ({ data, setData }) => {
                   </div>
                   <div className="md:col-span-2">
                     <label className="text-[10px] font-semibold text-slate-600 mb-1 block">Qtd. Aulas</label>
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max="10" 
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
                       placeholder="0"
-                      className="w-full border border-slate-300 rounded px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-center font-semibold" 
-                      value={act.quantity} 
+                      className="w-full border border-slate-300 rounded px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500 text-center font-semibold"
+                      value={act.quantity}
                       onChange={e => {
                         const updated = [...multipleActivities];
                         updated[idx].quantity = e.target.value === '' ? '' : parseInt(e.target.value);
                         setMultipleActivities(updated);
-                      }} 
+                      }}
                     />
                   </div>
                   <div className="md:col-span-2 flex items-end gap-2">
@@ -384,7 +384,7 @@ const ActivitiesSection = ({ data, setData }) => {
                   </div>
                 </div>
               ))}
-              
+
               <div className="flex gap-3">
                 <button
                   onClick={() => setMultipleActivities([...multipleActivities, { subjectId: '', classId: '', quantity: '', doubleLesson: false }])}
@@ -396,8 +396,8 @@ const ActivitiesSection = ({ data, setData }) => {
             </div>
 
             <div className="flex justify-end">
-              <button 
-                onClick={handleAddActivity} 
+              <button
+                onClick={handleAddActivity}
                 className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl px-6 py-3 text-sm font-bold hover:from-blue-500 hover:to-indigo-500 transition-all flex items-center gap-2 shadow-md hover:shadow-xl"
               >
                 <Plus size={18} /> Salvar Todas as Atribuições
@@ -406,33 +406,43 @@ const ActivitiesSection = ({ data, setData }) => {
           </div>
         )}
         <div className="mt-6 rounded-lg bg-white/60 backdrop-blur p-3 border border-slate-200 text-[11px] flex flex-wrap gap-3">
-           <div className="flex items-center gap-1"><Users size={12} className="text-blue-500"/> <span className="font-medium">{newActivity.teacherId ? data.teachers.find(t => t.id === newActivity.teacherId)?.name : 'Professor não selecionado'}</span></div>
-           <div className="flex items-center gap-1"><BookOpen size={12} className="text-emerald-500"/> <span className="font-medium">{newActivity.subjectId ? data.subjects.find(s => s.id === newActivity.subjectId)?.name : 'Matéria não selecionada'}</span></div>
-           <div className="flex items-center gap-1"><Layout size={12} className="text-indigo-500"/> <span className="font-medium">{newActivity.classId ? data.classes.find(c => c.id === newActivity.classId)?.name : 'Turma não selecionada'}</span></div>
-           <div className="flex items-center gap-1"><Layers size={12} className="text-purple-500"/> <span className="font-medium">{newActivity.quantity || 0} aulas</span></div>
+          <div className="flex items-center gap-1"><Users size={12} className="text-blue-500" /> <span className="font-medium">{newActivity.teacherId ? data.teachers.find(t => t.id === newActivity.teacherId)?.name : 'Professor não selecionado'}</span></div>
+
+          {!bulkMode ? (
+            <>
+              <div className="flex items-center gap-1"><BookOpen size={12} className="text-emerald-500" /> <span className="font-medium">{newActivity.subjectId ? data.subjects.find(s => s.id === newActivity.subjectId)?.name : 'Matéria não selecionada'}</span></div>
+              <div className="flex items-center gap-1"><Layout size={12} className="text-indigo-500" /> <span className="font-medium">{newActivity.classId ? data.classes.find(c => c.id === newActivity.classId)?.name : 'Turma não selecionada'}</span></div>
+              <div className="flex items-center gap-1"><Layers size={12} className="text-purple-500" /> <span className="font-medium">{newActivity.quantity || 0} aulas</span></div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-1"><Layers size={12} className="text-purple-500" /> <span className="font-medium">{multipleActivities.filter(a => a.subjectId && a.classId).length} atribuições configuradas</span></div>
+              <div className="flex items-center gap-1"><BookOpen size={12} className="text-emerald-500" /> <span className="font-medium">Total: {multipleActivities.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0)} aulas</span></div>
+            </>
+          )}
         </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-0">
         <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
-             <h3 className="font-bold text-slate-700 text-lg">Atividades Cadastradas</h3>
-             <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2.5 py-0.5 rounded-full">{filteredActivities.length}</span>
+            <h3 className="font-bold text-slate-700 text-lg">Atividades Cadastradas</h3>
+            <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2.5 py-0.5 rounded-full">{filteredActivities.length}</span>
           </div>
           <div className="relative w-full sm:w-64">
-            <input 
-               type="text" 
-               placeholder="Buscar por professor, matéria..." 
-               className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-               value={filter}
-               onChange={e => setFilter(e.target.value)}
+            <input
+              type="text"
+              placeholder="Buscar por professor, matéria..."
+              className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
             />
             <div className="absolute left-3 top-2.5 text-slate-400">
-               <Search size={16} />
+              <Search size={16} />
             </div>
           </div>
         </div>
-        
+
         <div className="overflow-auto scrollbar-elegant">
           <table className="w-full text-sm text-left min-w-[600px]">
             <thead className="text-xs text-slate-500 uppercase bg-slate-50/50 border-b border-slate-100 sticky top-0">
@@ -447,90 +457,90 @@ const ActivitiesSection = ({ data, setData }) => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredActivities.map(act => {
-                 const tName = data.teachers.find(t => t.id === act.teacherId)?.name;
-                 const sName = data.subjects.find(s => s.id === act.subjectId)?.name;
-                 const cName = data.classes.find(c => c.id === act.classId)?.name;
-                 const isEditing = editingActivityId === act.id;
-                 return (
-                   <tr key={act.id} className="hover:bg-slate-50/80 transition-colors group">
-                     {/* Professor */}
-                     <td className="px-6 py-4 font-medium text-slate-700">
-                       {isEditing ? (
-                         <select className="border border-slate-300 rounded px-2 py-1 text-xs bg-white" value={editActivity.teacherId} onChange={e => setEditActivity({ ...editActivity, teacherId: e.target.value })}>
-                           <option value="">Prof...</option>
-                           {data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                         </select>
-                       ) : (
-                         <div className="flex items-center gap-3">
-                           <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs">{tName?.charAt(0)}</div>
-                           {tName}
-                         </div>
-                       )}
-                     </td>
-                     {/* Matéria */}
-                     <td className="px-6 py-4 text-slate-600">
-                       {isEditing ? (
-                         <select className="border border-slate-300 rounded px-2 py-1 text-xs bg-white" value={editActivity.subjectId} onChange={e => setEditActivity({ ...editActivity, subjectId: e.target.value })}>
-                           <option value="">Mat...</option>
-                           {data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                         </select>
-                       ) : sName}
-                     </td>
-                     {/* Turma */}
-                     <td className="px-6 py-4 text-slate-600">
-                       {isEditing ? (
-                         <select className="border border-slate-300 rounded px-2 py-1 text-xs bg-white" value={editActivity.classId} onChange={e => setEditActivity({ ...editActivity, classId: e.target.value })}>
-                           <option value="">Tur...</option>
-                           {data.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                         </select>
-                       ) : (
-                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">{cName}</span>
-                       )}
-                     </td>
-                     {/* Carga */}
-                     <td className="px-6 py-4 text-center">
-                       {isEditing ? (
-                         <input type="number" min="1" max="10" className="w-16 border border-slate-300 rounded px-2 py-1 text-xs text-center" value={editActivity.quantity} onChange={e => setEditActivity({ ...editActivity, quantity: e.target.value })} />
-                       ) : (
-                         <span className="inline-flex items-center px-2 py-1 rounded bg-slate-100 text-slate-700 text-xs font-semibold">{act.quantity} aulas</span>
-                       )}
-                     </td>
-                     {/* Preferência */}
-                     <td className="px-6 py-4 text-center">
-                       {isEditing ? (
-                         <label className="inline-flex items-center gap-1 text-xs">
-                           <input type="checkbox" checked={editActivity.doubleLesson} onChange={e => setEditActivity({ ...editActivity, doubleLesson: e.target.checked })} className="h-3 w-3 rounded border-slate-300 text-purple-600" />
-                           <span>Dupla</span>
-                         </label>
-                       ) : (
-                         act.doubleLesson ? <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-semibold"><Layers size={12}/> Dupla</span> : <span className="text-[10px] text-slate-400">—</span>
-                       )}
-                     </td>
-                     {/* Ação */}
-                     <td className="px-6 py-4 text-right">
-                       {isEditing ? (
-                         <div className="flex justify-end gap-2">
-                           <button onClick={saveEditActivity} className="px-3 py-1.5 text-xs font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700">Salvar</button>
-                           <button onClick={cancelEditActivity} className="px-3 py-1.5 text-xs font-medium rounded-md bg-slate-200 text-slate-700 hover:bg-slate-300">Cancelar</button>
-                         </div>
-                       ) : (
-                         <div className="flex justify-end gap-2">
-                           <button onClick={() => startEditActivity(act)} className="text-slate-400 hover:text-indigo-600 p-2 transition-colors" title="Editar"><Pencil size={16} /></button>
-                           <button onClick={() => setData(prev => ({ ...prev, activities: prev.activities.filter(a => a.id !== act.id) }))} className="text-slate-400 hover:text-red-600 p-2 transition-colors" title="Excluir"><Trash2 size={16} /></button>
-                         </div>
-                       )}
-                     </td>
-                   </tr>
-                 )
+                const tName = data.teachers.find(t => t.id === act.teacherId)?.name;
+                const sName = data.subjects.find(s => s.id === act.subjectId)?.name;
+                const cName = data.classes.find(c => c.id === act.classId)?.name;
+                const isEditing = editingActivityId === act.id;
+                return (
+                  <tr key={act.id} className="hover:bg-slate-50/80 transition-colors group">
+                    {/* Professor */}
+                    <td className="px-6 py-4 font-medium text-slate-700">
+                      {isEditing ? (
+                        <select className="border border-slate-300 rounded px-2 py-1 text-xs bg-white" value={editActivity.teacherId} onChange={e => setEditActivity({ ...editActivity, teacherId: e.target.value })}>
+                          <option value="">Prof...</option>
+                          {data.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs">{tName?.charAt(0)}</div>
+                          {tName}
+                        </div>
+                      )}
+                    </td>
+                    {/* Matéria */}
+                    <td className="px-6 py-4 text-slate-600">
+                      {isEditing ? (
+                        <select className="border border-slate-300 rounded px-2 py-1 text-xs bg-white" value={editActivity.subjectId} onChange={e => setEditActivity({ ...editActivity, subjectId: e.target.value })}>
+                          <option value="">Mat...</option>
+                          {data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      ) : sName}
+                    </td>
+                    {/* Turma */}
+                    <td className="px-6 py-4 text-slate-600">
+                      {isEditing ? (
+                        <select className="border border-slate-300 rounded px-2 py-1 text-xs bg-white" value={editActivity.classId} onChange={e => setEditActivity({ ...editActivity, classId: e.target.value })}>
+                          <option value="">Tur...</option>
+                          {data.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">{cName}</span>
+                      )}
+                    </td>
+                    {/* Carga */}
+                    <td className="px-6 py-4 text-center">
+                      {isEditing ? (
+                        <input type="number" min="1" max="10" className="w-16 border border-slate-300 rounded px-2 py-1 text-xs text-center" value={editActivity.quantity} onChange={e => setEditActivity({ ...editActivity, quantity: e.target.value })} />
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-1 rounded bg-slate-100 text-slate-700 text-xs font-semibold">{act.quantity} aulas</span>
+                      )}
+                    </td>
+                    {/* Preferência */}
+                    <td className="px-6 py-4 text-center">
+                      {isEditing ? (
+                        <label className="inline-flex items-center gap-1 text-xs">
+                          <input type="checkbox" checked={editActivity.doubleLesson} onChange={e => setEditActivity({ ...editActivity, doubleLesson: e.target.checked })} className="h-3 w-3 rounded border-slate-300 text-purple-600" />
+                          <span>Dupla</span>
+                        </label>
+                      ) : (
+                        act.doubleLesson ? <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-semibold"><Layers size={12} /> Dupla</span> : <span className="text-[10px] text-slate-400">—</span>
+                      )}
+                    </td>
+                    {/* Ação */}
+                    <td className="px-6 py-4 text-right">
+                      {isEditing ? (
+                        <div className="flex justify-end gap-2">
+                          <button onClick={saveEditActivity} className="px-3 py-1.5 text-xs font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700">Salvar</button>
+                          <button onClick={cancelEditActivity} className="px-3 py-1.5 text-xs font-medium rounded-md bg-slate-200 text-slate-700 hover:bg-slate-300">Cancelar</button>
+                        </div>
+                      ) : (
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => startEditActivity(act)} className="text-slate-400 hover:text-indigo-600 p-2 transition-colors" title="Editar"><Pencil size={16} /></button>
+                          <button onClick={() => setData(prev => ({ ...prev, activities: prev.activities.filter(a => a.id !== act.id) }))} className="text-slate-400 hover:text-red-600 p-2 transition-colors" title="Excluir"><Trash2 size={16} /></button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )
               })}
               {filteredActivities.length === 0 && (
                 <tr>
                   <td colSpan="6" className="p-12 text-center text-slate-400 bg-slate-50/30">
-                     <div className="flex flex-col items-center gap-2">
-                        <BookOpen size={40} className="opacity-20 mb-2"/>
-                        <p className="font-medium">Nenhuma atividade encontrada</p>
-                        <p className="text-xs">Adicione novas atividades no formulário acima</p>
-                     </div>
+                    <div className="flex flex-col items-center gap-2">
+                      <BookOpen size={40} className="opacity-20 mb-2" />
+                      <p className="font-medium">Nenhuma atividade encontrada</p>
+                      <p className="text-xs">Adicione novas atividades no formulário acima</p>
+                    </div>
                   </td>
                 </tr>
               )}
