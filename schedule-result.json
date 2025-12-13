@@ -1,0 +1,9 @@
+{
+  "c2-Segunda-1": {
+    "subjectId": "sub1",
+    "teacherId": "t1",
+    "classId": "c2",
+    "timeKey": "Segunda-1",
+    "isDoubleLesson": false
+  }
+}

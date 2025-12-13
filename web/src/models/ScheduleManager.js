@@ -276,6 +276,7 @@ class ScheduleManager {
    */
   _isTeacherTimeCompatible(teacherId, dayIdx, candidateSlotIdx) {
     const candidateSlot = this.timeSlots[candidateSlotIdx];
+
     const candStart = this._minutes(candidateSlot.start);
     const candEnd = this._minutes(candidateSlot.end);
 

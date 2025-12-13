@@ -1,0 +1,84 @@
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 1 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 2 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 3 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 4 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 0
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 1 (number). Candidate: 510-560. Entries: 0
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 2 (number). Candidate: 510-560. Entries: 0
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 3 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 4 (number). Candidate: 510-560. Entries: 0
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 1 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 2 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 3 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 4 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 0
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 1 (number). Candidate: 510-560. Entries: 0
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 2 (number). Candidate: 510-560. Entries: 0
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 3 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 4 (number). Candidate: 510-560. Entries: 0
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 1 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 2 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 3 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 4 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 0
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 1 (number). Candidate: 510-560. Entries: 0
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 2 (number). Candidate: 510-560. Entries: 0
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 3 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 4 (number). Candidate: 510-560. Entries: 0
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":3,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 470-520. Entries: 0
+Booked Sample: []
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":0,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":0,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":0,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":0,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":0,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":0,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":0,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":0,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":0,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":0,"slotIdx":0,"start":"07:50","end":"08:40"}]
+[DEBUG] Check Teacher t1 Day 0 (number). Candidate: 510-560. Entries: 1
+Booked Sample: [{"teacherId":"t1","classId":"c1","subjectId":"sub1","dayIdx":0,"slotIdx":0,"start":"07:50","end":"08:40"}]
