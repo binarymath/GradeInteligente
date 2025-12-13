@@ -12,6 +12,29 @@ import { DAYS } from '../utils';
  * @param {Object} params.data Estado completo (classes, teachers, subjects, timeSlots, schedule)
  * @param {Array} params.displayPeriods Períodos filtrados para exibição
  */
+// Helper to get standardized filename
+function getFileName(viewMode, selectedEntity, data) {
+  let entityName = '';
+  if (viewMode === 'class') {
+    entityName = data.classes.find(c => c.id === selectedEntity)?.name || 'Turma';
+  } else if (viewMode === 'teacher') {
+    entityName = data.teachers.find(t => t.id === selectedEntity)?.name || 'Professor';
+  } else if (viewMode === 'subject') {
+    entityName = data.subjects.find(s => s.id === selectedEntity)?.name || 'Matéria';
+  }
+  // Remove caracteres inválidos para nome de arquivo
+  const safeName = entityName.replace(/[<>:"/\\|?*]/g, '');
+  return `GradeInteligente (${safeName})`;
+}
+
+/**
+ * Gera PDF da grade para uma turma ou professor.
+ * @param {Object} params
+ * @param {'class'|'teacher'} params.viewMode
+ * @param {string} params.selectedEntity
+ * @param {Object} params.data Estado completo (classes, teachers, subjects, timeSlots, schedule)
+ * @param {Array} params.displayPeriods Períodos filtrados para exibição
+ */
 export async function exportPDF({ viewMode, selectedEntity, data, displayPeriods }) {
   const jsPDFModule = await import('jspdf');
   const jsPDF = jsPDFModule.default || jsPDFModule.jsPDF;
@@ -19,14 +42,8 @@ export async function exportPDF({ viewMode, selectedEntity, data, displayPeriods
   const autoTable = autoTableModule.default || autoTableModule;
 
   const doc = new jsPDF({ orientation: 'landscape' });
-  let titleText = '';
-  if (viewMode === 'class') {
-    titleText = `Grade Horária - ${data.classes.find(c => c.id === selectedEntity)?.name || 'Turma'}`;
-  } else if (viewMode === 'teacher') {
-    titleText = `Grade Horária - Professor(a) ${data.teachers.find(t => t.id === selectedEntity)?.name || 'Professor'}`;
-  } else if (viewMode === 'subject') {
-    titleText = `Grade Horária - Matéria ${data.subjects.find(s => s.id === selectedEntity)?.name || 'Matéria'}`;
-  }
+  const fileName = getFileName(viewMode, selectedEntity, data);
+  const titleText = fileName.replace('GradeInteligente', 'Grade Horária');
 
   doc.setFontSize(18);
   doc.text(titleText, 14, 22);
@@ -89,7 +106,7 @@ export async function exportPDF({ viewMode, selectedEntity, data, displayPeriods
     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 35, halign: 'center' } }
   });
 
-  doc.save(`Grade_${viewMode}_${selectedEntity}.pdf`);
+  doc.save(`${fileName}.pdf`);
 }
 
 /**
@@ -141,7 +158,9 @@ export async function exportExcel({ viewMode, selectedEntity, data }) {
   XLSX.utils.book_append_sheet(wb, ws, 'Grade Horária');
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   const blob = new Blob([wbout], { type: 'application/octet-stream' });
-  saveAs(blob, `Grade_${viewMode}_${selectedEntity}.xlsx`);
+
+  const fileName = getFileName(viewMode, selectedEntity, data);
+  saveAs(blob, `${fileName}.xlsx`);
 }
 
 /**
@@ -153,14 +172,8 @@ export async function exportExcel({ viewMode, selectedEntity, data }) {
  * @param {Array} params.displayPeriods Períodos filtrados
  */
 export async function exportDOC({ viewMode, selectedEntity, data, displayPeriods }) {
-  let titleText = '';
-  if (viewMode === 'class') {
-    titleText = `Grade Horária - ${data.classes.find(c => c.id === selectedEntity)?.name || 'Turma'}`;
-  } else if (viewMode === 'teacher') {
-    titleText = `Grade Horária - Professor(a) ${data.teachers.find(t => t.id === selectedEntity)?.name || 'Professor'}`;
-  } else if (viewMode === 'subject') {
-    titleText = `Grade Horária - Matéria ${data.subjects.find(s => s.id === selectedEntity)?.name || 'Matéria'}`;
-  }
+  const fileName = getFileName(viewMode, selectedEntity, data);
+  const titleText = fileName.replace('GradeInteligente', 'Grade Horária');
 
   let html = `
     <html>
@@ -246,5 +259,5 @@ export async function exportDOC({ viewMode, selectedEntity, data, displayPeriods
   `;
 
   const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
-  saveAs(blob, `Grade_${viewMode}_${selectedEntity}.doc`);
+  saveAs(blob, `${fileName}.doc`);
 }
