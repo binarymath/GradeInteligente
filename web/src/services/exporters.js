@@ -143,3 +143,108 @@ export async function exportExcel({ viewMode, selectedEntity, data }) {
   const blob = new Blob([wbout], { type: 'application/octet-stream' });
   saveAs(blob, `Grade_${viewMode}_${selectedEntity}.xlsx`);
 }
+
+/**
+ * Exporta a grade em formato Word (.doc) simulado via HTML.
+ * @param {Object} params
+ * @param {'class'|'teacher'} params.viewMode
+ * @param {string} params.selectedEntity
+ * @param {Object} params.data Estado completo
+ * @param {Array} params.displayPeriods Períodos filtrados
+ */
+export async function exportDOC({ viewMode, selectedEntity, data, displayPeriods }) {
+  let titleText = '';
+  if (viewMode === 'class') {
+    titleText = `Grade Horária - ${data.classes.find(c => c.id === selectedEntity)?.name || 'Turma'}`;
+  } else if (viewMode === 'teacher') {
+    titleText = `Grade Horária - Professor(a) ${data.teachers.find(t => t.id === selectedEntity)?.name || 'Professor'}`;
+  } else if (viewMode === 'subject') {
+    titleText = `Grade Horária - Matéria ${data.subjects.find(s => s.id === selectedEntity)?.name || 'Matéria'}`;
+  }
+
+  let html = `
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: Arial, sans-serif; }
+          h1 { text-align: center; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid black; padding: 5px; text-align: center; font-size: 10px; }
+          th { background-color: #f0f0f0; font-weight: bold; }
+          .break { background-color: #e0e0e0; font-weight: bold; color: #555; }
+        </style>
+      </head>
+      <body>
+        <h1>${titleText}</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Horário</th>
+              <th>Segunda</th>
+              <th>Terça</th>
+              <th>Quarta</th>
+              <th>Quinta</th>
+              <th>Sexta</th>
+            </tr>
+          </thead>
+          <tbody>
+  `;
+
+  displayPeriods.forEach(slot => {
+    const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
+    html += `<tr><td>${slot.start} - ${slot.end}</td>`;
+
+    if (slot.type !== 'aula') {
+      const label = slot.type.toUpperCase();
+      html += `<td colspan="5" class="break">${label}</td>`;
+    } else {
+      DAYS.forEach((_, dayIdx) => {
+        const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
+        let cellContent = '';
+
+        if (viewMode === 'class') {
+          const entry = Object.values(data.schedule).find(v => v.classId === selectedEntity && v.timeKey === timeKey);
+          if (entry) {
+            const subj = data.subjects.find(s => s.id === entry.subjectId);
+            const teacher = data.teachers.find(t => t.id === entry.teacherId);
+            if (subj && teacher) {
+              cellContent = `<b>${subj.name}</b><br>(${teacher.name})`;
+            }
+          }
+        } else if (viewMode === 'teacher') {
+          const entry = Object.values(data.schedule).find(v => v.teacherId === selectedEntity && v.timeKey === timeKey);
+          if (entry) {
+            const subj = data.subjects.find(s => s.id === entry.subjectId);
+            const cls = data.classes.find(c => c.id === entry.classId);
+            if (subj && cls) {
+              cellContent = `<b>${subj.name}</b><br>(${cls.name})`;
+            }
+          }
+        } else if (viewMode === 'subject') {
+          const entries = Object.values(data.schedule).filter(v => v.subjectId === selectedEntity && v.timeKey === timeKey);
+          if (entries.length) {
+            cellContent = entries.map(e => {
+              const cls = data.classes.find(c => c.id === e.classId);
+              const teacher = data.teachers.find(t => t.id === e.teacherId);
+              return `<b>${cls?.name || '?'}</b><br>(${teacher?.name || '?'})`;
+            }).join('<br><br>');
+          }
+        }
+        html += `<td>${cellContent}</td>`;
+      });
+    }
+    html += `</tr>`;
+  });
+
+  html += `
+          </tbody>
+        </table>
+        <p style="text-align: center; font-size: 10px; margin-top: 20px;">Gerado pelo Sistema de Grade Inteligente</p>
+      </body>
+    </html>
+  `;
+
+  const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
+  saveAs(blob, `Grade_${viewMode}_${selectedEntity}.doc`);
+}

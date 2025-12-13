@@ -1,6 +1,6 @@
 import React from 'react';
 import { FileText, Download, Calendar, CalendarPlus } from 'lucide-react';
-import { exportPDF, exportExcel } from '../services/exporters';
+import { exportPDF, exportExcel, exportDOC } from '../services/exporters';
 import { exportICS, exportIncrementalICS } from '../services/icsExporter';
 
 /**
@@ -14,6 +14,15 @@ const ExportButtons = ({ viewMode, selectedEntity, data, displayPeriods, calenda
   const commonCls = 'p-2 rounded-md border text-xs font-medium flex items-center justify-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
   return (
     <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => exportDOC({ viewMode, selectedEntity, data, displayPeriods })}
+        disabled={disabled}
+        title="Exportar Word (.doc)"
+        className={`${commonCls} bg-blue-800 border-blue-800 text-white hover:bg-blue-900`}
+      >
+        <FileText size={14} /> <span className="sr-only">Word</span>
+      </button>
       <button
         type="button"
         onClick={() => exportPDF({ viewMode, selectedEntity, data, displayPeriods })}
