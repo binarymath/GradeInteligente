@@ -52,4 +52,4 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           $version = $env:VERSION
-          gh release create "v$version" "executaveis/Grade-Inteligente-$version-Setup.exe" "executaveis/GradeInteligente.zip" "executaveis/hashes.txt" --repo binarymath/GradeInteligenteExecutavel --title "Versão $version" --notes "Release automático gerado via CI" --generate-notes --clobber
+          gh release create "v$version" "executaveis/Grade-Inteligente-$version-Setup.exe" "executaveis/GradeInteligente.zip" "executaveis/hashes.txt" --repo binarymath/GradeInteligenteExecutavel --title "Versão $version" --notes "Release automático gerado via CI" --generate-notes
