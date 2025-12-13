@@ -244,10 +244,12 @@ class ScheduleManager {
           if (tryBookDouble(activity)) {
             remaining -= 2;
             this.logMessage(`  ✓ Alocada aula dupla (${remaining} restantes)`);
+            continue; // Sucesso na dupla, volta para o início do loop (tenta mais duplas se houver saldo)
           }
         }
-        // Tentar alocar aula simples
-        else if (remaining > 0) {
+
+        // Tentar alocar aula simples (fallback ou normal)
+        if (remaining > 0) {
           if (tryBookSingle(activity)) {
             remaining--;
             if (remaining > 0) {
