@@ -1,8 +1,0 @@
-﻿build-and-release	Upload Release Assets	´╗┐2025-12-13T02:37:54.0648054Z ##[group]Run gh release upload V.0.1.0 executaveis/Grade-Inteligente-0.1.0-Setup.exe executaveis/GradeInteligente.zip executaveis/hashes.txt --repo binarymath/GradeInteligenteExecutavel --clobber
-build-and-release	Upload Release Assets	2025-12-13T02:37:54.0649569Z [36;1mgh release upload V.0.1.0 executaveis/Grade-Inteligente-0.1.0-Setup.exe executaveis/GradeInteligente.zip executaveis/hashes.txt --repo binarymath/GradeInteligenteExecutavel --clobber[0m
-build-and-release	Upload Release Assets	2025-12-13T02:37:54.0720315Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
-build-and-release	Upload Release Assets	2025-12-13T02:37:54.0720712Z env:
-build-and-release	Upload Release Assets	2025-12-13T02:37:54.0721709Z   GH_TOKEN: ***
-build-and-release	Upload Release Assets	2025-12-13T02:37:54.0721937Z ##[endgroup]
-build-and-release	Upload Release Assets	2025-12-13T02:38:52.3571356Z release not found
-build-and-release	Upload Release Assets	2025-12-13T02:38:52.4604793Z ##[error]Process completed with exit code 1.
