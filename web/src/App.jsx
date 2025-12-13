@@ -162,7 +162,12 @@ const App = () => {
         <div className={`border-b border-slate-100 flex items-center ${sidebarOpen ? 'p-6 justify-between' : 'p-3 justify-center'} overflow-hidden whitespace-nowrap ${isMobile && !sidebarOpen ? 'hidden' : ''}`}>
           <div className="flex items-center gap-2 text-indigo-700 mb-1">
             <Layout className="w-6 h-6 shrink-0" />
-            {sidebarOpen && <span className="font-extrabold text-xl tracking-tight">Grade Inteligente</span>}
+            {sidebarOpen && (
+              <div className="flex flex-col">
+                <span className="font-extrabold text-xl tracking-tight leading-none">Grade Inteligente</span>
+                <span className="text-[10px] uppercase tracking-widest text-indigo-400 font-bold mt-0.5">Atualizado em {__BUILD_DATE__}</span>
+              </div>
+            )}
           </div>
           {sidebarOpen && isMobile && (
             <button onClick={() => setSidebarOpen(false)} className="text-slate-400 hover:text-slate-600" title="Fechar">
