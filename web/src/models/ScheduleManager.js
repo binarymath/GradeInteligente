@@ -25,6 +25,16 @@ class ScheduleManager {
   }
 
   /**
+   * Converte string de horário "HH:MM" para minutos absolutos.
+   * @private
+   */
+  _minutes(timeStr) {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  /**
    * Adiciona uma mensagem ao log de execução com timestamp.
    * @param {string} msg - Mensagem a ser logada.
    */
@@ -214,6 +224,10 @@ class ScheduleManager {
     ).length;
     if (teacherLessonsInClassOnDay >= LIMITS.MAX_TEACHER_LOGGED_PER_DAY) return false;
 
+    // 7. Verificação de Conflito de Horário Real (Smart Conflict Avoidance)
+    // Impede que o professor seja agendado em slots diferentes que se sobrepõem no tempo real
+    if (!this._isTeacherTimeCompatible(teacherId, dayIdx, slotIdx)) return false;
+
     return true;
   }
 
@@ -254,6 +268,30 @@ class ScheduleManager {
     }
 
     return score;
+  }
+
+  /**
+   * Verifica se o slot candidato conflita temporalmente com outros agendamentos do professor no mesmo dia.
+   * @private
+   */
+  _isTeacherTimeCompatible(teacherId, dayIdx, candidateSlotIdx) {
+    const candidateSlot = this.timeSlots[candidateSlotIdx];
+    const candStart = this._minutes(candidateSlot.start);
+    const candEnd = this._minutes(candidateSlot.end);
+
+    // Filtra agendamentos deste professor neste dia
+    const teacherEntries = this.bookedEntries.filter(e => e.teacherId === teacherId && e.dayIdx === dayIdx);
+
+    for (const entry of teacherEntries) {
+      const entryStart = this._minutes(entry.start);
+      const entryEnd = this._minutes(entry.end);
+
+      // Check overlap: StartA < EndB && EndA > StartB
+      if (candStart < entryEnd && candEnd > entryStart) {
+        return false; // Conflito de tempo real detectado
+      }
+    }
+    return true;
   }
 
   /**
@@ -393,8 +431,7 @@ class ScheduleManager {
           // Cálculo detalhado da sobreposição
           const overlapStart = A.start > B.start ? A.start : B.start;
           const overlapEnd = A.end < B.end ? A.end : B.end;
-          const toMinutes = t => parseInt(t.split(':')[0], 10) * 60 + parseInt(t.split(':')[1], 10);
-          const overlapDur = Math.max(0, toMinutes(overlapEnd) - toMinutes(overlapStart));
+          const overlapDur = Math.max(0, this._minutes(overlapEnd) - this._minutes(overlapStart));
           const dayIdx = A.dayIdx;
 
           const timeKeyA = `${DAYS[dayIdx]}-${A.slotIdx}`;
