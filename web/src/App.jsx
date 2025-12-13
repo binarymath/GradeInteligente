@@ -235,7 +235,7 @@ const App = () => {
             <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2 truncate">
               {view === 'about' ? 'Sobre o Sistema' : view === 'data' && subView === 'timeSettings' ? 'Configuração de Horários' : view === 'data' ? 'Dados Institucionais' : view === 'activities' ? 'Atribuições' : view === 'manualEdit' ? 'Edição Manual da Grade' : view === 'agenda' ? 'Agenda e Grade' : 'Gerar/Visualizar Grade'}
               <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 ml-2">
-                v0.0.0 ({__BUILD_DATE__})
+                {__BUILD_DATE__}
               </span>
             </h1>
           </div>
