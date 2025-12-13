@@ -39,10 +39,10 @@ jobs:
 
       - name: Generate Hashes
         run: |
-          Get-FileHash -Path 'executaveis\Grade-Inteligente-0.0.0-Setup.exe', 'executaveis\GradeInteligente.zip' -Algorithm SHA256 | ForEach-Object { $_.Path.Split('\')[-1] + ': ' + $_.Hash } | Out-File 'executaveis\hashes.txt' -Encoding UTF8
+          Get-FileHash -Path 'executaveis\Grade-Inteligente-0.1.0-Setup.exe', 'executaveis\GradeInteligente.zip' -Algorithm SHA256 | ForEach-Object { $_.Path.Split('\')[-1] + ': ' + $_.Hash } | Out-File 'executaveis\hashes.txt' -Encoding UTF8
 
       - name: Upload Release Assets
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
-          gh release upload V.0.0.0 executaveis/Grade-Inteligente-0.0.0-Setup.exe executaveis/GradeInteligente.zip executaveis/hashes.txt --repo binarymath/GradeInteligenteExecutavel --clobber
+          gh release upload V.0.1.0 executaveis/Grade-Inteligente-0.1.0-Setup.exe executaveis/GradeInteligente.zip executaveis/hashes.txt --repo binarymath/GradeInteligenteExecutavel --clobber
