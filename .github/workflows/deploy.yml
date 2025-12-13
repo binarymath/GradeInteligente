@@ -37,12 +37,19 @@ jobs:
         run: |
           Compress-Archive -Path 'executaveis\win-unpacked\*' -DestinationPath 'executaveis\GradeInteligente.zip' -Force
 
+      - name: Get Version
+        id: get_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $env:GITHUB_ENV
+
       - name: Generate Hashes
         run: |
-          Get-FileHash -Path 'executaveis\Grade-Inteligente-0.1.0-Setup.exe', 'executaveis\GradeInteligente.zip' -Algorithm SHA256 | ForEach-Object { $_.Path.Split('\')[-1] + ': ' + $_.Hash } | Out-File 'executaveis\hashes.txt' -Encoding UTF8
+          $version = $env:VERSION
+          $exePath = "executaveis\Grade-Inteligente-$version-Setup.exe"
+          Get-FileHash -Path $exePath, 'executaveis\GradeInteligente.zip' -Algorithm SHA256 | ForEach-Object { $_.Path.Split('\')[-1] + ': ' + $_.Hash } | Out-File 'executaveis\hashes.txt' -Encoding UTF8
 
       - name: Upload Release Assets
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
-          gh release upload V.0.1.0 executaveis/Grade-Inteligente-0.1.0-Setup.exe executaveis/GradeInteligente.zip executaveis/hashes.txt --repo binarymath/GradeInteligenteExecutavel --clobber
+          $version = $env:VERSION
+          gh release create "v$version" "executaveis/Grade-Inteligente-$version-Setup.exe" "executaveis/GradeInteligente.zip" "executaveis/hashes.txt" --repo binarymath/GradeInteligenteExecutavel --title "Versão $version" --notes "Release automático gerado via CI" --generate-notes --clobber
