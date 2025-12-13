@@ -257,7 +257,7 @@ class ScheduleManager {
    * Salva nos mapas de lookup rápida e na lista plana de logs.
    * @private
    */
-  _book(activity, dayIdx, slotIdx, isDoubleSecondPart = false) {
+  _book(activity, dayIdx, slotIdx, isDoubleSecondPart = false, forceSingle = false) {
     const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
     const scheduleKey = `${activity.classId}-${timeKey}`;
 
@@ -266,8 +266,9 @@ class ScheduleManager {
       teacherId: activity.teacherId,
       classId: activity.classId,
       timeKey,
-      isDoubleLesson: isDoubleSecondPart ? false : activity.doubleLesson // Apenas a 1ª da dupla leva a flag true
+      isDoubleLesson: forceSingle ? false : (isDoubleSecondPart ? false : activity.doubleLesson) // Apenas a 1ª da dupla leva a flag true
     };
+
 
     // Marca ocupação
     if (!this.teacherSchedule[activity.teacherId]) this.teacherSchedule[activity.teacherId] = {};
@@ -346,7 +347,7 @@ class ScheduleManager {
     const topCandidates = candidates.filter(c => c.score === maxScore);
     const chosen = topCandidates[Math.floor(Math.random() * topCandidates.length)];
 
-    this._book(activity, chosen.dayIdx, chosen.slotIdx);
+    this._book(activity, chosen.dayIdx, chosen.slotIdx, false, true);
     return true;
   }
 
