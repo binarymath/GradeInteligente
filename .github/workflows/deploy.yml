@@ -29,7 +29,7 @@ jobs:
           ELECTRON: 'true'
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           ELECTRON_BUILDER_DISABLE_WIN_CODE_SIGNING: 'true'
-        run: npx electron-builder --win nsis
+        run: npx electron-builder --win nsis --publish never
 
       - name: Create Portable Zip
         run: |
