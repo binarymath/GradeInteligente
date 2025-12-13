@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
 const path = require('path');
 // electron-store is ESM in v11+, use dynamic import to avoid ERR_REQUIRE_ESM
 
@@ -47,11 +47,12 @@ function createWindow() {
     win.loadURL(devUrl);
     win.webContents.openDevTools({ mode: 'detach' });
   } else {
-    const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
+    const indexPath = path.resolve(__dirname, '..', 'dist', 'index.html');
     win.loadFile(indexPath);
     // win.webContents.openDevTools(); // Removed as requested
     win.webContents.on('did-fail-load', (_e, ec, desc, url) => {
       console.error('Load failed', { ec, desc, url, indexPath });
+      dialog.showErrorBox('Erro de Carregamento', `Falha ao carregar a aplicação.\nErro: ${desc} (${ec})\nCaminho: ${indexPath}`);
     });
     win.webContents.on('crashed', () => {
       console.error('Renderer crashed');
