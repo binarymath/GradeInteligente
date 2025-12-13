@@ -108,7 +108,13 @@ class ScheduleManager {
       const teacherB = this.data.teachers.find(t => t.id === b.teacherId);
       const constraintsA = teacherA?.unavailable?.length || 0;
       const constraintsB = teacherB?.unavailable?.length || 0;
-      return constraintsB - constraintsA;
+
+      const diff = constraintsB - constraintsA;
+      // "Fuzzy sort": Se a diferença de restrições for pequena (ex: < 2), trata como iguais.
+      // Isso preserva a aleatoriedade do shuffle inicial, evitando que uma matéria sempre ganhe.
+      if (Math.abs(diff) < 2) return 0;
+
+      return diff;
     });
   }
 
