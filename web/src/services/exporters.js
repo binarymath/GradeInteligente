@@ -176,33 +176,97 @@ export async function exportDOC({ viewMode, selectedEntity, data, displayPeriods
   const titleText = fileName.replace('GradeInteligente', 'Grade Horária');
 
   let html = `
-    <html>
-      <head>
-        <meta charset="utf-8">
+    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head>
+      <meta charset="utf-8">
+        <title>${titleText}</title>
+        <!--[if gte mso 9]>
+        <xml>
+          <w:WordDocument>
+            <w:View>Print</w:View>
+            <w:Zoom>90</w:Zoom>
+            <w:DoNotOptimizeForBrowser />
+          </w:WordDocument>
+        </xml>
+        <![endif]-->
         <style>
-          body { font-family: Arial, sans-serif; }
-          h1 { text-align: center; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th, td { border: 1px solid black; padding: 5px; text-align: center; font-size: 10px; }
-          th { background-color: #f0f0f0; font-weight: bold; }
-          .break { background-color: #e0e0e0; font-weight: bold; color: #555; }
+          @page {
+            size: 29.7cm 21cm;
+          margin: 1cm 1cm 1cm 1cm;
+          mso-page-orientation: landscape;
+          }
+          @page Section1 {
+            size: 29.7cm 21cm;
+          margin: 1cm 1cm 1cm 1cm;
+          mso-header-margin: 0.5in;
+          mso-footer-margin: 0.5in;
+          mso-paper-source: 0;
+          }
+          div.Section1 {
+            page: Section1;
+          }
+          body {
+            font - family: Arial, sans-serif;
+          font-size: 12px;
+          }
+          h1 {
+            text - align: center;
+          font-size: 18px;
+          margin-bottom: 20px;
+          }
+          table {
+            width: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+          }
+          th, td {
+            border: 1px solid black;
+          padding: 8px 4px;
+          text-align: center;
+          font-size: 11px;
+          vertical-align: middle;
+          word-wrap: break-word;
+          }
+          th {
+            background - color: #f0f0f0;
+          font-weight: bold;
+          color: #333;
+          height: 40px;
+          }
+          .break {
+            background - color: #e0e0e0;
+          font-weight: bold;
+          color: #555;
+          letter-spacing: 1px;
+          }
+          /* Garantir que as linhas tenham altura mínima */
+          tr {height: 50px; }
         </style>
-      </head>
-      <body>
+    </head>
+    <body>
+      <div class="Section1">
         <h1>${titleText}</h1>
         <table>
-          <thead>
-            <tr>
-              <th>Horário</th>
-              <th>Segunda</th>
-              <th>Terça</th>
-              <th>Quarta</th>
-              <th>Quinta</th>
-              <th>Sexta</th>
-            </tr>
-          </thead>
-          <tbody>
-  `;
+          <colgroup>
+            <col style="width: 10%">
+              <col style="width: 18%">
+                <col style="width: 18%">
+                  <col style="width: 18%">
+                    <col style="width: 18%">
+                      <col style="width: 18%">
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th>Horário</th>
+                          <th>Segunda</th>
+                          <th>Terça</th>
+                          <th>Quarta</th>
+                          <th>Quinta</th>
+                          <th>Sexta</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        `;
 
   displayPeriods.forEach(slot => {
     const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
@@ -222,7 +286,7 @@ export async function exportDOC({ viewMode, selectedEntity, data, displayPeriods
             const subj = data.subjects.find(s => s.id === entry.subjectId);
             const teacher = data.teachers.find(t => t.id === entry.teacherId);
             if (subj && teacher) {
-              cellContent = `<b>${subj.name}</b><br>(${teacher.name})`;
+              cellContent = `<b>${subj.name}</b><br><span style="font-size:10px; color:#555;">(${teacher.name})</span>`;
             }
           }
         } else if (viewMode === 'teacher') {
@@ -231,7 +295,7 @@ export async function exportDOC({ viewMode, selectedEntity, data, displayPeriods
             const subj = data.subjects.find(s => s.id === entry.subjectId);
             const cls = data.classes.find(c => c.id === entry.classId);
             if (subj && cls) {
-              cellContent = `<b>${subj.name}</b><br>(${cls.name})`;
+              cellContent = `<b>${subj.name}</b><br><span style="font-size:10px; color:#555;">(${cls.name})</span>`;
             }
           }
         } else if (viewMode === 'subject') {
@@ -240,7 +304,7 @@ export async function exportDOC({ viewMode, selectedEntity, data, displayPeriods
             cellContent = entries.map(e => {
               const cls = data.classes.find(c => c.id === e.classId);
               const teacher = data.teachers.find(t => t.id === e.teacherId);
-              return `<b>${cls?.name || '?'}</b><br>(${teacher?.name || '?'})`;
+              return `<b>${cls?.name || '?'}</b><br><span style="font-size:10px; color:#555;">(${teacher?.name || '?'})</span>`;
             }).join('<br><br>');
           }
         }
@@ -251,12 +315,13 @@ export async function exportDOC({ viewMode, selectedEntity, data, displayPeriods
   });
 
   html += `
-          </tbody>
-        </table>
-        <p style="text-align: center; font-size: 10px; margin-top: 20px;">Gerado pelo Sistema de Grade Inteligente</p>
-      </body>
-    </html>
-  `;
+                      </tbody>
+                    </table>
+                    <p style="text-align: center; font-size: 10px; margin-top: 20px; color: #777;">Gerado pelo Sistema de Grade Inteligente - ${new Date().toLocaleDateString('pt-BR')}</p>
+                  </div>
+                </body>
+              </html>
+              `;
 
   const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
   saveAs(blob, `${fileName}.doc`);
