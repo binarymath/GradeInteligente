@@ -1,18 +1,9 @@
-// Serviços de exportação (PDF, Excel) seguindo princípios de responsabilidade única.
-// Cada função recebe o estado mínimo necessário.
-// Lazy imports serão usados dentro das funções para reduzir bundle inicial.
 import { saveAs } from 'file-saver';
 import { DAYS } from '../utils';
 
 /**
- * Gera PDF da grade para uma turma ou professor.
- * @param {Object} params
- * @param {'class'|'teacher'} params.viewMode
- * @param {string} params.selectedEntity
- * @param {Object} params.data Estado completo (classes, teachers, subjects, timeSlots, schedule)
- * @param {Array} params.displayPeriods Períodos filtrados para exibição
+ * Helper to get standardized filename
  */
-// Helper to get standardized filename
 function getFileName(viewMode, selectedEntity, data) {
   let entityName = '';
   if (viewMode === 'class') {
@@ -179,69 +170,73 @@ export async function exportDOC({ viewMode, selectedEntity, data, displayPeriods
     <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
     <head>
       <meta charset="utf-8">
-        <title>${titleText}</title>
-        <!--[if gte mso 9]>
-        <xml>
-          <w:WordDocument>
-            <w:View>Print</w:View>
-            <w:Zoom>90</w:Zoom>
-            <w:DoNotOptimizeForBrowser />
-          </w:WordDocument>
-        </xml>
-        <![endif]-->
-        <style>
-          @page {
-            size: 29.7cm 21cm;
-          margin: 1cm 1cm 1cm 1cm;
+      <title>${titleText}</title>
+      <!--[if gte mso 9]>
+      <xml>
+      <w:WordDocument>
+      <w:View>Print</w:View>
+      <w:Zoom>90</w:Zoom>
+      <w:DoNotOptimizeForBrowser/>
+      </w:WordDocument>
+      </xml>
+      <![endif]-->
+      <style>
+        @page {
+          size: 29.7cm 21cm;
+          margin: 0.5cm;
           mso-page-orientation: landscape;
-          }
-          @page Section1 {
-            size: 29.7cm 21cm;
-          margin: 1cm 1cm 1cm 1cm;
-          mso-header-margin: 0.5in;
-          mso-footer-margin: 0.5in;
+        }
+        @page Section1 {
+          size: 29.7cm 21cm;
+          margin: 0.5cm;
+          mso-header-margin: 0.2in;
+          mso-footer-margin: 0.2in;
           mso-paper-source: 0;
-          }
-          div.Section1 {
-            page: Section1;
-          }
-          body {
-            font - family: Arial, sans-serif;
-          font-size: 12px;
-          }
-          h1 {
-            text - align: center;
-          font-size: 18px;
-          margin-bottom: 20px;
-          }
-          table {
-            width: 100%;
-          border-collapse: collapse;
-          table-layout: fixed;
-          }
-          th, td {
-            border: 1px solid black;
-          padding: 8px 4px;
-          text-align: center;
+        }
+        div.Section1 {
+          page: Section1;
+        }
+        body { 
+          font-family: Arial, sans-serif; 
           font-size: 11px;
+        }
+        h1 { 
+          text-align: center; 
+          font-size: 16px;
+          margin-bottom: 10px;
+          margin-top: 0;
+        }
+        table { 
+          width: 100%; 
+          border-collapse: collapse; 
+          table-layout: fixed;
+        }
+        th, td { 
+          border: 1px solid black; 
+          padding: 2px 2px; 
+          text-align: center; 
+          font-size: 10px;
           vertical-align: middle;
           word-wrap: break-word;
-          }
-          th {
-            background - color: #f0f0f0;
-          font-weight: bold;
+        }
+        th { 
+          background-color: #f0f0f0; 
+          font-weight: bold; 
           color: #333;
-          height: 40px;
-          }
-          .break {
-            background - color: #e0e0e0;
-          font-weight: bold;
-          color: #555;
+          height: 25px;
+          line-height: normal;
+        }
+        .break { 
+          background-color: #e0e0e0; 
+          font-weight: bold; 
+          color: #555; 
           letter-spacing: 1px;
-          }
-          /* Garantir que as linhas tenham altura mínima */
-          tr {height: 50px; }
-        </style>
+          font-size: 9px;
+          height: 15px;
+        }
+        /* Remover altura fixa para permitir compactação, mas garantir mínimo legível */
+        tr { height: auto; }
+      </style>
     </head>
     <body>
       <div class="Section1">
@@ -249,24 +244,24 @@ export async function exportDOC({ viewMode, selectedEntity, data, displayPeriods
         <table>
           <colgroup>
             <col style="width: 10%">
-              <col style="width: 18%">
-                <col style="width: 18%">
-                  <col style="width: 18%">
-                    <col style="width: 18%">
-                      <col style="width: 18%">
-                      </colgroup>
-                      <thead>
-                        <tr>
-                          <th>Horário</th>
-                          <th>Segunda</th>
-                          <th>Terça</th>
-                          <th>Quarta</th>
-                          <th>Quinta</th>
-                          <th>Sexta</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        `;
+            <col style="width: 18%">
+            <col style="width: 18%">
+            <col style="width: 18%">
+            <col style="width: 18%">
+            <col style="width: 18%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Horário</th>
+              <th>Segunda</th>
+              <th>Terça</th>
+              <th>Quarta</th>
+              <th>Quinta</th>
+              <th>Sexta</th>
+            </tr>
+          </thead>
+          <tbody>
+  `;
 
   displayPeriods.forEach(slot => {
     const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
@@ -315,13 +310,13 @@ export async function exportDOC({ viewMode, selectedEntity, data, displayPeriods
   });
 
   html += `
-                      </tbody>
-                    </table>
-                    <p style="text-align: center; font-size: 10px; margin-top: 20px; color: #777;">Gerado pelo Sistema de Grade Inteligente - ${new Date().toLocaleDateString('pt-BR')}</p>
-                  </div>
-                </body>
-              </html>
-              `;
+          </tbody>
+        </table>
+        <p style="text-align: center; font-size: 10px; margin-top: 20px; color: #777;">Gerado pelo Sistema de Grade Inteligente - ${new Date().toLocaleDateString('pt-BR')}</p>
+      </div>
+    </body>
+    </html>
+  `;
 
   const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
   saveAs(blob, `${fileName}.doc`);
