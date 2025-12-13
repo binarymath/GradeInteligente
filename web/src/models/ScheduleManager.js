@@ -84,7 +84,11 @@ class ScheduleManager {
    * @private
    */
   _getSortedActivities() {
-    return [...this.data.activities].sort((a, b) => {
+    // Embaralhar para evitar viés de ordem de entrada (ex: todas turmas A antes da B)
+    // Isso ajuda a distribuir as aulas ao longo da semana ao invés de preencher sequencialmente
+    const shuffled = [...this.data.activities].sort(() => Math.random() - 0.5);
+
+    return shuffled.sort((a, b) => {
       // 1. Priorizar aulas duplas
       if (a.doubleLesson && !b.doubleLesson) return -1;
       if (!a.doubleLesson && b.doubleLesson) return 1;
@@ -315,9 +319,14 @@ class ScheduleManager {
 
     if (candidates.length === 0) return false;
 
-    // Escolhe o melhor candidato baseado no score
+    // Escolhe o melhor candidato.
     candidates.sort((a, b) => b.score - a.score);
-    const best = candidates[0];
+
+    // Aleatoriedade entre os melhores scores (empates)
+    const maxScore = candidates[0].score;
+    const topCandidates = candidates.filter(c => c.score === maxScore);
+    const best = topCandidates[Math.floor(Math.random() * topCandidates.length)];
+
     this._book(activity, best.dayIdx, best.slot1, false);
     this._book(activity, best.dayIdx, best.slot2, true); // Segundo slot marcado como parte da dupla
     return true;
