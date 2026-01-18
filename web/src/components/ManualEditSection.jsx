@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { Edit3, Trash2, Plus, X, Save, AlertCircle } from 'lucide-react';
+import { Edit3, Trash2, Plus, X, Save, AlertCircle, Printer } from 'lucide-react';
 import { DAYS, COLORS } from '../utils';
 
 const ManualEditSection = ({ data, setData }) => {
-  const [selectedClass, setSelectedClass] = useState('all');
   const [editMode, setEditMode] = useState(false);
-  const [selectedCell, setSelectedCell] = useState(null); // { dayIdx, slotIdx }
+  const [selectedCell, setSelectedCell] = useState(null); // { dayIdx, slotIdx, classId }
   const [showAddModal, setShowAddModal] = useState(false);
   const [newEntry, setNewEntry] = useState({ teacherId: '', subjectId: '' });
+  const [availableSlots, setAvailableSlots] = useState([]);
+  const [printingClass, setPrintingClass] = useState(null);
 
   // Filtrar apenas slots de aula
   const lessonSlots = useMemo(() =>
@@ -15,18 +16,196 @@ const ManualEditSection = ({ data, setData }) => {
     [data.timeSlots]
   );
 
-  const handleCellClick = (dayIdx, slotIdx, classId = null) => {
-    const targetClass = classId || selectedClass;
-    if (!editMode || !targetClass || targetClass === 'all') return;
-    setSelectedCell({ dayIdx, slotIdx, classId: targetClass });
+  const handlePrint = (classId) => {
+    const className = data.classes.find(c => c.id === classId)?.name || 'Grade';
+    
+    // Criar um estilo temporário para impressão
+    const printStyle = document.createElement('style');
+    printStyle.id = 'print-style-temp';
+    printStyle.innerHTML = `
+      @media print {
+        @page {
+          size: A4 landscape;
+          margin: 10mm;
+        }
+        
+        body * {
+          visibility: hidden;
+        }
+        
+        .print-now, .print-now * {
+          visibility: visible;
+        }
+        
+        .print-now {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+          box-shadow: none !important;
+          border: none !important;
+          page-break-after: avoid;
+          page-break-inside: avoid;
+        }
+        
+        .print-now .print\\:hidden {
+          display: none !important;
+        }
+        
+        .print-now table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 10pt;
+          page-break-inside: avoid;
+          page-break-after: avoid;
+        }
+        
+        .print-now tbody {
+          page-break-inside: avoid;
+        }
+        
+        .print-now tr {
+          page-break-inside: avoid;
+          page-break-after: auto;
+        }
+        
+        .print-now th,
+        .print-now td {
+          border: 1px solid #000 !important;
+          padding: 6px 4px !important;
+          page-break-inside: avoid;
+        }
+        
+        .print-now th {
+          background-color: #f0f0f0 !important;
+          font-weight: bold;
+          text-align: center;
+        }
+        
+        .print-now td {
+          vertical-align: top;
+        }
+        
+        /* Título da página */
+        .print-now::before {
+          content: "Grade Horária - ${className}";
+          display: block;
+          font-size: 18pt;
+          font-weight: bold;
+          text-align: center;
+          margin-bottom: 15px;
+          padding-bottom: 10px;
+          border-bottom: 2px solid #000;
+        }
+        
+        /* Cores das matérias na impressão */
+        .print-now [class*="bg-"] {
+          background-color: #f5f5f5 !important;
+          border: 2px solid #333 !important;
+        }
+        
+        .print-now [class*="text-"] {
+          color: #000 !important;
+        }
+        
+        /* Ocultar padding extra que pode causar quebra de página */
+        .print-now .p-4,
+        .print-now .p-6 {
+          padding: 0 !important;
+        }
+        
+        .print-now .overflow-x-auto {
+          overflow: visible !important;
+        }
+      }
+    `;
+    
+    document.head.appendChild(printStyle);
+    setPrintingClass(classId);
+    
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        setPrintingClass(null);
+        document.getElementById('print-style-temp')?.remove();
+      }, 100);
+    }, 100);
+  };
+
+  // Calcular slots disponíveis quando professor e matéria são selecionados
+  const calculateAvailableSlots = () => {
+    if (!newEntry.teacherId || !newEntry.subjectId || !selectedCell) {
+      setAvailableSlots([]);
+      return;
+    }
+
+    const teacher = data.teachers.find(t => t.id === newEntry.teacherId);
+    const subject = data.subjects.find(s => s.id === newEntry.subjectId);
+    const targetClass = data.classes.find(c => c.id === selectedCell.classId);
+
+    if (!teacher || !subject || !targetClass) {
+      setAvailableSlots([]);
+      return;
+    }
+
+    const available = [];
+
+    // Percorre todos os dias e slots
+    for (let dayIdx = 0; dayIdx < DAYS.length; dayIdx++) {
+      lessonSlots.forEach((slot, slotIdx) => {
+        const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
+        const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
+
+        // 1. Verificar se professor está indisponível
+        if (teacher.unavailable && teacher.unavailable.includes(timeKey)) {
+          return;
+        }
+
+        // 2. Verificar se professor já está ocupado neste horário (em outra turma)
+        const teacherBusy = Object.values(data.schedule).some(
+          entry => entry.teacherId === newEntry.teacherId && entry.timeKey === timeKey
+        );
+        if (teacherBusy) return;
+
+        // 3. Verificar se matéria tem restrição neste horário
+        if (subject.unavailable && subject.unavailable.includes(timeKey)) {
+          return;
+        }
+
+        // 4. Verificar se a turma está ativa neste slot
+        if (!targetClass.activeSlots.includes(slot.id)) {
+          return;
+        }
+
+        // 5. Verificar se o slot já está ocupado na turma
+        const scheduleKey = `${selectedCell.classId}-${timeKey}`;
+        if (data.schedule[scheduleKey]) {
+          return;
+        }
+
+        // Se passou por todas as verificações, está disponível
+        available.push({ dayIdx, slotIdx: absoluteIndex });
+      });
+    }
+
+    setAvailableSlots(available);
+  };
+
+  // Atualizar slots disponíveis quando professor ou matéria mudam
+  React.useEffect(() => {
+    calculateAvailableSlots();
+  }, [newEntry.teacherId, newEntry.subjectId, selectedCell]);
+
+  const handleCellClick = (dayIdx, slotIdx, classId) => {
+    if (!editMode || !classId) return;
+    setSelectedCell({ dayIdx, slotIdx, classId });
     setShowAddModal(true);
   };
 
-  const handleRemoveLesson = (dayIdx, slotIdx, classId = null) => {
-    const targetClass = classId || selectedClass;
-    if (!targetClass || targetClass === 'all') return;
+  const handleRemoveLesson = (dayIdx, slotIdx, classId) => {
+    if (!classId) return;
     const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
-    const scheduleKey = `${targetClass}-${timeKey}`;
+    const scheduleKey = `${classId}-${timeKey}`;
 
     setData(prev => {
       const newSchedule = { ...prev.schedule };
@@ -39,8 +218,7 @@ const ManualEditSection = ({ data, setData }) => {
     if (!newEntry.teacherId || !newEntry.subjectId || !selectedCell) return;
 
     const { dayIdx, slotIdx, classId } = selectedCell;
-    const targetClass = classId || selectedClass;
-    if (!targetClass || targetClass === 'all') return;
+    const targetClass = classId;
 
     const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
     const scheduleKey = `${targetClass}-${timeKey}`;
@@ -74,13 +252,48 @@ const ManualEditSection = ({ data, setData }) => {
     setSelectedCell(null);
   };
 
-  const getScheduleEntry = (dayIdx, slotIdx, classId = null) => {
-    const targetClass = classId || selectedClass;
-    if (!targetClass || targetClass === 'all') return null;
+  const getScheduleEntry = (dayIdx, slotIdx, classId) => {
+    if (!classId) return null;
     const absoluteIndex = data.timeSlots.findIndex(s => s.id === lessonSlots[slotIdx].id);
     const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
-    const scheduleKey = `${targetClass}-${timeKey}`;
+    const scheduleKey = `${classId}-${timeKey}`;
     return data.schedule[scheduleKey];
+  };
+
+  // Verificar se um slot está disponível (para destacar visualmente)
+  const isSlotAvailable = (dayIdx, slotIdx) => {
+    return availableSlots.some(slot => slot.dayIdx === dayIdx && slot.slotIdx === slotIdx);
+  };
+
+  // Verificar se uma linha de horário tem pelo menos uma aula (para qualquer dia)
+  const isSlotRowEmpty = (slotIdx, classId) => {
+    for (let dayIdx = 0; dayIdx < DAYS.length; dayIdx++) {
+      const entry = getScheduleEntry(dayIdx, slotIdx, classId);
+      if (entry) return false; // Encontrou pelo menos uma aula
+    }
+    return true; // Linha completamente vazia
+  };
+
+  const getLessonCount = (classId, subjectId) => {
+    return Object.values(data.schedule).filter(
+      entry => entry.classId === classId && entry.subjectId === subjectId
+    ).length;
+  };
+
+  // Helper para obter cor consistente da matéria
+  const getSubjectColor = (subjectId) => {
+    const subject = data.subjects.find(s => s.id === subjectId);
+    if (subject && typeof subject.colorIndex !== 'undefined') {
+      return COLORS[subject.colorIndex % COLORS.length];
+    }
+    // Fallback consistente baseado no ID (hash simples)
+    let hash = 0;
+    const str = String(subjectId);
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % COLORS.length;
+    return COLORS[index];
   };
 
   return (
@@ -117,214 +330,122 @@ const ManualEditSection = ({ data, setData }) => {
         </div>
       </div>
 
-      {/* Seletor de Turma */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <label className="text-sm font-semibold text-slate-700 mb-3 block">
-          Selecione a Turma para Editar
-        </label>
-        <select
-          value={selectedClass}
-          onChange={e => setSelectedClass(e.target.value)}
-          className="w-full md:w-96 border border-slate-300 rounded-lg px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        >
-          <option value="">Escolha uma turma...</option>
-          <option value="all">📋 Todos</option>
-          {data.classes.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-      </div>
+      {/* Lista de Turmas */}
+      <div className="space-y-6">
+        {data.classes.map(cls => (
+          <div
+            key={cls.id}
+            className={`bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden printable-schedule ${printingClass === cls.id ? 'print-now' : ''}`}
+          >
+            <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-indigo-100">
+              <h3 className="font-bold text-slate-800 flex items-center gap-3">
+                {/* Botão de Impressão (Antes do nome) */}
+                <button
+                  onClick={() => handlePrint(cls.id)}
+                  className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors print:hidden"
+                  title="Imprimir Grade"
+                >
+                  <Printer size={18} />
+                </button>
 
-      {/* Grade Editável */}
-      {selectedClass && selectedClass !== 'all' && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-            <h3 className="font-bold text-slate-700">
-              Grade de {data.classes.find(c => c.id === selectedClass)?.name}
-            </h3>
-            {editMode && (
-              <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
-                <AlertCircle size={14} />
-                Modo edição ativo - Clique nas células para adicionar/remover aulas
-              </div>
-            )}
-          </div>
-
-          <div className="p-4 overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr>
-                  <th className="border border-slate-300 p-3 bg-slate-100 font-bold text-slate-700">
-                    Horário
-                  </th>
-                  {DAYS.map(day => (
-                    <th key={day} className="border border-slate-300 p-3 bg-slate-100 font-bold text-slate-700">
-                      {day}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {lessonSlots.map((slot, slotIdx) => {
-                  const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
-                  return (
-                    <tr key={slot.id}>
-                      <td className="border border-slate-300 p-3 font-semibold text-slate-600 whitespace-nowrap bg-slate-50">
-                        {slot.start} - {slot.end}
-                      </td>
-                      {DAYS.map((_, dayIdx) => {
-                        const entry = getScheduleEntry(dayIdx, slotIdx);
-                        const isEmpty = !entry;
-
-                        return (
-                          <td
-                            key={dayIdx}
-                            className={`border border-slate-300 p-2 relative group ${editMode ? 'cursor-pointer hover:bg-indigo-50' : ''
-                              } ${isEmpty ? 'bg-slate-50' : ''}`}
-                            onClick={() => editMode && !isEmpty && handleCellClick(dayIdx, absoluteIndex)}
-                          >
-                            {entry ? (
-                              <div className="relative">
-                                <div className={`p-2 rounded ${COLORS[data.subjects.find(s => s.id === entry.subjectId)?.colorIndex || 0].bg} ${COLORS[data.subjects.find(s => s.id === entry.subjectId)?.colorIndex || 0].border} border`}>
-                                  <div className="font-bold text-xs mb-1">
-                                    {data.subjects.find(s => s.id === entry.subjectId)?.name}
-                                  </div>
-                                  <div className="text-[11px] text-slate-600">
-                                    {data.teachers.find(t => t.id === entry.teacherId)?.name}
-                                  </div>
-                                </div>
-                                {editMode && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRemoveLesson(dayIdx, absoluteIndex);
-                                    }}
-                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600"
-                                    title="Remover aula"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
-                                )}
-                              </div>
-                            ) : editMode ? (
-                              <button
-                                onClick={() => handleCellClick(dayIdx, absoluteIndex)}
-                                className="w-full h-full min-h-[60px] flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                              >
-                                <Plus size={20} />
-                              </button>
-                            ) : (
-                              <div className="min-h-[60px]"></div>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Visualização de Todas as Turmas */}
-      {selectedClass === 'all' && (
-        <div className="space-y-6">
-          {data.classes.map(cls => (
-            <div key={cls.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-indigo-100">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-sm">{cls.name}</span>
-                  <span className="text-xs text-slate-600">Turno: {cls.shift}</span>
-                  {editMode && (
-                    <span className="ml-auto flex items-center gap-2 text-xs text-amber-700 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200">
-                      <AlertCircle size={14} />
-                      Editável
-                    </span>
-                  )}
-                </h3>
-              </div>
-
-              <div className="p-4 overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr>
-                      <th className="border border-slate-300 p-3 bg-slate-100 font-bold text-slate-700">
-                        Horário
-                      </th>
-                      {DAYS.map(day => (
-                        <th key={day} className="border border-slate-300 p-3 bg-slate-100 font-bold text-slate-700">
-                          {day}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lessonSlots.map((slot, slotIdx) => {
-                      const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
-                      return (
-                        <tr key={slot.id}>
-                          <td className="border border-slate-300 p-3 font-semibold text-slate-600 whitespace-nowrap bg-slate-50">
-                            {slot.start} - {slot.end}
-                          </td>
-                          {DAYS.map((_, dayIdx) => {
-                            const entry = getScheduleEntry(dayIdx, slotIdx, cls.id);
-                            const isEmpty = !entry;
-
-                            return (
-                              <td
-                                key={dayIdx}
-                                className={`border border-slate-300 p-2 relative group ${editMode ? 'cursor-pointer hover:bg-indigo-50' : ''
-                                  } ${isEmpty ? 'bg-slate-50' : ''}`}
-                                onClick={() => editMode && !isEmpty && handleCellClick(dayIdx, absoluteIndex, cls.id)}
-                              >
-                                {entry ? (
-                                  <div className="relative">
-                                    <div className={`p-2 rounded ${COLORS[data.subjects.find(s => s.id === entry.subjectId)?.colorIndex || 0].bg} ${COLORS[data.subjects.find(s => s.id === entry.subjectId)?.colorIndex || 0].border} border`}>
-                                      <div className="font-bold text-xs mb-1">
-                                        {data.subjects.find(s => s.id === entry.subjectId)?.name}
-                                      </div>
-                                      <div className="text-[11px] text-slate-600">
-                                        {data.teachers.find(t => t.id === entry.teacherId)?.name}
-                                      </div>
-                                    </div>
-                                    {editMode && (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleRemoveLesson(dayIdx, absoluteIndex, cls.id);
-                                        }}
-                                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600"
-                                        title="Remover aula"
-                                      >
-                                        <Trash2 size={12} />
-                                      </button>
-                                    )}
-                                  </div>
-                                ) : editMode ? (
-                                  <button
-                                    onClick={() => handleCellClick(dayIdx, absoluteIndex, cls.id)}
-                                    className="w-full h-full min-h-[60px] flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                                  >
-                                    <Plus size={20} />
-                                  </button>
-                                ) : (
-                                  <div className="min-h-[60px]"></div>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-sm">{cls.name}</span>
+                <span className="text-xs text-slate-600">Turno: {cls.shift}</span>
+                {editMode && (
+                  <span className="ml-auto flex items-center gap-2 text-xs text-amber-700 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200">
+                    <AlertCircle size={14} />
+                    Editável
+                  </span>
+                )}
+              </h3>
             </div>
-          ))}
-        </div>
-      )}
+
+            <div className="p-4 overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr>
+                    <th className="border border-slate-300 p-3 bg-slate-100 font-bold text-slate-700">
+                      Horário
+                    </th>
+                    {DAYS.map(day => (
+                      <th key={day} className="border border-slate-300 p-3 bg-slate-100 font-bold text-slate-700">
+                        {day}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {lessonSlots.map((slot, slotIdx) => {
+                    const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
+                    const isEmptyRow = isSlotRowEmpty(slotIdx, cls.id);
+                    
+                    return (
+                      <tr key={slot.id} className={isEmptyRow ? 'print:hidden' : ''}>
+                        <td className="border border-slate-300 p-3 font-semibold text-slate-600 whitespace-nowrap bg-slate-50">
+                          {slot.start} - {slot.end}
+                        </td>
+                        {DAYS.map((_, dayIdx) => {
+                          const entry = getScheduleEntry(dayIdx, slotIdx, cls.id);
+                          const isEmpty = !entry;
+                          const isAvailable = isSlotAvailable(dayIdx, absoluteIndex);
+
+                          return (
+                            <td
+                              key={dayIdx}
+                              className={`border border-slate-300 p-2 relative group ${editMode ? 'cursor-pointer hover:bg-indigo-50' : ''
+                                } ${isEmpty ? 'bg-slate-50' : ''} ${isAvailable && isEmpty ? 'bg-green-50 border-2 border-green-300' : ''}`}
+                              onClick={() => editMode && !isEmpty && handleCellClick(dayIdx, absoluteIndex, cls.id)}
+                            >
+                              {entry ? (
+                                <div className="relative">
+                                  {/* Usar função helper para cor consistente */}
+                                  <div className={`p-2 rounded ${getSubjectColor(entry.subjectId).bg} ${getSubjectColor(entry.subjectId).border} border print:border-2 print:text-black`}>
+                                    <div className={`font-bold text-xs mb-1 ${getSubjectColor(entry.subjectId).text} print:text-black`}>
+                                      {data.subjects.find(s => s.id === entry.subjectId)?.name}
+                                    </div>
+                                    <div className="text-[11px] text-slate-600 print:text-slate-800">
+                                      {data.teachers.find(t => t.id === entry.teacherId)?.name}
+                                    </div>
+                                  </div>
+                                  {/* Tooltip com contagem (Ocultar na impressão) */}
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 whitespace-nowrap shadow-lg print:hidden">
+                                    {getLessonCount(entry.classId, entry.subjectId)} aulas alocadas
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                  </div>
+                                  {editMode && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemoveLesson(dayIdx, absoluteIndex, cls.id);
+                                      }}
+                                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600"
+                                      title="Remover aula"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  )}
+                                </div>
+                              ) : editMode ? (
+                                <button
+                                  onClick={() => handleCellClick(dayIdx, absoluteIndex, cls.id)}
+                                  className="w-full h-full min-h-[60px] flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                >
+                                  <Plus size={20} />
+                                </button>
+                              ) : (
+                                <div className="min-h-[60px]"></div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Modal Adicionar Aula */}
       {showAddModal && (
@@ -379,6 +500,29 @@ const ManualEditSection = ({ data, setData }) => {
                   ))}
                 </select>
               </div>
+
+              {/* Dica de slots disponíveis */}
+              {newEntry.teacherId && newEntry.subjectId && availableSlots.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
+                  <p className="text-green-800 font-semibold mb-1">
+                    ✅ {availableSlots.length} horários livres encontrados
+                  </p>
+                  <p className="text-green-700 text-xs">
+                    Os slots destacados em verde na grade estão disponíveis para este professor e matéria.
+                  </p>
+                </div>
+              )}
+
+              {newEntry.teacherId && newEntry.subjectId && availableSlots.length === 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                  <p className="text-amber-800 font-semibold mb-1">
+                    ⚠️ Nenhum horário livre disponível
+                  </p>
+                  <p className="text-amber-700 text-xs">
+                    Este professor não possui horários livres nesta turma, ou todos os slots compatíveis já estão ocupados.
+                  </p>
+                </div>
+              )}
 
               {selectedCell && (
                 <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-sm">

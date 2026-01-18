@@ -205,8 +205,8 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-auto">
       <div className="flex border-b border-slate-200 overflow-x-auto scrollbar-elegant">
-        <button onClick={() => setSubView('classes')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium whitespace-nowrap ${subView === 'classes' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>Turmas</button>
         <button onClick={() => setSubView('subjects')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium whitespace-nowrap ${subView === 'subjects' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>Matérias</button>
+        <button onClick={() => setSubView('classes')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium whitespace-nowrap ${subView === 'classes' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>Turmas</button>
         <button onClick={() => setSubView('teachers')} className={`flex-1 min-w-[100px] py-3 text-sm font-medium whitespace-nowrap ${subView === 'teachers' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}>Professores</button>
       </div>
 

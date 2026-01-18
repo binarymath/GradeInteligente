@@ -1,3 +1,44 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@media print {
+  /* Ocultar tudo por padrão */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Mostrar apenas a área de impressão designada */
+  .printable-schedule,
+  .printable-schedule * {
+    visibility: visible;
+  }
+
+  /* Posicionar a tabela no topo */
+  .printable-schedule {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none;
+    box-shadow: none;
+    overflow: visible !important;
+  }
+  
+  /* Garantir que containers internos não limitem o overflow */
+  .printable-schedule .overflow-x-auto {
+      overflow: visible !important;
+  }
+
+  /* Forçar impressão de background e cores exatas */
+  @page {
+    size: landscape;
+    margin: 5mm;
+  }
+
+  /* Ajustes específicos para impressão */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

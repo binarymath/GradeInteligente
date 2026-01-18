@@ -11,6 +11,7 @@ import TimetableSection from './components/TimetableSection';
 import AgendaSection from './components/AgendaSection';
 import AboutSection from './components/AboutSection';
 import ManualEditSection from './components/ManualEditSection';
+import ApiConfigModal from './components/ApiConfigModal';
 import { exportBackup, importBackup } from './services/stateService';
 import { generateScheduleAsync } from './services/scheduleService';
 
@@ -26,6 +27,13 @@ const INITIAL_STATE = {
 
 const App = () => {
   const [data, setData] = useState(INITIAL_STATE);
+  const [isApiModalOpen, setIsApiModalOpen] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState(false);
+
+  useEffect(() => {
+    setHasApiKey(!!localStorage.getItem('gemini_api_key'));
+  }, [isApiModalOpen]); // Checa quando fecha o modal
+
   // Restauração de navegação salva no localStorage (view, subView, viewMode, selectedEntity, sidebarOpen)
   const getInitialNav = () => {
     try {
@@ -46,7 +54,7 @@ const App = () => {
       // ignore and fall back to defaults
     }
     // Default first load: open "Sobre o Sistema" (about) and sidebar collapsed
-    return { view: 'about', subView: 'teachers', viewMode: 'class', selectedEntity: '', sidebarOpen: false };
+    return { view: 'about', subView: 'subjects', viewMode: 'class', selectedEntity: '', sidebarOpen: false };
   };
   const initialNav = getInitialNav();
   // Default view changed to 'generate' so Grade Inteligente is homepage
@@ -101,6 +109,19 @@ const App = () => {
           if (persistedCalendar && typeof persistedCalendar === 'object') {
             setCalendarSettings(prev => ({ ...prev, ...persistedCalendar }));
           }
+        } else {
+          // Fallback para LocalStorage se não estiver no Electron
+          const lsData = localStorage.getItem('grade_data');
+          if (lsData) {
+            const parsed = JSON.parse(lsData);
+            if (parsed && typeof parsed === 'object') setData(prev => ({ ...prev, ...parsed }));
+          }
+
+          const lsCalendar = localStorage.getItem('grade_calendar');
+          if (lsCalendar) {
+            const parsed = JSON.parse(lsCalendar);
+            if (parsed && typeof parsed === 'object') setCalendarSettings(prev => ({ ...prev, ...parsed }));
+          }
         }
       } catch (e) {
         // ignore IPC errors
@@ -109,15 +130,17 @@ const App = () => {
     loadPersisted();
   }, []);
 
-  // Salvar estado persistente via Electron (se disponível) quando mudar
+  // Salvar estado persistente via Electron ou LocalStorage quando mudar
   useEffect(() => {
     const savePersisted = async () => {
       try {
         if (window && window.grade) {
           await window.grade.set('data', data);
+        } else {
+          localStorage.setItem('grade_data', JSON.stringify(data));
         }
       } catch (e) {
-        // ignore IPC errors
+        // ignore errors
       }
     };
     savePersisted();
@@ -128,9 +151,11 @@ const App = () => {
       try {
         if (window && window.grade) {
           await window.grade.set('calendarSettings', calendarSettings);
+        } else {
+          localStorage.setItem('grade_calendar', JSON.stringify(calendarSettings));
         }
       } catch (e) {
-        // ignore IPC errors
+        // ignore errors
       }
     };
     saveCalendar();
@@ -200,10 +225,11 @@ const App = () => {
           {sidebarOpen && <div className="px-4 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Menu Principal</div>}
           <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Info} label="Sobre o Sistema" active={view === 'about'} onClick={() => { setView('about'); if (isMobile) setSidebarOpen(false); }} />
           <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Clock} label="Configure os Horários" active={view === 'data' && subView === 'timeSettings'} onClick={() => { setView('data'); setSubView('timeSettings'); if (isMobile) setSidebarOpen(false); }} />
-          <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Settings} label="Cadastro" active={view === 'data' && subView !== 'timeSettings'} onClick={() => { setView('data'); setSubView('teachers'); if (isMobile) setSidebarOpen(false); }} />
+          <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Settings} label="Cadastro" active={view === 'data' && subView !== 'timeSettings'} onClick={() => { setView('data'); setSubView('subjects'); if (isMobile) setSidebarOpen(false); }} />
           <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={BookOpen} label="Atribuições" active={view === 'activities'} onClick={() => { setView('activities'); if (isMobile) setSidebarOpen(false); }} />
           <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Rocket} label="Gerar/Visualizar" active={view === 'generate'} onClick={() => { setView('generate'); if (isMobile) setSidebarOpen(false); }} />
           <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Edit3} label="Edição Manual" active={view === 'manualEdit'} onClick={() => { setView('manualEdit'); if (isMobile) setSidebarOpen(false); }} />
+          <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Settings} label="Configurar Gemini" active={false} onClick={() => { setIsApiModalOpen(true); if (isMobile) setSidebarOpen(false); }} />
           <div className="my-4 border-t border-slate-100"></div>
           {sidebarOpen && <div className="px-4 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Operações</div>}
           <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Calendar} label="Agenda e Grade" active={view === 'agenda'} onClick={() => { setView('agenda'); if (isMobile) setSidebarOpen(false); }} />
@@ -240,6 +266,27 @@ const App = () => {
             </h1>
           </div>
           <div className="flex items-center gap-4 shrink-0">
+            {/* Status da API e Configuração */}
+            <div className="flex items-center gap-2 mr-2 border-r border-slate-200 pr-4">
+              {hasApiKey ? (
+                <span className="hidden sm:flex items-center gap-1.5 px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-200" title="API Conectada">
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                  API OK
+                </span>
+              ) : (
+                <span className="hidden sm:flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-700 text-xs font-bold rounded-full border border-amber-200" title="API Não Configurada">
+                  ⚠ Sem IA
+                </span>
+              )}
+              <button
+                onClick={() => setIsApiModalOpen(true)}
+                className={`p-1.5 rounded-md transition-colors ${hasApiKey ? 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50' : 'text-amber-600 hover:bg-amber-100'}`}
+                title="Configurar Chave API Gemini"
+              >
+                <Settings size={20} />
+              </button>
+            </div>
+
             {!isMobile && !isElectron && (
               <a href="https://github.com/binarymath/GradeInteligenteExecutavel/releases/download/V.0.0.0/Grade-Inteligente-0.0.0-Setup.exe" className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 transition-colors text-sm font-medium" title="Baixar para Windows">
                 <svg className="w-4 h-4 fill-current" viewBox="0 0 88 88" xmlns="http://www.w3.org/2000/svg">
@@ -408,6 +455,11 @@ const App = () => {
           )}
         </div>
       </main>
+
+      <ApiConfigModal
+        isOpen={isApiModalOpen}
+        onClose={() => setIsApiModalOpen(false)}
+      />
     </div >
   );
 };
