@@ -141,5 +141,57 @@ describe('ScheduleManager', () => {
             // Esperamos EXATAMENTE Segunda-0 e Segunda-3
             expect(timeKeys).toEqual(['Segunda-0', 'Segunda-3']);
         });
+
+        it('should import existing schedule correctly', () => {
+            const manager = new ScheduleManager(mockData);
+
+            // Create a fake existing schedule
+            const existingSchedule = {
+                'c1-Segunda-0': {
+                    subjectId: 's1',
+                    teacherId: 't1',
+                    classId: 'c1',
+                    timeKey: 'Segunda-0',
+                    isDoubleLesson: false
+                }
+            };
+
+            manager.importExistingSchedule(existingSchedule);
+
+            // Verify internal state
+            expect(Object.keys(manager.schedule).length).toBe(1);
+            expect(manager.bookedEntries.length).toBe(1);
+            expect(manager.teacherSchedule['t1']['Segunda-0']).toBe(true);
+            expect(manager.classSchedule['c1']['Segunda-0']).toBe(true);
+        });
+
+        it('should fill pending lessons only', () => {
+            // Setup: Activity needs 2 lessons. 
+            // Existing schedule has 1 lesson.
+            mockData.activities = [
+                { id: 'a1', teacherId: 't1', subjectId: 's1', classId: 'c1', quantity: 2, doubleLesson: false },
+            ];
+
+            const manager = new ScheduleManager(mockData);
+
+            const existingSchedule = {
+                'c1-Segunda-0': {
+                    subjectId: 's1',
+                    teacherId: 't1',
+                    classId: 'c1',
+                    timeKey: 'Segunda-0',
+                    isDoubleLesson: false
+                }
+            };
+
+            manager.importExistingSchedule(existingSchedule);
+            const result = manager.fillPendingOnly();
+
+            // Should have 2 total lessons now (1 imported + 1 new)
+            expect(Object.keys(result.schedule).length).toBe(2);
+
+            // The imported one should still be there
+            expect(result.schedule['c1-Segunda-0']).toBeDefined();
+        });
     });
 });

@@ -478,6 +478,116 @@ class ScheduleManager {
 
     return conflicts;
   }
+
+  /**
+   * Importa uma grade existente e reconstrói o estado interno (bookedEntries, teacherSchedule, etc).
+   * Usado para o "Modo Correção".
+   * @param {Object} existingSchedule - Objeto schedule { "classId-day-slot": info }
+   */
+  importExistingSchedule(existingSchedule) {
+    this._resetState();
+    this.schedule = { ...existingSchedule };
+
+    // Reconstrói índices baseados na grade importada
+    for (const [key, entry] of Object.entries(this.schedule)) {
+      // Extrai dayIdx e slotIdx da key "classId-DayName-SlotIdx" ? 
+      // Não, a key é "classId-timeKey", onde timeKey é "DayName-SlotIdx"
+      // entry tem: { subjectId, teacherId, classId, timeKey, isDoubleLesson }
+
+      const [dayName, slotIdxStr] = entry.timeKey.split('-');
+      const dayIdx = DAYS.indexOf(dayName);
+      const slotIdx = parseInt(slotIdxStr, 10);
+
+      if (dayIdx === -1 || isNaN(slotIdx)) continue;
+
+      // Marca ocupação
+      if (!this.teacherSchedule[entry.teacherId]) this.teacherSchedule[entry.teacherId] = {};
+      this.teacherSchedule[entry.teacherId][entry.timeKey] = true;
+
+      if (!this.classSchedule[entry.classId]) this.classSchedule[entry.classId] = {};
+      this.classSchedule[entry.classId][entry.timeKey] = true;
+
+      const slot = this.timeSlots[slotIdx];
+
+      this.bookedEntries.push({
+        teacherId: entry.teacherId,
+        classId: entry.classId,
+        subjectId: entry.subjectId,
+        dayIdx,
+        slotIdx,
+        start: slot ? slot.start : '00:00',
+        end: slot ? slot.end : '00:00'
+      });
+    }
+
+    this.logMessage(`Grade importada com sucesso. ${this.bookedEntries.length} aulas já alocadas.`);
+  }
+
+  /**
+   * Tenta preencher apenas as aulas que faltam (diferença entre esperado e já alocado).
+   * Mantém o que já foi importado.
+   */
+  fillPendingOnly() {
+    this.logMessage("Iniciando preenchimento de pendências (Modo Correção)...");
+
+    // Calcula o que já foi feito por atividade
+    // Precisamos mapear as bookedEntries de volta para suas Activities de origem?
+    // A activity não tem ID único nos bookedEntries, apenas teacher/class/subject.
+    // Vamos agrupar bookedEntries por "assinatura" de atividade.
+
+    const currentCounts = {}; // "teacherId-classId-subjectId" -> count
+
+    for (const entry of this.bookedEntries) {
+      // Atenção: subjectId pode vir nulo se não achou na importação? Assumimos que tem.
+      const key = `${entry.teacherId}-${entry.classId}-${entry.subjectId}`;
+      currentCounts[key] = (currentCounts[key] || 0) + 1;
+    }
+
+    const pendingActivities = [];
+
+    // Para cada atividade esperada, vê quanto falta
+    for (const activity of this.data.activities) {
+      const key = `${activity.teacherId}-${activity.classId}-${activity.subjectId}`;
+      const done = currentCounts[key] || 0;
+      const total = activity.quantity;
+      const remaining = total - done;
+
+      if (remaining > 0) {
+        // Cria um clone da atividade com a quantidade restante
+        pendingActivities.push({
+          ...activity,
+          quantity: remaining
+        });
+      }
+    }
+
+    if (pendingActivities.length === 0) {
+      this.logMessage("Nenhuma pendência encontrada. Grade validada.");
+      return { schedule: this.schedule, log: this.log, conflicts: this._detectConflicts() };
+    }
+
+    this.logMessage(`Found ${pendingActivities.length} activities with pending lessons.`);
+
+    // Ordena as pendentes
+    // Reciclamos a lógica de sort, mas aplicada a essa lista customizada
+    // Como _getSortedActivities usa this.data.activities, vamos fazer um sort manual similar aqui.
+    const sortedPending = pendingActivities.sort((a, b) => {
+      if (a.doubleLesson && !b.doubleLesson) return -1;
+      if (!a.doubleLesson && b.doubleLesson) return 1;
+      return 0; // Simplificado para correções
+    });
+
+    // Aloca as pendências
+    for (const activity of sortedPending) {
+      this._allocateActivity(activity);
+    }
+
+    // Valida final
+    const conflicts = this._detectConflicts();
+    this.logMessage("Correção concluída.");
+
+    return { schedule: this.schedule, log: this.log, conflicts };
+  }
 }
 
 export default ScheduleManager;
