@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Settings, Calendar, Download, Users, HelpCircle, CheckCircle, Github, BookOpen, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Sparkles, Settings, Calendar, Download, Users, HelpCircle, CheckCircle } from 'lucide-react';
 
 // Componente "Sobre o Sistema" simplificado e altamente escaneável.
 // Objetivo: transmitir rapidamente o valor, funcionamento e regras principais sem excesso de texto.
@@ -44,72 +44,6 @@ const AboutSection = () => {
           <div className="p-4 rounded-lg bg-white border border-slate-200 shadow-sm"><span className="font-semibold">Exportações:</span> PDF, Excel e Agenda (.ics).</div>
         </div>
       </section>
-
-      {/* SEÇÃO DE AVISOS IMPORTANTES (Apenas Web) */}
-      {!isElectron && (
-        <div className="grid lg:grid-cols-2 gap-6">
-
-          {/* AVISO DE BACKUP (ONLINE) */}
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 -mt-2 -mr-2 w-16 h-16 bg-amber-100 rounded-full opacity-50 blur-xl"></div>
-            <div className="flex items-start gap-4 relative z-10">
-              <div className="bg-amber-100 p-2 rounded-lg text-amber-600 shrink-0">
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <div className="space-y-3">
-                <h3 className="text-lg font-bold text-amber-900">Atenção: Versão Online</h3>
-                <p className="text-sm text-amber-800 leading-relaxed">
-                  Seus dados são temporários! Eles serão apagados se você <strong>atualizar</strong> ou <strong>fechar</strong> esta janela.
-                </p>
-                <div className="bg-white/60 rounded-lg p-3 text-sm border border-amber-100">
-                  <p className="font-semibold text-amber-900 mb-1">Para não perder nada:</p>
-                  <ul className="list-disc pl-4 text-amber-800 space-y-1">
-                    <li>Faça <strong>Backups</strong> frequentes (botão no topo).</li>
-                    <li>Salve o arquivo <code className="bg-amber-100 px-1 rounded text-xs">.json</code> em local seguro.</li>
-                    <li>Use a opção <strong>Restaurar</strong> para recuperar seus dados.</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* DOWNLOAD & SMARTSCREEN */}
-          <div className="hidden lg:block bg-indigo-50 border border-indigo-200 rounded-xl p-6 shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 -mt-2 -mr-2 w-16 h-16 bg-indigo-100 rounded-full opacity-50 blur-xl"></div>
-            <div className="flex items-start gap-4 relative z-10">
-              <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600 shrink-0">
-                <Download className="w-6 h-6" />
-              </div>
-              <div className="space-y-3">
-                <h3 className="text-lg font-bold text-indigo-900">Baixe para Windows</h3>
-                <p className="text-sm text-indigo-800 leading-relaxed">
-                  Para maior segurança e não depender do navegador, instale o Grade Inteligente no seu computador.
-                </p>
-
-                <div className="flex flex-wrap gap-3 my-2">
-                  <a href="https://github.com/binarymath/GradeInteligenteExecutavel/releases/download/V.0.0.0/Grade-Inteligente-0.0.0-Setup.exe" className="flex-1 bg-indigo-600 text-white text-center px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm flex items-center justify-center gap-2">
-                    <Download className="w-4 h-4" /> Instalador (.exe)
-                  </a>
-                  <a href="https://github.com/binarymath/GradeInteligenteExecutavel/releases/download/V.0.0.0/GradeInteligente.zip" className="flex-1 bg-white text-indigo-700 border border-indigo-200 text-center px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-50 transition-colors shadow-sm flex items-center justify-center gap-2">
-                    <BookOpen className="w-4 h-4" /> Portátil (.zip)
-                  </a>
-                </div>
-
-                {/* SmartScreen Info */}
-                <div className="text-xs text-indigo-800 bg-indigo-100/50 p-3 rounded-lg border border-indigo-100">
-                  <p className="font-bold mb-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Apareceu uma tela azul?</p>
-                  <p className="mb-2">O Windows pode exibir um aviso de proteção pois o app é novo.</p>
-                  <div className="flex items-center gap-2 font-mono text-[10px] bg-white p-1.5 rounded border border-indigo-100 opacity-90">
-                    <span>Mais informações</span>
-                    <span className="text-slate-400">→</span>
-                    <span className="font-bold text-indigo-700">Executar assim mesmo</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
 
 

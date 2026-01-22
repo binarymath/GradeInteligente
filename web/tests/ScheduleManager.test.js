@@ -193,5 +193,116 @@ describe('ScheduleManager', () => {
             // The imported one should still be there
             expect(result.schedule['c1-Segunda-0']).toBeDefined();
         });
+
+        it('should track failures when allocation is impossible', () => {
+            // Setup impossible scenario: 2 lessons needed, only 1 slot available
+            mockData.activities = [
+                { id: 'a1', teacherId: 't1', subjectId: 's1', classId: 'c1', quantity: 2, doubleLesson: false },
+            ];
+
+            // Block all slots except one
+            const allDays = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+            const unavailableKeys = [];
+            allDays.forEach(day => {
+                // Block everything except Segunda-0
+                if (day === 'Segunda') {
+                    unavailableKeys.push(`${day}-1`);
+                    unavailableKeys.push(`${day}-2`);
+                    unavailableKeys.push(`${day}-3`);
+                } else {
+                    unavailableKeys.push(`${day}-0`);
+                    unavailableKeys.push(`${day}-1`);
+                    unavailableKeys.push(`${day}-2`);
+                    unavailableKeys.push(`${day}-3`);
+                }
+            });
+            mockData.teachers[0].unavailable = unavailableKeys;
+
+            const manager = new ScheduleManager(mockData);
+            const result = manager.generate();
+
+            // Should have 1 failure recorded
+            expect(manager.failures.length).toBe(1);
+            expect(manager.failures[0].remaining).toBe(1); // 2 needed, 1 booked, 1 remaining
+        });
+
+        it('should optimize using swap/move to resolve failures', () => {
+            // Setup:
+            // Turma C1 precisa de 1 aula de S1 (Prof T1).
+            // Turma C1 está livre em Segunda-0.
+            // Prof T1 está ocupado em Segunda-0 (dando aula para C2).
+            // Prof T1 está livre em Segunda-1.
+            // C2 está livre em Segunda-1.
+
+            // Solução esperada: Mover aula de [T1, C2] de Seg-0 para Seg-1.
+            // Isso libera Seg-0 para [T1, C1].
+
+            mockData.classes.push(
+                { id: 'c2', name: '7º A', shift: 'Manhã', activeSlots: ['ts1', 'ts2'] }
+            );
+
+            mockData.activities = [
+                // A1: [T1, C2] ocupa Seg-0 (será alocada primeiro pois limitamos o C1)
+                { id: 'a_bk', teacherId: 't1', subjectId: 's2', classId: 'c2', quantity: 1, doubleLesson: false },
+                // A2: [T1, C1] quer aula.
+                { id: 'a_tg', teacherId: 't1', subjectId: 's1', classId: 'c1', quantity: 1, doubleLesson: false }
+            ];
+
+            // Forçar ordem ou falha inicial:
+            // Vamos pré-ocupar a grade manualmente para garantir o cenário de falha.
+
+            const manager = new ScheduleManager(mockData);
+
+            // Bloquear Seg-0 para C2 com T1
+            const blockingAct = mockData.activities[0];
+            manager._book(blockingAct, 0, 0, false, true); // Segunda-0
+
+            // Tentar alocar A2 (vai falhar pois T1 ocupado em Seg-0. Seg-1 está livre)
+            // Vamos propositalmente bloquear Seg-1 APENAS para C1? Não, se bloquearmos C1 em Seg-1, 
+            // a única chance dele seria Seg-0. Mas Seg-0 está com T1 ocupado.
+
+            // Bloquear C1 em todos os slots MENOS Seg-0
+            // Use lessonIndices to be safe
+            const indices = manager.lessonIndices; // [0, 1, 3]
+            for (let d = 0; d < DAYS.length; d++) {
+                for (const s of indices) {
+                    if (d === 0 && s === 0) continue; // Deixar livre Seg-0
+                    manager.classSchedule['c1'] = manager.classSchedule['c1'] || {};
+                    manager.classSchedule['c1'][`${DAYS[d]}-${s}`] = true;
+                }
+            }
+
+            // Tentar alocar via _allocateActivity (deve falhar e ir pra failures)
+            const targetAct = mockData.activities[1];
+            manager._allocateActivity(targetAct);
+
+            // Debug print
+            // console.log('Failures before:', manager.failures);
+
+            expect(manager.failures.length).toBe(1);
+
+            // Agora rodar optimize()
+            const result = manager.optimize();
+
+            // Debug print
+            // console.log('Failures after:', manager.failures);
+
+            // Deve ter resolvido
+            const remainingFailures = manager.failures.filter(f => f.activityId === targetAct.id);
+            expect(remainingFailures.length).toBe(0);
+
+            // Verificar se T1/C2 mudou de lugar (moveu de 0-0 para outro lugar para liberar T1)
+            const c1Entry = result.schedule['c1-Segunda-0'];
+            expect(c1Entry).toBeDefined();
+            expect(c1Entry.teacherId).toBe('t1');
+
+            // Verificar se C2 mudou (não está mais em 0-0)
+            const c2EntryOld = result.schedule['c2-Segunda-0'];
+            expect(c2EntryOld).toBeUndefined();
+
+            // Deve estar em algum lugar (provavelmente Seg-1 (0-1))
+            const c2Moves = Object.values(result.schedule).filter(s => s.classId === 'c2');
+            expect(c2Moves.length).toBe(1);
+        });
     });
 });

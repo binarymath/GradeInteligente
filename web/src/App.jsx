@@ -3,6 +3,7 @@ import {
   Layout, Settings, Clock, BookOpen, Calendar, Menu, X, ChevronLeft, ChevronRight, Upload, Download, AlertTriangle, Info, Edit3, Rocket
 } from 'lucide-react';
 import { DAYS } from './utils';
+import { migrateData } from './services/DataMigration';
 import SidebarItem from './components/SidebarItem';
 import TimeSettingsSection from './components/TimeSettingsSection';
 import DataInputSection from './components/DataInputSection';
@@ -13,7 +14,7 @@ import AboutSection from './components/AboutSection';
 import ManualEditSection from './components/ManualEditSection';
 import ApiConfigModal from './components/ApiConfigModal';
 import { exportBackup, importBackup } from './services/stateService';
-import { generateScheduleAsync } from './services/scheduleService';
+import { generateScheduleAsync, smartRepairAsync } from './services/scheduleService';
 
 const INITIAL_STATE = {
   timeSlots: [],
@@ -62,6 +63,8 @@ const App = () => {
   const [subView, setSubView] = useState(initialNav.subView);
   const [sidebarOpen, setSidebarOpen] = useState(initialNav.sidebarOpen);
   const [generating, setGenerating] = useState(false);
+  const [repairing, setRepairing] = useState(false);
+  const [isVerified, setIsVerified] = useState(false); // Controla se já verificou a grade
   const [generationLog, setGenerationLog] = useState([]);
   const [viewMode, setViewMode] = useState(initialNav.viewMode);
   const [selectedEntity, setSelectedEntity] = useState(initialNav.selectedEntity);
@@ -104,7 +107,10 @@ const App = () => {
           const persistedData = await window.grade.get('data');
           const persistedCalendar = await window.grade.get('calendarSettings');
           if (persistedData && typeof persistedData === 'object') {
-            setData(prev => ({ ...prev, ...persistedData }));
+            const migratedData = migrateData(persistedData);
+            if (migratedData) {
+              setData(prev => ({ ...prev, ...migratedData }));
+            }
           }
           if (persistedCalendar && typeof persistedCalendar === 'object') {
             setCalendarSettings(prev => ({ ...prev, ...persistedCalendar }));
@@ -114,7 +120,12 @@ const App = () => {
           const lsData = localStorage.getItem('grade_data');
           if (lsData) {
             const parsed = JSON.parse(lsData);
-            if (parsed && typeof parsed === 'object') setData(prev => ({ ...prev, ...parsed }));
+            if (parsed && typeof parsed === 'object') {
+              const migratedData = migrateData(parsed);
+              if (migratedData) {
+                setData(prev => ({ ...prev, ...migratedData }));
+              }
+            }
           }
 
           const lsCalendar = localStorage.getItem('grade_calendar');
@@ -163,10 +174,81 @@ const App = () => {
 
   const handleExportState = useCallback(() => exportBackup(data), [data]);
 
-  const handleImportState = useCallback((e) => importBackup(e.target.files[0], setData), []);
+  const handleImportState = useCallback((e) => {
+    importBackup(e.target.files[0], setData);
+    setIsVerified(false); // Ao restaurar, volta para modo "Verificar"
+  }, []);
 
-  const generateSchedule = useCallback(() =>
-    generateScheduleAsync(data, setData, setGenerationLog, setGenerating),
+  const verifySchedule = useCallback(() => {
+    setGenerating(true);
+    setGenerationLog(['🔍 Verificando grade restaurada...']);
+    
+    setTimeout(() => {
+      const log = ['🔍 Verificando grade restaurada...'];
+      
+      if (!data.schedule || Object.keys(data.schedule).length === 0) {
+        log.push('⚠️ Nenhuma grade encontrada.');
+        setGenerationLog(log);
+        setGenerating(false);
+        return;
+      }
+      
+      const totalSlots = Object.keys(data.schedule).length;
+      log.push(`✅ Grade contém ${totalSlots} aula(s) alocada(s).`);
+      
+      // Verifica pendências
+      const bookedCounts = {};
+      for (const [key, entry] of Object.entries(data.schedule)) {
+        const actKey = `${entry.classId}-${entry.subjectId}`;
+        bookedCounts[actKey] = (bookedCounts[actKey] || 0) + 1;
+      }
+      
+      const demandMap = {};
+      for (const activity of data.activities) {
+        const key = `${activity.classId}-${activity.subjectId}`;
+        if (!demandMap[key]) demandMap[key] = { totalNeeded: 0 };
+        demandMap[key].totalNeeded += Number(activity.quantity) || 0;
+      }
+      
+      let pending = 0;
+      let excess = 0;
+      
+      for (const [key, demand] of Object.entries(demandMap)) {
+        const allocated = bookedCounts[key] || 0;
+        if (allocated < demand.totalNeeded) {
+          pending += demand.totalNeeded - allocated;
+        } else if (allocated > demand.totalNeeded) {
+          excess += allocated - demand.totalNeeded;
+        }
+      }
+      
+      if (pending > 0) {
+        log.push(`⚠️ ${pending} aula(s) pendente(s) encontrada(s).`);
+      }
+      
+      if (excess > 0) {
+        log.push(`⚠️ ${excess} aula(s) excedente(s) encontrada(s).`);
+      }
+      
+      if (pending === 0 && excess === 0) {
+        log.push('✅ Grade está completa e balanceada!');
+      } else {
+        log.push('💡 Use "Ajustar" para corrigir pendências/excessos.');
+      }
+      
+      setGenerationLog(log);
+      setIsVerified(true); // Marca como verificado
+      setGenerating(false);
+    }, 100);
+  }, [data]);
+
+  const generateSchedule = useCallback(() => {
+    setIsVerified(true); // Ao gerar, marca como verificado
+    generateScheduleAsync(data, setData, setGenerationLog, setGenerating);
+  }, [data]);
+
+  const handleSmartRepair = useCallback(() =>
+    smartRepairAsync(data, setData, setGenerationLog, setRepairing),
     [data]
   );
 
@@ -287,14 +369,6 @@ const App = () => {
               </button>
             </div>
 
-            {!isMobile && !isElectron && (
-              <a href="https://github.com/binarymath/GradeInteligenteExecutavel/releases/download/V.0.0.0/Grade-Inteligente-0.0.0-Setup.exe" className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 transition-colors text-sm font-medium" title="Baixar para Windows">
-                <svg className="w-4 h-4 fill-current" viewBox="0 0 88 88" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M0 12.402l35.687-4.86.016 34.423-35.67.203zm35.67 33.529l.028 34.453L.028 75.48l-.028-29.28zm5.975-39.053l46.3-6.68V39.88l-46.3.265zm0 37.323l46.29 2.19v35.416l-46.273-6.55z" />
-                </svg>
-                <span className="hidden sm:inline">Baixar Grade Inteligente</span>
-              </a>
-            )}
             <input type="file" ref={fileInputRef} onChange={handleImportState} style={{ display: 'none' }} accept=".json" />
             <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 bg-white border border-slate-300 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 transition-colors text-sm font-medium" title="Importar Backup"><Upload size={16} /> <span className="hidden sm:inline">Restaurar</span></button>
             <button onClick={handleExportState} className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-1.5 rounded hover:bg-indigo-700 transition-colors text-sm font-medium" title="Salvar Backup"><Download size={16} /> <span className="hidden sm:inline">Backup</span></button>
@@ -310,9 +384,29 @@ const App = () => {
             <div className="flex flex-col gap-4">
               <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-slate-200">
                 <h2 className="text-lg font-bold text-slate-800">Gerar Grade</h2>
-                <button onClick={generateSchedule} disabled={generating} className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed" aria-busy={generating}>
-                  {generating ? 'Gerando...' : (Object.keys(data.schedule || {}).length > 0 ? 'Gerar Novamente' : 'Gerar Agora')}
-                </button>
+                <div className="flex items-center gap-2">
+                  {isVerified && (
+                    <button
+                      onClick={handleSmartRepair}
+                      disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
+                      className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      aria-busy={repairing}
+                      title="Ajustar grade atual sem regenerar"
+                    >
+                      {repairing ? 'Ajustando...' : 'Ajustar'}
+                    </button>
+                  )}
+                  <button
+                    onClick={isVerified ? generateSchedule : verifySchedule}
+                    disabled={generating || repairing}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    aria-busy={generating}
+                  >
+                    {generating ? (isVerified ? 'Gerando...' : 'Verificando...') : 
+                     (isVerified ? 'Gerar Novamente' : 
+                      (Object.keys(data.schedule || {}).length > 0 ? 'Verificar' : 'Gerar Agora'))}
+                  </button>
+                </div>
               </div>
               {generationLog.length > 0 && (
                 <div
@@ -322,24 +416,6 @@ const App = () => {
                   aria-label="Log de geração da grade"
                 >
                   {generationLog.map((log, i) => <div key={i}>{log}</div>)}
-                </div>
-              )}
-              {data.scheduleConflicts && data.scheduleConflicts.length > 0 && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm flex flex-col gap-2" role="alert" aria-live="assertive">
-                  <div className="flex items-center gap-2 font-semibold text-red-700"><AlertTriangle size={16} /> Conflitos de professor detectados</div>
-                  <ul className="list-disc pl-5 space-y-1 text-red-700">
-                    {data.scheduleConflicts.map((c, idx) => {
-                      const teacherName = data.teachers.find(t => t.id === c.teacherId)?.name || c.teacherId;
-                      const classNames = c.classes.map(cid => data.classes.find(cl => cl.id === cid)?.name || cid).join(' & ');
-                      const dayName = DAYS[c.dayIdx] || `Dia ${c.dayIdx}`;
-                      return (
-                        <li key={idx}>
-                          <span className="font-semibold">{teacherName}</span> conflito em <span className="font-medium">{classNames}</span> ({dayName}) — {c.reason}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  <p className="text-[11px] text-red-600">Ajuste atividades, turnos ou horários para eliminar conflitos.</p>
                 </div>
               )}
               <div className="flex flex-wrap gap-6 mb-4">

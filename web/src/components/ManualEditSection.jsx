@@ -9,6 +9,72 @@ const ManualEditSection = ({ data, setData }) => {
   const [newEntry, setNewEntry] = useState({ teacherId: '', subjectId: '' });
   const [availableSlots, setAvailableSlots] = useState([]);
   const [printingClass, setPrintingClass] = useState(null);
+  const [manualLog, setManualLog] = useState([]); // Log simples para operações manuais
+  const [pendingLog, setPendingLog] = useState([]); // Log de pendências por matéria/turma
+
+  const recomputePending = () => {
+    try {
+      const lines = [];
+      let totalExpected = 0;
+      let totalAllocated = 0;
+      let totalMissing = 0;
+
+      // Índice de alocação por (turma-matéria)
+      const allocatedIndex = {};
+      Object.values(data.schedule || {}).forEach(entry => {
+        const key = `${entry.classId}-${entry.subjectId}`;
+        allocatedIndex[key] = (allocatedIndex[key] || 0) + 1;
+      });
+
+      // Agregar esperados por (turma-matéria) e professores
+      const expectedByKey = {};
+      const teachersByKey = {};
+      (data.activities || []).forEach(act => {
+        const key = `${act.classId}-${act.subjectId}`;
+        const qty = parseInt(act.quantity) || 0;
+        expectedByKey[key] = (expectedByKey[key] || 0) + qty;
+        if (!teachersByKey[key]) teachersByKey[key] = new Set();
+        if (act.teacherId) teachersByKey[key].add(act.teacherId);
+      });
+
+      Object.entries(expectedByKey).forEach(([key, expected]) => {
+        const allocated = allocatedIndex[key] || 0;
+        const missing = Math.max(0, expected - allocated);
+        totalExpected += expected;
+        totalAllocated += allocated;
+        totalMissing += missing;
+
+        if (missing > 0) {
+          const [classId, subjectId] = key.split('-');
+          const className = data.classes.find(c => c.id === classId)?.name || 'Turma';
+          const subjectName = data.subjects.find(s => s.id === subjectId)?.name || 'Matéria';
+          const tSet = teachersByKey[key] || new Set();
+          let teacherName = 'Sem professor';
+          if (tSet.size === 1) {
+            const tid = Array.from(tSet)[0];
+            teacherName = data.teachers.find(t => t.id === tid)?.name || 'Professor';
+          } else if (tSet.size > 1) {
+            teacherName = 'Vários professores';
+          }
+          lines.push(`• ${subjectName} - ${className}: ${allocated}/${expected} (faltam ${missing}) — Prof: ${teacherName}`);
+        }
+      });
+
+      const header = [
+        `📈 Total esperado: ${totalExpected} aula(s)`,
+        `✅ Alocado: ${totalAllocated} aula(s)`,
+        `⏳ Pendências: ${totalMissing} aula(s)`
+      ];
+
+      if (totalMissing === 0) {
+        setPendingLog([...header, '', '✅ Sem pendências para esta grade.']);
+      } else {
+        setPendingLog([...header, '', ...lines]);
+      }
+    } catch (e) {
+      setPendingLog([`❌ Erro ao calcular pendências: ${e.message}`]);
+    }
+  };
 
   // Filtrar apenas slots de aula
   const lessonSlots = useMemo(() =>
@@ -196,6 +262,11 @@ const ManualEditSection = ({ data, setData }) => {
     calculateAvailableSlots();
   }, [newEntry.teacherId, newEntry.subjectId, selectedCell]);
 
+  // Atualiza automaticamente o resumo de pendências quando a grade muda
+  React.useEffect(() => {
+    recomputePending();
+  }, [data.schedule, data.activities]);
+
   const handleCellClick = (dayIdx, slotIdx, classId) => {
     if (!editMode || !classId) return;
     setSelectedCell({ dayIdx, slotIdx, classId });
@@ -207,11 +278,23 @@ const ManualEditSection = ({ data, setData }) => {
     const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
     const scheduleKey = `${classId}-${timeKey}`;
 
+    const slot = data.timeSlots[slotIdx];
+    const className = data.classes.find(c => c.id === classId)?.name || 'Turma';
+    const entry = data.schedule[scheduleKey];
+    const subjectName = data.subjects.find(s => s.id === entry?.subjectId)?.name || 'Matéria';
+    const teacherName = data.teachers.find(t => t.id === entry?.teacherId)?.name || 'Professor';
+
     setData(prev => {
-      const newSchedule = { ...prev.schedule };
+      const newSchedule = { ...(prev.schedule || {}) };
       delete newSchedule[scheduleKey];
       return { ...prev, schedule: newSchedule };
     });
+
+    // Log da operação
+    setManualLog(prev => [
+      `Removido: ${subjectName} (${teacherName}) da turma ${className} em ${DAYS[dayIdx]} ${slot?.start || ''}-${slot?.end || ''}`,
+      ...prev
+    ].slice(0, 200));
   };
 
   const handleAddLesson = () => {
@@ -223,21 +306,34 @@ const ManualEditSection = ({ data, setData }) => {
     const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
     const scheduleKey = `${targetClass}-${timeKey}`;
 
+    const slot = data.timeSlots[slotIdx];
+    const className = data.classes.find(c => c.id === targetClass)?.name || 'Turma';
+    const subjectName = data.subjects.find(s => s.id === newEntry.subjectId)?.name || 'Matéria';
+    const teacherName = data.teachers.find(t => t.id === newEntry.teacherId)?.name || 'Professor';
+
     // Verificar conflito de professor
-    const teacherConflict = Object.values(data.schedule).find(
+    const teacherConflict = Object.values(data.schedule || {}).find(
       entry => entry.teacherId === newEntry.teacherId && entry.timeKey === timeKey
     );
 
     if (teacherConflict) {
       const conflictClass = data.classes.find(c => c.id === teacherConflict.classId);
-      alert(`Conflito: Professor já está alocado na turma ${conflictClass?.name} neste horário.`);
+      // Alerta usuário sobre conflito de professor neste horário
+      window.alert(
+        `Conflito: o(a) prof. ${teacherName} já está na turma ${conflictClass?.name || ''} em ${DAYS[dayIdx]} ${slot?.start || ''}-${slot?.end || ''}`
+      );
+      // Também registra no log de edição manual
+      setManualLog(prev => [
+        `Conflito: Prof. ${teacherName} já está na turma ${conflictClass?.name || ''} em ${DAYS[dayIdx]} ${slot?.start || ''}-${slot?.end || ''}`,
+        ...prev
+      ].slice(0, 200));
       return;
     }
 
     setData(prev => ({
       ...prev,
       schedule: {
-        ...prev.schedule,
+        ...(prev.schedule || {}),
         [scheduleKey]: {
           teacherId: newEntry.teacherId,
           subjectId: newEntry.subjectId,
@@ -247,14 +343,20 @@ const ManualEditSection = ({ data, setData }) => {
       }
     }));
 
+    // Log da operação
+    setManualLog(prev => [
+      `Adicionado: ${subjectName} (${teacherName}) na turma ${className} em ${DAYS[dayIdx]} ${slot?.start || ''}-${slot?.end || ''}`,
+      ...prev
+    ].slice(0, 200));
+
     setShowAddModal(false);
     setNewEntry({ teacherId: '', subjectId: '' });
     setSelectedCell(null);
   };
 
-  const getScheduleEntry = (dayIdx, slotIdx, classId) => {
+  const getScheduleEntry = (dayIdx, slot, classId) => {
     if (!classId) return null;
-    const absoluteIndex = data.timeSlots.findIndex(s => s.id === lessonSlots[slotIdx].id);
+    const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
     const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
     const scheduleKey = `${classId}-${timeKey}`;
     return data.schedule[scheduleKey];
@@ -266,9 +368,9 @@ const ManualEditSection = ({ data, setData }) => {
   };
 
   // Verificar se uma linha de horário tem pelo menos uma aula (para qualquer dia)
-  const isSlotRowEmpty = (slotIdx, classId) => {
+  const isSlotRowEmpty = (slot, classId) => {
     for (let dayIdx = 0; dayIdx < DAYS.length; dayIdx++) {
-      const entry = getScheduleEntry(dayIdx, slotIdx, classId);
+      const entry = getScheduleEntry(dayIdx, slot, classId);
       if (entry) return false; // Encontrou pelo menos uma aula
     }
     return true; // Linha completamente vazia
@@ -329,10 +431,66 @@ const ManualEditSection = ({ data, setData }) => {
           </button>
         </div>
       </div>
+      
+
+        {/* Resumo de Pendências (atualizável) */}
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-semibold text-slate-700">Resumo de Pendências</h4>
+            <div className="flex gap-2">
+              <button
+                onClick={recomputePending}
+                className="text-xs px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700"
+              >
+                Atualizar
+              </button>
+            </div>
+          </div>
+          {pendingLog.length === 0 ? (
+            <p className="text-xs text-slate-500">Calculando...</p>
+          ) : (
+            <div className="max-h-48 overflow-y-auto space-y-1 text-xs text-slate-700">
+              {pendingLog.map((line, idx) => (
+                <div key={idx} className="bg-white border border-slate-200 rounded px-2 py-1">
+                  {line}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Log de operações manuais */}
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-semibold text-slate-700">Log de Edição Manual</h4>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setManualLog([])}
+                className="text-xs px-2 py-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300"
+              >
+                Limpar
+              </button>
+            </div>
+          </div>
+          {manualLog.length === 0 ? (
+            <p className="text-xs text-slate-500">Nenhuma operação registrada ainda.</p>
+          ) : (
+            <div className="max-h-40 overflow-y-auto space-y-1 text-xs text-slate-700">
+              {manualLog.map((line, idx) => (
+                <div key={idx} className="bg-white border border-slate-200 rounded px-2 py-1">
+                  {line}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
       {/* Lista de Turmas */}
       <div className="space-y-6">
-        {data.classes.map(cls => (
+        {data.classes.map(cls => {
+          // Garantir que activeSlots existe e é um array
+          const classActiveSlots = cls.activeSlots && Array.isArray(cls.activeSlots) ? cls.activeSlots : [];
+          
+          return (
           <div
             key={cls.id}
             className={`bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden printable-schedule ${printingClass === cls.id ? 'print-now' : ''}`}
@@ -360,6 +518,16 @@ const ManualEditSection = ({ data, setData }) => {
             </div>
 
             <div className="p-4 overflow-x-auto">
+              {classActiveSlots.length === 0 ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+                  <p className="text-amber-800 font-semibold mb-2">
+                    ⚠️ Nenhum horário ativo configurado
+                  </p>
+                  <p className="text-amber-700 text-sm">
+                    Esta turma não possui horários ativos selecionados. Vá em "Dados Institucionais" → "Turmas" e edite esta turma para selecionar os horários.
+                  </p>
+                </div>
+              ) : (
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr>
@@ -374,9 +542,11 @@ const ManualEditSection = ({ data, setData }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {lessonSlots.map((slot, slotIdx) => {
+                  {lessonSlots
+                    .filter(slot => classActiveSlots.includes(slot.id))
+                    .map((slot, slotIdx) => {
                     const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
-                    const isEmptyRow = isSlotRowEmpty(slotIdx, cls.id);
+                    const isEmptyRow = isSlotRowEmpty(slot, cls.id);
                     
                     return (
                       <tr key={slot.id} className={isEmptyRow ? 'print:hidden' : ''}>
@@ -384,7 +554,7 @@ const ManualEditSection = ({ data, setData }) => {
                           {slot.start} - {slot.end}
                         </td>
                         {DAYS.map((_, dayIdx) => {
-                          const entry = getScheduleEntry(dayIdx, slotIdx, cls.id);
+                          const entry = getScheduleEntry(dayIdx, slot, cls.id);
                           const isEmpty = !entry;
                           const isAvailable = isSlotAvailable(dayIdx, absoluteIndex);
 
@@ -442,9 +612,11 @@ const ManualEditSection = ({ data, setData }) => {
                   })}
                 </tbody>
               </table>
+              )}
             </div>
           </div>
-        ))}
+        );
+        })}
       </div>
 
       {/* Modal Adicionar Aula */}
