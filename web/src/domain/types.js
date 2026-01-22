@@ -7,6 +7,8 @@
  * @property {string} start HH:MM
  * @property {string} end HH:MM
  * @property {'aula'|'intervalo'|'almoco'|'jantar'} type
+ * @property {string} [shift] Turno (Manhã, Tarde, Noite, Integral (Manhã e Tarde), Integral (Tarde e Noite))
+ * @property {number[]} [days] Array de dias (0=seg, 1=ter, 2=qua, 3=qui, 4=sex, 5=sab, 6=dom). Se vazio, aplica em todos os dias.
  */
 
 /** @typedef {Object} Teacher

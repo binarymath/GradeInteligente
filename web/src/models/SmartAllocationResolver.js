@@ -1,4 +1,4 @@
-import { DAYS } from '../utils';
+import { DAYS, isSlotValidForDay } from '../utils';
 import { computeSlotShift } from '../utils/time';
 import { LIMITS } from '../constants/schedule';
 
@@ -427,9 +427,14 @@ class SmartAllocationResolver {
 
     if (!slot) return false;
 
-    // 1. VERIFICAR SE SLOT ESTÁ EM activeSlots DA TURMA
+    // 1. VERIFICAR SE SLOT ESTÁ EM activeSlots DA TURMA E SE É VÁLIDO PARA O DIA
     const classData = this.data.classes?.find(c => c.id === activity.classId);
     if (!classData) {
+      return false;
+    }
+
+    // Verifica se o slot é válido para este dia específico (considera propriedade 'days')
+    if (!isSlotValidForDay(slot, dayIdx)) {
       return false;
     }
 
@@ -663,6 +668,13 @@ class SmartAllocationResolver {
         if (!slot) continue;
 
         let blocked = false;
+
+        // Verifica se o slot é válido para este dia (considera dias específicos)
+        if (!isSlotValidForDay(slot, dayIdx)) {
+          blockedByInterval++;
+          blocked = true;
+          continue;
+        }
 
         // Verifica intervalo/inativo da turma
         if (classData?.activeSlots && Array.isArray(classData.activeSlots) && classData.activeSlots.length > 0) {
