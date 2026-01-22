@@ -1,0 +1,215 @@
+{
+  "example": "Configuração de Horários com Variação por Dia",
+  "description": "Exemplo completo mostrando como usar horários variáveis por dia da semana",
+  "timeSlots": [
+    {
+      "id": "slot_intervalo_segunda",
+      "start": "08:40",
+      "end": "08:50",
+      "type": "intervalo",
+      "shift": "Manhã",
+      "days": [0],
+      "comment": "Segunda: Intervalo escada longa"
+    },
+    {
+      "id": "slot_intervalo_tera_sex",
+      "start": "05:40",
+      "end": "05:50",
+      "type": "intervalo",
+      "shift": "Manhã",
+      "days": [1, 2, 3, 4],
+      "comment": "Terça a Sexta: Intervalo escada curta"
+    },
+    {
+      "id": "slot_aula_1",
+      "start": "09:00",
+      "end": "09:50",
+      "type": "aula",
+      "shift": "Manhã",
+      "comment": "Slot de aula 1 - válido para todos os dias"
+    },
+    {
+      "id": "slot_aula_2",
+      "start": "09:50",
+      "end": "10:40",
+      "type": "aula",
+      "shift": "Manhã"
+    },
+    {
+      "id": "slot_almoco_integral",
+      "start": "11:30",
+      "end": "12:30",
+      "type": "almoco",
+      "shift": "Integral (Manhã e Tarde)",
+      "comment": "Almoço para turno integral (manhã + tarde)"
+    },
+    {
+      "id": "slot_intervalo_tarde",
+      "start": "14:40",
+      "end": "14:50",
+      "type": "intervalo",
+      "shift": "Tarde"
+    },
+    {
+      "id": "slot_aula_3",
+      "start": "15:00",
+      "end": "15:50",
+      "type": "aula",
+      "shift": "Tarde"
+    },
+    {
+      "id": "slot_jantar_sexta",
+      "start": "17:30",
+      "end": "18:30",
+      "type": "jantar",
+      "days": [4],
+      "comment": "Jantar apenas na sexta (integração com turno noite)"
+    }
+  ],
+  "structure_explanation": {
+    "id": "Identificador único do slot",
+    "start": "Hora de início (HH:MM)",
+    "end": "Hora de término (HH:MM)",
+    "type": "Tipo: 'aula', 'intervalo', 'almoco', ou 'jantar'",
+    "shift": "Turno: 'Manhã', 'Tarde', 'Noite', 'Integral (Manhã e Tarde)', 'Integral (Tarde e Noite)'",
+    "days": "Array de dias: [0=seg, 1=ter, 2=qua, 3=qui, 4=sex, 5=sab, 6=dom] | OPCIONAL: vazio ou ausente = todos os dias",
+    "comment": "Documentação (não processada pelo sistema)"
+  },
+  "examples": {
+    "intervalo_fixo": {
+      "description": "Intervalo com mesmo horário todos os dias",
+      "slot": {
+        "id": "intervalo_fixo",
+        "start": "10:20",
+        "end": "10:40",
+        "type": "intervalo",
+        "days": []
+      },
+      "note": "days vazio = válido para segunda-sexta"
+    },
+    "intervalo_segunda": {
+      "description": "Intervalo apenas na segunda",
+      "slot": {
+        "id": "intervalo_segunda",
+        "start": "08:40",
+        "end": "08:50",
+        "type": "intervalo",
+        "days": [0]
+      }
+    },
+    "intervalo_meio_semana": {
+      "description": "Intervalo de terça a quinta",
+      "slot": {
+        "id": "intervalo_meio_semana",
+        "start": "10:00",
+        "end": "10:15",
+        "type": "intervalo",
+        "days": [1, 2, 3]
+      }
+    },
+    "almoco_turno_integral": {
+      "description": "Almoço específico para turno integral",
+      "slot": {
+        "id": "almoco_integral",
+        "start": "11:30",
+        "end": "12:30",
+        "type": "almoco",
+        "shift": "Integral (Manhã e Tarde)"
+      }
+    },
+    "almoco_turno_noite": {
+      "description": "Almoço antecipado para turno noite",
+      "slot": {
+        "id": "almoco_noite",
+        "start": "17:00",
+        "end": "18:00",
+        "type": "almoco",
+        "shift": "Noite"
+      }
+    },
+    "jantar_sexta": {
+      "description": "Jantar apenas na sexta",
+      "slot": {
+        "id": "jantar_sexta",
+        "start": "18:30",
+        "end": "19:00",
+        "type": "jantar",
+        "days": [4]
+      }
+    }
+  },
+  "data_type_reference": {
+    "typescript_equivalent": "interface TimeSlot { id: string; start: string; end: string; type: 'aula'|'intervalo'|'almoco'|'jantar'; shift?: string; days?: number[]; }",
+    "notes": [
+      "days é OPCIONAL",
+      "Se ausente ou vazio: válido para todos os dias (segunda-sexta = [0,1,2,3,4])",
+      "Se presente com valores: válido APENAS para aqueles dias",
+      "Índices: 0=segunda, 1=terça, 2=quarta, 3=quinta, 4=sexta",
+      "Futuro: 5=sábado, 6=domingo"
+    ]
+  },
+  "algoritmo_validacao": {
+    "paso_1_check_dia": "isSlotValidForDay(slot, dayIdx) → true se dias é vazio OU dayIdx está em dias",
+    "paso_2_check_active_slots": "Verifica se slot está em activeSlots da turma (nada novo)",
+    "paso_3_check_ocupacao": "Verifica se turma está livre neste horário (nada novo)",
+    "paso_4_check_professor": "Verifica disponibilidade do professor (nada novo)"
+  },
+  "migration_notes": {
+    "backwards_compatibility": "100%",
+    "old_slots_without_days": "Continuam funcionando como 'válidos para todos os dias'",
+    "data_loss": "Nenhum",
+    "action_required": "Nenhuma"
+  },
+  "real_world_scenario": {
+    "scenario": "Escola com diferentes intervalos por dia",
+    "configuration": [
+      {
+        "name": "Segunda - Escada Longa",
+        "slots": [
+          {
+            "type": "intervalo",
+            "time": "08:40 - 08:50",
+            "days": [0],
+            "reason": "Segunda tem mais tempo para deslocamento"
+          }
+        ]
+      },
+      {
+        "name": "Terça a Sexta - Escada Curta",
+        "slots": [
+          {
+            "type": "intervalo",
+            "time": "05:40 - 05:50",
+            "days": [1, 2, 3, 4],
+            "reason": "Semana normal com intervalo padrão"
+          }
+        ]
+      },
+      {
+        "name": "Almoço - Todos os Dias",
+        "slots": [
+          {
+            "type": "almoco",
+            "time": "11:30 - 12:30",
+            "days": [],
+            "reason": "Mesmo horário para todos (ou deixar dias vazio)"
+          }
+        ]
+      }
+    ],
+    "expected_result": {
+      "segunda": {
+        "08:40_08:50": "INTERVALO (escada longa)",
+        "09:00_09:50": "AULA",
+        "11:30_12:30": "ALMOÇO"
+      },
+      "tera_a_sexta": {
+        "05:40_05:50": "INTERVALO (escada curta)",
+        "09:00_09:50": "AULA",
+        "11:30_12:30": "ALMOÇO"
+      }
+    }
+  },
+  "version": "0.1.10+",
+  "last_updated": "2026-01-22"
+}
