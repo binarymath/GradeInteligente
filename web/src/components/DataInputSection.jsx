@@ -3,6 +3,7 @@ import { Plus, Check, X, Trash2, Clock, BookOpen, Star, Save, Coffee, Utensils, 
 import { uid, DAYS, COLORS, getAllSlots } from '../utils';
 import { computeSlotShift } from '../utils/time';
 import SynchronousConfigService from '../services/SynchronousConfigService';
+import ClassForm from './ClassForm';
 
 const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
@@ -25,7 +26,8 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const [editingClassId, setEditingClassId] = useState(null);
   const [newClassName, setNewClassName] = useState('');
   const [newClassShift, setNewClassShift] = useState('Manhã');
-  const [selectedClassSlots, setSelectedClassSlots] = useState([]);
+  const [selectedClassSlots, setSelectedClassSlots] = useState([]); // Legado, compatibilidade
+  const [activeSlotsByDay, setActiveSlotsByDay] = useState({}); // Novo: { dayIdx: [slotIds] }
   const [classNames, setClassNames] = useState(['']);
 
   const allSlots = getAllSlots(data.timeSlots);
@@ -224,6 +226,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
     setNewClassName('');
     setNewClassShift('Manhã');
     setSelectedClassSlots([]);
+    setActiveSlotsByDay({});
     setEditingClassId(null);
     setIsAddingClass(false);
     setClassNames(['']);
@@ -231,8 +234,25 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
 
   const handleEditClass = (cls) => {
     setNewClassName(cls.name);
-    setNewClassShift(cls.shift || 'Manhã'); // Garante valor padrão para evitar erro de filtro
-    setSelectedClassSlots(cls.activeSlots || []);
+    setNewClassShift(cls.shift || 'Manhã');
+    
+    // Migração: se tem activeSlots (legado), converte para activeSlotsByDay
+    if (cls.activeSlotsByDay) {
+      setActiveSlotsByDay(cls.activeSlotsByDay);
+      setSelectedClassSlots([]);
+    } else if (cls.activeSlots) {
+      // Legado: aplica os mesmos slots em todos os dias
+      const byDay = {};
+      DAYS.forEach((_, idx) => {
+        byDay[idx] = [...cls.activeSlots];
+      });
+      setActiveSlotsByDay(byDay);
+      setSelectedClassSlots(cls.activeSlots);
+    } else {
+      setActiveSlotsByDay({});
+      setSelectedClassSlots([]);
+    }
+    
     setEditingClassId(cls.id);
     setClassNames([cls.name]);
     setIsAddingClass(true);
@@ -243,14 +263,18 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
       // Modo edição: salva uma única turma
       if (!newClassName.trim()) return;
       const classData = {
+        id: editingClassId,
         name: newClassName,
         shift: newClassShift,
-        activeSlots: selectedClassSlots
+        activeSlotsByDay: activeSlotsByDay,
+        // 🔴 IMPORTANTE: Se tem activeSlotsByDay (novo), limpar activeSlots (legado) para evitar conflito
+        activeSlots: Object.keys(activeSlotsByDay).length > 0 ? [] : selectedClassSlots
       };
       setData(prev => ({
         ...prev,
         classes: prev.classes.map(c => c.id === editingClassId ? { ...c, ...classData } : c)
       }));
+      window.alert('Alterações salvas com sucesso.');
     } else {
       // Modo criação: cria múltiplas turmas com os mesmos horários
       const validNames = classNames.filter(name => name.trim() !== '');
@@ -260,23 +284,20 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
         id: uid(),
         name: name.trim(),
         shift: newClassShift,
-        activeSlots: selectedClassSlots
+        activeSlotsByDay: activeSlotsByDay,
+        // 🔴 IMPORTANTE: Se tem activeSlotsByDay (novo), limpar activeSlots (legado) para evitar conflito
+        activeSlots: Object.keys(activeSlotsByDay).length > 0 ? [] : selectedClassSlots
       }));
 
       setData(prev => ({
         ...prev,
         classes: [...prev.classes, ...newClasses]
       }));
+      
+      // Só fecha o formulário quando criar novas turmas
+      resetClassForm();
     }
-    resetClassForm();
-  };
-
-  const toggleClassSlot = (slotId) => {
-    setSelectedClassSlots(prev =>
-      prev.includes(slotId)
-        ? prev.filter(id => id !== slotId)
-        : [...prev, slotId]
-    );
+    // Não fecha o formulário ao salvar edição - mantém aberto para editar outras turmas
   };
 
   const classesByShift = data.classes.reduce((acc, cls) => {
@@ -873,16 +894,34 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-bold text-slate-500 mb-1">
-                          {editingClassId ? 'Nome da Turma' : 'Nomes das Turmas (uma por linha)'}
+                          {editingClassId ? 'Selecione a Turma para Editar' : 'Nomes das Turmas (uma por linha)'}
                         </label>
                         {editingClassId ? (
-                          <input
-                            type="text"
-                            placeholder="Ex: 6º Ano A"
-                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
-                            value={newClassName}
-                            onChange={e => setNewClassName(e.target.value)}
-                          />
+                          <div className="space-y-2">
+                            <select
+                              className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500 font-medium"
+                              value={editingClassId}
+                              onChange={e => {
+                                const classToEdit = data.classes.find(c => c.id === e.target.value);
+                                if (classToEdit) {
+                                  handleEditClass(classToEdit);
+                                }
+                              }}
+                            >
+                              {data.classes.map(cls => (
+                                <option key={cls.id} value={cls.id}>
+                                  {cls.name} ({cls.shift})
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              placeholder="Ex: 6º Ano A"
+                              className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500"
+                              value={newClassName}
+                              onChange={e => setNewClassName(e.target.value)}
+                            />
+                          </div>
                         ) : (
                           <div className="space-y-2">
                             {classNames.map((name, idx) => (
@@ -933,39 +972,12 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                       </div>
                     </div>
 
-                    <div className="border-t border-slate-200 pt-3">
-                      <h4 className="text-xs font-bold text-slate-700 mb-2">Seleção de Horários da Turma (Marque os usados)</h4>
-                      <div className="max-h-48 overflow-y-auto border rounded p-2 bg-white scrollbar-elegant">
-                        <div className="grid grid-cols-1 gap-1">
-                          {data.timeSlots.filter(slot => {
-                            const slotShift = computeSlotShift(slot);
-                            if (newClassShift === 'Integral (Manhã e Tarde)') {
-                              return slotShift === 'Manhã' || slotShift === 'Tarde' || slotShift === 'Integral (Manhã e Tarde)';
-                            }
-                            if (newClassShift === 'Integral (Tarde e Noite)') {
-                              return slotShift === 'Tarde' || slotShift === 'Noite' || slotShift === 'Integral (Tarde e Noite)';
-                            }
-                            return slotShift === newClassShift;
-                          }).map(slot => (
-                            <label key={`cls-slot-${slot.id}`} className={`flex items-center gap-3 p-2 rounded cursor-pointer border ${selectedClassSlots.includes(slot.id) ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent hover:bg-slate-50'}`}>
-                              <input
-                                type="checkbox"
-                                checked={selectedClassSlots.includes(slot.id)}
-                                onChange={() => toggleClassSlot(slot.id)}
-                                className="text-blue-500 rounded focus:ring-blue-500"
-                              />
-                              <div className="flex items-center gap-2 text-xs">
-                                <span className="font-bold text-slate-700 w-20">{slot.start} - {slot.end}</span>
-                                {slot.type === 'aula' && <span className="text-slate-500 bg-slate-100 px-1 rounded">Aula</span>}
-                                {slot.type === 'intervalo' && <span className="text-orange-600 bg-orange-50 px-1 rounded flex items-center gap-1"><Coffee size={10} /> Intervalo</span>}
-                                {slot.type === 'almoco' && <span className="text-red-600 bg-red-50 px-1 rounded flex items-center gap-1"><Utensils size={10} /> Almoço</span>}
-                                {slot.type === 'jantar' && <span className="text-indigo-600 bg-indigo-50 px-1 rounded flex items-center gap-1"><Utensils size={10} /> Jantar</span>}
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                    <ClassForm
+                      timeSlots={data.timeSlots}
+                      selectedShift={newClassShift}
+                      activeSlotsByDay={activeSlotsByDay}
+                      setActiveSlotsByDay={setActiveSlotsByDay}
+                    />
 
                     <div className="flex justify-end gap-2">
                       <button onClick={handleSaveClass} className="bg-emerald-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2"><Save size={16} /> {editingClassId ? 'Salvar Alterações' : 'Criar Turma'}</button>

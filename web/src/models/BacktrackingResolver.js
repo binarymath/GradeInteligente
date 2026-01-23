@@ -211,8 +211,9 @@ class BacktrackingResolver {
 
     if (activity.isDoubleLesson) {
       const nextSlot = this.timeSlots[slotIdx + 1];
-      if (nextSlot.type !== 'aula') {
-        return false; // Próximo slot é intervalo
+      // Validação de segurança
+      if (!nextSlot || nextSlot.type !== 'aula') {
+        return false; // Próximo slot não existe ou é intervalo
       }
 
       // Verifica turma e professor no próximo slot também
@@ -271,6 +272,13 @@ class BacktrackingResolver {
     if (activity.isDoubleLesson) {
       const nextSlotIdx = slotIdx + 1;
       const nextSlot = this.timeSlots[nextSlotIdx];
+      
+      // Validação de segurança
+      if (!nextSlot) {
+        console.warn(`⚠️ Tentativa de alocar dupla mas próximo slot (${nextSlotIdx}) não existe`);
+        return;
+      }
+      
       const nextTimeKey = `${day}-${nextSlotIdx}`;
 
       this.schedule[`${activity.classId}-${day}-${nextSlotIdx}`] = {

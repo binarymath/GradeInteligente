@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { DAYS } from './utils';
 import { migrateData } from './services/DataMigration';
+import { cleanSchedule } from './services/scheduleHelpers';
 import SidebarItem from './components/SidebarItem';
 import TimeSettingsSection from './components/TimeSettingsSection';
 import DataInputSection from './components/DataInputSection';
@@ -76,6 +77,7 @@ const App = () => {
   });
 
   const fileInputRef = useRef(null);
+  const logContainerRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
 
   useEffect(() => {
@@ -88,6 +90,17 @@ const App = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Auto-scroll para o log quando há novos registros
+  useEffect(() => {
+    if (logContainerRef.current && generationLog.length > 0) {
+      setTimeout(() => {
+        if (logContainerRef.current) {
+          logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+        }
+      }, 100);
+    }
+  }, [generationLog]);
 
   // Persiste navegação para manter a página/visualização após reload
   useEffect(() => {
@@ -107,8 +120,11 @@ const App = () => {
           const persistedData = await window.grade.get('data');
           const persistedCalendar = await window.grade.get('calendarSettings');
           if (persistedData && typeof persistedData === 'object') {
-            const migratedData = migrateData(persistedData);
+            let migratedData = migrateData(persistedData);
             if (migratedData) {
+              if (migratedData.schedule) {
+                migratedData.schedule = cleanSchedule(migratedData);
+              }
               setData(prev => ({ ...prev, ...migratedData }));
             }
           }
@@ -121,8 +137,12 @@ const App = () => {
           if (lsData) {
             const parsed = JSON.parse(lsData);
             if (parsed && typeof parsed === 'object') {
-              const migratedData = migrateData(parsed);
+              let migratedData = migrateData(parsed);
               if (migratedData) {
+                // DEEP CLEAN: Remove ghost allocations on load
+                if (migratedData.schedule) {
+                  migratedData.schedule = cleanSchedule(migratedData);
+                }
                 setData(prev => ({ ...prev, ...migratedData }));
               }
             }
@@ -175,67 +195,433 @@ const App = () => {
   const handleExportState = useCallback(() => exportBackup(data), [data]);
 
   const handleImportState = useCallback((e) => {
-    importBackup(e.target.files[0], setData);
+    importBackup(e.target.files[0], (rawParsed) => {
+      // 1. Migrar para garantir formato atual (v1 data -> v2 structures)
+      let newData = migrateData(rawParsed);
+
+      if (newData) {
+        // 2. Limpar (apenas se tiver dados mínimos válidos, senão cleanSchedule protege)
+        if (newData.schedule) {
+          const cleaned = cleanSchedule(newData);
+          // Se cleanSchedule retornar algo vazio quando HAVIA dados, é sinal de perigo. 
+          // Mas como adicionamos validação no cleanSchedule para retornar o original se faltar deps, é seguro.
+          newData.schedule = cleaned;
+        }
+        setData(newData);
+      }
+    });
     setIsVerified(false); // Ao restaurar, volta para modo "Verificar"
   }, []);
 
   const verifySchedule = useCallback(() => {
     setGenerating(true);
     setGenerationLog(['🔍 Verificando grade restaurada...']);
-    
+
     setTimeout(() => {
       const log = ['🔍 Verificando grade restaurada...'];
-      
+
       if (!data.schedule || Object.keys(data.schedule).length === 0) {
         log.push('⚠️ Nenhuma grade encontrada.');
         setGenerationLog(log);
         setGenerating(false);
         return;
       }
-      
+
+      // PRÉ-PROCESSAR: Criar mapas para lookups O(1) em vez de O(n)
+      const classMap = new Map((data.classes || []).map(c => [c.id, c]));
+      const subjectMap = new Map((data.subjects || []).map(s => [s.id, s]));
+      const teacherMap = new Map((data.teachers || []).map(t => [t.id, t]));
+
       const totalSlots = Object.keys(data.schedule).length;
       log.push(`✅ Grade contém ${totalSlots} aula(s) alocada(s).`);
-      
-      // Verifica pendências
-      const bookedCounts = {};
+
+      // Validar se alguma aula foi colocada fora do horário permitido da turma
+      const invalidSlots = [];
       for (const [key, entry] of Object.entries(data.schedule)) {
-        const actKey = `${entry.classId}-${entry.subjectId}`;
-        bookedCounts[actKey] = (bookedCounts[actKey] || 0) + 1;
-      }
-      
-      const demandMap = {};
-      for (const activity of data.activities) {
-        const key = `${activity.classId}-${activity.subjectId}`;
-        if (!demandMap[key]) demandMap[key] = { totalNeeded: 0 };
-        demandMap[key].totalNeeded += Number(activity.quantity) || 0;
-      }
-      
-      let pending = 0;
-      let excess = 0;
-      
-      for (const [key, demand] of Object.entries(demandMap)) {
-        const allocated = bookedCounts[key] || 0;
-        if (allocated < demand.totalNeeded) {
-          pending += demand.totalNeeded - allocated;
-        } else if (allocated > demand.totalNeeded) {
-          excess += allocated - demand.totalNeeded;
+        const [classId, dayStr, slotStr] = key.split('-');
+        const slotIdx = parseInt(slotStr, 10);
+        const classData = classMap.get(classId);
+        const slot = data.timeSlots[slotIdx];
+
+        if (!classData || !slot || Number.isNaN(slotIdx)) continue;
+
+        const slotId = slot.id || String(slotIdx);
+        let allowed = true;
+
+        if (classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
+          const dayIdx = DAYS.indexOf(dayStr);
+          const activeForDay = dayIdx >= 0 ? classData.activeSlotsByDay[dayIdx] : null;
+          if (!activeForDay || !activeForDay.includes(slotId)) {
+            allowed = false;
+          }
+        } else if (classData.activeSlots && Array.isArray(classData.activeSlots) && classData.activeSlots.length > 0) {
+          if (!classData.activeSlots.includes(slotId)) {
+            allowed = false;
+          }
+        }
+
+        if (!allowed) {
+          const className = classData?.name || classId;
+          const subjectName = subjectMap.get(entry.subjectId)?.name || entry.subjectId;
+          const timeLabel = `${dayStr} ${slot.start || '?'}-${slot.end || '?'}`;
+          invalidSlots.push(`${className} - ${subjectName} em ${timeLabel}`);
         }
       }
-      
+
+      if (invalidSlots.length > 0) {
+        log.push('⚠️ Há aulas em horários/dias não permitidos para a turma:');
+        invalidSlots.slice(0, 10).forEach(item => log.push(`   • ${item}`));
+        if (invalidSlots.length > 10) {
+          log.push(`   ... mais ${invalidSlots.length - 10} ocorrência(s).`);
+        }
+      }
+
+      // Coletar todas as alocações por (matéria-turma-professor)
+      const allocations = {};
+      for (const [key, entry] of Object.entries(data.schedule)) {
+        if (!entry.classId || !entry.subjectId) {
+          continue;
+        }
+        const actKey = `${entry.classId}-${entry.subjectId}-${entry.teacherId || 'none'}`;
+        if (!allocations[actKey]) {
+          allocations[actKey] = [];
+        }
+        allocations[actKey].push({ key, entry });
+      }
+
+      // Verifica pendências baseado em (matéria-turma-professor)
+      const demandMap = {};
+      for (const activity of data.activities) {
+        const key = `${activity.classId}-${activity.subjectId}-${activity.teacherId || 'none'}`;
+        if (!demandMap[key]) demandMap[key] = { totalNeeded: 0, activity };
+        demandMap[key].totalNeeded += Number(activity.quantity) || 0;
+      }
+
+      let pending = 0;
+      let excess = 0;
+      const excessDetails = [];
+      const pendingDetails = [];
+
+      for (const [key, demand] of Object.entries(demandMap)) {
+        const allocated = allocations[key]?.length || 0;
+        if (allocated < demand.totalNeeded) {
+          const missing = demand.totalNeeded - allocated;
+          pending += missing;
+          const [classId, subjectId, teacherId] = key.split('-');
+          const className = classMap.get(classId)?.name || classId;
+          const subjectName = subjectMap.get(subjectId)?.name || subjectId;
+          const teacherName = teacherId !== 'none'
+            ? (teacherMap.get(teacherId)?.name || teacherId)
+            : 'Sem professor';
+          pendingDetails.push({
+            subject: subjectName,
+            class: className,
+            teacher: teacherName,
+            allocated,
+            expected: demand.totalNeeded,
+            missing
+          });
+        } else if (allocated > demand.totalNeeded) {
+          const excessQty = allocated - demand.totalNeeded;
+          excess += excessQty;
+          const [classId, subjectId, teacherId] = key.split('-');
+          const className = classMap.get(classId)?.name || classId;
+          const subjectName = subjectMap.get(subjectId)?.name || subjectId;
+          const teacherName = teacherId !== 'none'
+            ? (teacherMap.get(teacherId)?.name || teacherId)
+            : 'Sem professor';
+
+          // Coletar localização (dia/horário) das aulas excedentes
+          const locations = allocations[key].map(alloc => {
+            const slot = data.timeSlots[alloc.entry.slotIdx];
+            const dayName = data.schedule[alloc.key]?.dayLabel || 'Dia?';
+            return `${dayName} ${slot?.start || '?'}-${slot?.end || '?'}`;
+          });
+
+          excessDetails.push({
+            subject: subjectName,
+            class: className,
+            teacher: teacherName,
+            allocated,
+            expected: demand.totalNeeded,
+            excessQty,
+            locations
+          });
+        }
+      }
+
       if (pending > 0) {
-        log.push(`⚠️ ${pending} aula(s) pendente(s) encontrada(s).`);
+        log.push(`⚠️ ${pending} aula(s) pendente(s):`);
+        pendingDetails.forEach(d => {
+          log.push(`   • ${d.subject} - ${d.class}: ${d.allocated}/${d.expected} (faltam ${d.missing}) - Prof: ${d.teacher}`);
+        });
       }
-      
+
       if (excess > 0) {
-        log.push(`⚠️ ${excess} aula(s) excedente(s) encontrada(s).`);
+        log.push(`⚠️ ${excess} aula(s) excedente(s):`);
+        excessDetails.forEach(d => {
+          log.push(`   • ${d.subject} - ${d.class} (Prof: ${d.teacher}): ${d.allocated} alocada(s), ${d.expected} esperada(s)`);
+          log.push(`      Excesso: ${d.excessQty} aula(s) em: ${d.locations.join(', ')}`);
+        });
       }
-      
+
       if (pending === 0 && excess === 0) {
         log.push('✅ Grade está completa e balanceada!');
       } else {
         log.push('💡 Use "Ajustar" para corrigir pendências/excessos.');
       }
-      
+
+      // === ANÁLISE DE SATISFAÇÃO POR ENTIDADE ===
+      // Mostrar apenas se estiver tudo perfeito para não poluir
+      if (pending === 0 && excess === 0) {
+        log.push('');
+        log.push('📋 ANÁLISE DE SATISFAÇÃO');
+
+        // Satisfação por Professor
+        log.push('');
+        log.push('👨‍🏫 Status por Professor:');
+        const teacherStatus = new Map();
+        for (const activity of data.activities) {
+          const teacherId = activity.teacherId || 'nenhum';
+          if (!teacherStatus.has(teacherId)) {
+            const t = teacherMap.get(teacherId);
+            teacherStatus.set(teacherId, {
+              name: t?.name || teacherId,
+              expected: 0,
+              allocated: 0
+            });
+          }
+          const qty = Number(activity.quantity) || 0;
+          teacherStatus.get(teacherId).expected += qty;
+        }
+
+        for (const [key, entry] of Object.entries(allocations)) {
+          const [, , teacherId] = key.split('-');
+          const actualTeacherId = teacherId === 'none' ? 'nenhum' : teacherId;
+          if (teacherStatus.has(actualTeacherId)) {
+            teacherStatus.get(actualTeacherId).allocated += entry.length;
+          }
+        }
+
+        for (const [_, status] of teacherStatus) {
+          const pct = status.expected > 0 ? Math.round((status.allocated / status.expected) * 100) : 100;
+          const emoji = pct === 100 ? '✅' : pct >= 80 ? '⚠️' : '❌';
+          log.push(`   ${emoji} ${status.name}: ${status.allocated}/${status.expected} aulas (${pct}%)`);
+        }
+
+        // Satisfação por Disciplina
+        log.push('');
+        log.push('📚 Status por Disciplina:');
+        const subjectStatus = new Map();
+        for (const activity of data.activities) {
+          const subjectId = activity.subjectId;
+          if (!subjectStatus.has(subjectId)) {
+            const s = subjectMap.get(subjectId);
+            subjectStatus.set(subjectId, { name: s?.name || subjectId, expected: 0, allocated: 0 });
+          }
+          const qty = Number(activity.quantity) || 0;
+          subjectStatus.get(subjectId).expected += qty;
+        }
+
+        for (const [key, entry] of Object.entries(allocations)) {
+          const [, subjectId] = key.split('-');
+          if (subjectStatus.has(subjectId)) {
+            subjectStatus.get(subjectId).allocated += entry.length;
+          }
+        }
+
+        for (const [_, status] of subjectStatus) {
+          const pct = status.expected > 0 ? Math.round((status.allocated / status.expected) * 100) : 100;
+          const emoji = pct === 100 ? '✅' : pct >= 80 ? '⚠️' : '❌';
+          log.push(`   ${emoji} ${status.name}: ${status.allocated}/${status.expected} aulas (${pct}%)`);
+        }
+
+        // Satisfação por Turma
+        log.push('');
+        log.push('🏫 Status por Turma (Aulas + Disciplinas):');
+        const classStatus = new Map();
+        const classSubjects = new Map(); // Rastrear disciplinas únicas por turma
+
+        for (const activity of data.activities) {
+          const classId = activity.classId;
+          if (!classStatus.has(classId)) {
+            const c = classMap.get(classId);
+            classStatus.set(classId, { name: c?.name || classId, expected: 0, allocated: 0 });
+            classSubjects.set(classId, new Set());
+          }
+          const qty = Number(activity.quantity) || 0;
+          classStatus.get(classId).expected += qty;
+          classSubjects.get(classId).add(activity.subjectId);
+        }
+
+        for (const [key, entry] of Object.entries(allocations)) {
+          const [classId] = key.split('-');
+          if (classStatus.has(classId)) {
+            classStatus.get(classId).allocated += entry.length;
+          }
+        }
+
+        for (const [classId, status] of classStatus) {
+          const pct = status.expected > 0 ? Math.round((status.allocated / status.expected) * 100) : 100;
+          const emoji = pct === 100 ? '✅' : pct >= 80 ? '⚠️' : '❌';
+          const uniqueSubjects = classSubjects.get(classId)?.size || 0;
+          log.push(`   ${emoji} ${status.name}: ${status.allocated}/${status.expected} aulas | ${uniqueSubjects} disciplina(s)`);
+        }
+      }
+
+      // === ANÁLISE DE SLOTS LIVRES ===
+      const slotsDetails = [];
+
+      // Contar slots usados por turma (otimizado)
+      const usedByClass = new Map();
+      for (const entry of Object.values(data.schedule)) {
+        if (entry.classId) {
+          usedByClass.set(entry.classId, (usedByClass.get(entry.classId) || 0) + 1);
+        }
+      }
+
+      // Calcular slots livres por turma
+      let totalPossible = 0;
+      let totalUsed = 0;
+      const freeSlotsWarn = [];
+      for (const cls of (data.classes || [])) {
+        // Total de slots = contagem REAL de slots permitidos por dia, não soma de IDs
+        let totalSlots = 0;
+        if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+          // activeSlotsByDay[dayIdx] é um ARRAY de IDs permitidos, contar o .length de cada
+          for (const daySlots of Object.values(cls.activeSlotsByDay)) {
+            if (Array.isArray(daySlots)) {
+              totalSlots += daySlots.length;
+            }
+          }
+        } else if (cls.activeSlots && Array.isArray(cls.activeSlots)) {
+          // Fallback legado: activeSlots aplicável a todos os dias
+          totalSlots = cls.activeSlots.length * DAYS.length;
+        } else {
+          // Sem informação: assumir 7 aulas/dia
+          totalSlots = 7 * DAYS.length;
+        }
+
+        const usedSlots = usedByClass.get(cls.id) || 0;
+        const freeSlots = totalSlots - usedSlots;
+
+        totalPossible += totalSlots;
+        totalUsed += usedSlots;
+
+        const pct = totalSlots > 0 ? Math.round((usedSlots / totalSlots) * 100) : 0;
+        slotsDetails.push(`   ${cls.name}: ${usedSlots}/${totalSlots} ocupado(s) (${freeSlots} livre(s), ${100 - pct}% disponível)`);
+
+        // Se há slots livres, marcar para alerta específico
+        if (freeSlots > 0) {
+          freeSlotsWarn.push(`${cls.name}: ${freeSlots} slot(s) livre(s)`);
+        }
+      }
+
+      if (pending === 0 && excess === 0) {
+        log.push('');
+        log.push('📊 ANÁLISE DE SLOTS:');
+        slotsDetails.forEach(line => log.push(line));
+
+        if (totalPossible > 0) {
+          const gridPct = Math.round((totalUsed / totalPossible) * 100);
+          const freeTotal = totalPossible - totalUsed;
+          log.push(`   TOTAL: ${totalUsed}/${totalPossible} slots ocupados (${freeTotal} livres, ${100 - gridPct}% capacidade disponível)`);
+        }
+      }
+
+      if (freeSlotsWarn.length > 0) {
+        log.push('⚠️ Slots livres não utilizados (verifique se deveriam virar pendência):');
+        freeSlotsWarn.slice(0, 10).forEach(item => log.push(`   • ${item}`));
+        if (freeSlotsWarn.length > 10) {
+          log.push(`   ... mais ${freeSlotsWarn.length - 10} turma(s) com slots livres.`);
+        }
+      }
+
+      // Mapa diário: cada turma deveria ter 7 aulas por dia (7*5 = 35 semanais)
+      const dailyCountByClass = new Map();
+      for (const cls of (data.classes || [])) {
+        dailyCountByClass.set(cls.id, Array(DAYS.length).fill(0));
+      }
+
+      for (const [scheduleKey, entry] of Object.entries(data.schedule)) {
+        // Parse schedule key format: classId-dayName-slotIdx
+        const parts = scheduleKey.split('-');
+        if (parts.length >= 3) {
+          const classId = parts[0];
+          const dayName = parts[1];
+          const dayIdx = DAYS.indexOf(dayName);
+
+          if (classId && dayIdx >= 0 && dayIdx < DAYS.length && dailyCountByClass.has(classId)) {
+            const arr = dailyCountByClass.get(classId);
+            arr[dayIdx] = (arr[dayIdx] || 0) + 1;
+          }
+        }
+      }
+      log.push('');
+      log.push('🗓️ Aulas por dia (esperado: 7 por dia, 35 semanais):');
+      for (const cls of (data.classes || [])) {
+        // Recalcular com validação: apenas contar aulas que estão em slots permitidos
+        const dailyByDay = Array(DAYS.length).fill(0);
+        const validAllocations = new Map(); // rastrear o que é válido
+
+        for (const [scheduleKey, entry] of Object.entries(data.schedule)) {
+          if (entry.classId !== cls.id) continue;
+
+          const parts = scheduleKey.split('-');
+          if (parts.length < 3) continue;
+          const [, dayName, slotStr] = parts;
+          const slotIdx = parseInt(slotStr, 10);
+          const dayIdx = DAYS.indexOf(dayName);
+
+          if (dayIdx < 0 || dayIdx >= DAYS.length) continue;
+
+          const slot = data.timeSlots[slotIdx];
+          if (!slot) continue;
+
+          const slotId = slot.id || String(slotIdx);
+          let isValidForDay = false;
+
+          // Validar se slot está permitido neste dia específico
+          if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+            const activeForDay = cls.activeSlotsByDay[dayIdx];
+            if (activeForDay && Array.isArray(activeForDay) && activeForDay.includes(slotId)) {
+              isValidForDay = true;
+            }
+          } else if (cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.includes(slotId)) {
+            // Fallback: se só tem activeSlots (sem dia específico), é válido se está em activeSlots
+            isValidForDay = true;
+          }
+
+          if (isValidForDay) {
+            dailyByDay[dayIdx]++;
+            validAllocations.set(scheduleKey, true);
+          }
+        }
+
+        const weekly = dailyByDay.reduce((a, b) => a + b, 0);
+        const parts = dailyByDay.map((n, idx) => `${DAYS[idx].slice(0, 3)}:${n}`);
+
+        // Calcular esperado corretamente
+        let expectedPerDay = 7;
+        let expectedWeekly = 35;
+        if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+          const firstDaySlots = Object.values(cls.activeSlotsByDay)[0];
+          expectedPerDay = Array.isArray(firstDaySlots) ? firstDaySlots.length : 7;
+          expectedWeekly = 0;
+          for (const daySlots of Object.values(cls.activeSlotsByDay)) {
+            if (Array.isArray(daySlots)) expectedWeekly += daySlots.length;
+          }
+        } else if (cls.activeSlots && Array.isArray(cls.activeSlots)) {
+          expectedPerDay = cls.activeSlots.length;
+          expectedWeekly = expectedPerDay * DAYS.length;
+        }
+
+        log.push(`   ${cls.name}: ${weekly}/${expectedWeekly} semanais | ${parts.join(' ')}`);
+      }
+
+      log.push('');
+      log.push('Legenda: ✅ = 100% | ⚠️ = 80-99% | ❌ = < 80%');
+
       setGenerationLog(log);
       setIsVerified(true); // Marca como verificado
       setGenerating(false);
@@ -402,20 +788,59 @@ const App = () => {
                     className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     aria-busy={generating}
                   >
-                    {generating ? (isVerified ? 'Gerando...' : 'Verificando...') : 
-                     (isVerified ? 'Gerar Novamente' : 
-                      (Object.keys(data.schedule || {}).length > 0 ? 'Verificar' : 'Gerar Agora'))}
+                    {generating ? (isVerified ? 'Gerando...' : 'Verificando...') :
+                      (isVerified ? 'Gerar Novamente' :
+                        (Object.keys(data.schedule || {}).length > 0 ? 'Verificar' : 'Gerar Agora'))}
                   </button>
                 </div>
               </div>
               {generationLog.length > 0 && (
                 <div
-                  className="bg-slate-800 text-slate-200 p-4 rounded-lg text-xs font-mono max-h-40 overflow-y-auto"
+                  ref={logContainerRef}
+                  className="bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100 p-4 rounded-lg border-l-4 border-emerald-500 shadow-lg max-h-96 overflow-y-auto"
                   role="log"
                   aria-live="polite"
                   aria-label="Log de geração da grade"
                 >
-                  {generationLog.map((log, i) => <div key={i}>{log}</div>)}
+                  <div className="mb-3 font-bold text-emerald-400 text-sm">📋 Log de Operação:</div>
+                  {generationLog.map((logLine, i) => {
+                    // Colorir diferentes tipos de mensagens
+                    let textColor = 'text-slate-300';
+                    let bgColor = '';
+                    let fontWeight = '';
+
+                    if (logLine.includes('✅')) {
+                      textColor = 'text-emerald-300';
+                      fontWeight = 'font-semibold';
+                    } else if (logLine.includes('❌') || logLine.includes('⚠️')) {
+                      textColor = 'text-orange-300';
+                      fontWeight = 'font-semibold';
+                    } else if (logLine.includes('🧹')) {
+                      textColor = 'text-blue-300';
+                      fontWeight = 'font-semibold';
+                    } else if (logLine.includes('💡')) {
+                      textColor = 'text-amber-300';
+                    } else if (logLine.includes('📍')) {
+                      textColor = 'text-cyan-300';
+                      fontWeight = 'font-medium';
+                    } else if (logLine.includes('•')) {
+                      textColor = 'text-slate-400';
+                      bgColor = 'bg-slate-800/50';
+                    } else if (logLine.includes('🔧') || logLine.includes('⏳')) {
+                      textColor = 'text-violet-300';
+                      fontWeight = 'font-semibold';
+                    }
+
+                    return (
+                      <div
+                        key={i}
+                        className={`text-xs py-1 px-2 ${textColor} ${bgColor} ${fontWeight} leading-relaxed`}
+                        style={{ fontFamily: 'menlo, monospace' }}
+                      >
+                        {logLine}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               <div className="flex flex-wrap gap-6 mb-4">

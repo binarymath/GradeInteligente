@@ -8,7 +8,6 @@
  * @property {string} end HH:MM
  * @property {'aula'|'intervalo'|'almoco'|'jantar'} type
  * @property {string} [shift] Turno (Manhã, Tarde, Noite, Integral (Manhã e Tarde), Integral (Tarde e Noite))
- * @property {number[]} [days] Array de dias (0=seg, 1=ter, 2=qua, 3=qui, 4=sex, 5=sab, 6=dom). Se vazio, aplica em todos os dias.
  */
 
 /** @typedef {Object} Teacher
@@ -30,7 +29,8 @@
  * @property {string} id
  * @property {string} name
  * @property {'Manhã'|'Tarde'|'Noite'|'Integral'} shift
- * @property {string[]} activeSlots IDs de TimeSlot ativos para a turma
+ * @property {string[]} activeSlots IDs de TimeSlot ativos para a turma (legado, compatibilidade)
+ * @property {Object.<number, string[]>} [activeSlotsByDay] Mapa de dia (0-6) para IDs de slots ativos naquele dia
  * @property {string} [classroomId]
  */
 

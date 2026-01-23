@@ -1,15 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, BookOpen, Coffee, Utensils, ArrowUp, ArrowDown, Trash2, Pencil, X, Check, Moon, Sun, Sunset, Sunrise, CloudSun } from 'lucide-react';
+import { Plus, BookOpen, Coffee, Utensils, ArrowUp, ArrowDown, Trash2, Pencil, X, Check, Moon, Sun, Sunset, Sunrise, CloudSun, GripVertical } from 'lucide-react';
 import { uid } from '../utils';
 
 const TimeSettingsSection = ({ data, setData }) => {
-  const [newSlot, setNewSlot] = useState({ start: '', end: '', type: '', shift: '', days: [] });
+  const [newSlot, setNewSlot] = useState({ start: '', end: '', type: '', shift: '' });
   const [shiftFilter, setShiftFilter] = useState('Todos');
   const [editingId, setEditingId] = useState(null);
-  const [editSlot, setEditSlot] = useState({ start: '', end: '', type: 'aula', shift: 'Manhã', days: [] });
-  
-  const weekDays = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
-  const weekDaysShort = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+  const [editSlot, setEditSlot] = useState({ start: '', end: '', type: 'aula', shift: 'Manhã' });
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
 
   const shiftOptions = ['Todos','Manhã','Tarde','Noite','Integral (Manhã e Tarde)','Integral (Tarde e Noite)'];
 
@@ -50,27 +49,22 @@ const TimeSettingsSection = ({ data, setData }) => {
     if (newSlot.shift) {
       slotData.shift = newSlot.shift;
     }
-    // Se nenhum dia foi selecionado, não incluir a propriedade days (aplica a todos os dias)
-    if (newSlot.days && newSlot.days.length > 0) {
-      slotData.days = newSlot.days;
-    }
     setData(prev => ({
       ...prev,
       timeSlots: [...prev.timeSlots, slotData]
     }));
-    setNewSlot({ start: '', end: '', type: '', shift: '', days: [] });
+    setNewSlot({ start: '', end: '', type: '', shift: '' });
   };
 
   const startEdit = (slot) => {
     setEditingId(slot.id);
     const defaultShift = slot.shift ? slot.shift : 'AUTO';
-    const defaultDays = slot.days ? [...slot.days] : [];
-    setEditSlot({ start: slot.start, end: slot.end, type: slot.type, shift: defaultShift, days: defaultDays });
+    setEditSlot({ start: slot.start, end: slot.end, type: slot.type, shift: defaultShift });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditSlot({ start: '', end: '', type: 'aula', shift: 'AUTO', days: [] });
+    setEditSlot({ start: '', end: '', type: 'aula', shift: 'AUTO' });
   };
 
   const saveEdit = () => {
@@ -85,18 +79,7 @@ const TimeSettingsSection = ({ data, setData }) => {
     }
     setData(prev => ({
       ...prev,
-      timeSlots: prev.timeSlots.map(s => {
-        if (s.id === editingId) {
-          const updated = { ...s, start: editSlot.start, end: editSlot.end, type: editSlot.type, shift: editSlot.shift };
-          if (editSlot.days && editSlot.days.length > 0) {
-            updated.days = editSlot.days;
-          } else {
-            delete updated.days;
-          }
-          return updated;
-        }
-        return s;
-      })
+      timeSlots: prev.timeSlots.map(s => s.id === editingId ? { ...s, start: editSlot.start, end: editSlot.end, type: editSlot.type, shift: editSlot.shift } : s)
     }));
     cancelEdit();
   };
@@ -111,6 +94,53 @@ const TimeSettingsSection = ({ data, setData }) => {
     if (targetIndex < 0 || targetIndex >= newSlots.length) return;
     [newSlots[index], newSlots[targetIndex]] = [newSlots[targetIndex], newSlots[index]];
     setData(prev => ({ ...prev, timeSlots: newSlots }));
+  };
+
+  const handleDragStart = (e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', e.currentTarget);
+    e.currentTarget.style.opacity = '0.4';
+  };
+
+  const handleDragEnd = (e) => {
+    e.currentTarget.style.opacity = '1';
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDragEnter = (e, index) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e, dropIndex) => {
+    e.preventDefault();
+    
+    if (draggedIndex === null || draggedIndex === dropIndex) return;
+    
+    const newSlots = [...data.timeSlots];
+    const draggedItem = newSlots[draggedIndex];
+    
+    // Remove o item da posição original
+    newSlots.splice(draggedIndex, 1);
+    
+    // Insere na nova posição
+    newSlots.splice(dropIndex, 0, draggedItem);
+    
+    setData(prev => ({ ...prev, timeSlots: newSlots }));
+    setDraggedIndex(null);
+    setDragOverIndex(null);
   };
 
   return (
@@ -139,73 +169,50 @@ const TimeSettingsSection = ({ data, setData }) => {
             </select>
           </div>
         </div>
-        <p className="text-sm text-slate-500 mb-6">Defina os blocos de tempo, tipo e turno. Para <strong>Intervalo, Almoço ou Jantar</strong>, selecione os dias específicos (ex: Segunda com horário diferente da terça em diante). <strong>Atenção:</strong> Ao filtrar por um turno, só aparecem horários explicitamente marcados com aquele turno (não os automáticos).</p>
+        <p className="text-sm text-slate-500 mb-6">Defina os blocos de tempo, tipo e turno. <strong>Atenção:</strong> Ao filtrar por um turno, só aparecem horários explicitamente marcados com aquele turno (não os automáticos).</p>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Início</label>
-              <input type="time" className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={newSlot.start} onChange={e => setNewSlot({...newSlot, start: e.target.value})} />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Fim</label>
-              <input type="time" className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={newSlot.end} onChange={e => setNewSlot({...newSlot, end: e.target.value})} />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Tipo</label>
-              <select className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={newSlot.type} onChange={e => setNewSlot({...newSlot, type: e.target.value})}>
-                <option value="">Escolha o tipo</option>
-                <option value="aula">Aula</option>
-                <option value="intervalo">Intervalo</option>
-                <option value="almoco">Almoço</option>
-                <option value="jantar">Jantar</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Turno</label>
-              <select className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={newSlot.shift} onChange={e => setNewSlot({...newSlot, shift: e.target.value})}>
-                <option value="">Automático</option>
-                <option value="Manhã">Manhã</option>
-                <option value="Tarde">Tarde</option>
-                <option value="Noite">Noite</option>
-                <option value="Integral (Manhã e Tarde)">Integral (Manhã e Tarde)</option>
-                <option value="Integral (Tarde e Noite)">Integral (Tarde e Noite)</option>
-              </select>
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-2">Dias (deixe vazio = todos os dias)</label>
-            <div className="grid grid-cols-2 gap-2">
-              {weekDays.map((day, idx) => (
-                <label key={idx} className="flex items-center gap-2 cursor-pointer hover:bg-white p-2 rounded transition">
-                  <input 
-                    type="checkbox" 
-                    checked={newSlot.days.includes(idx)}
-                    onChange={e => {
-                      if (e.target.checked) {
-                        setNewSlot({...newSlot, days: [...newSlot.days, idx].sort((a,b) => a-b)});
-                      } else {
-                        setNewSlot({...newSlot, days: newSlot.days.filter(d => d !== idx)});
-                      }
-                    }}
-                    className="rounded border-slate-300"
-                  />
-                  <span className="text-xs text-slate-600">{weekDaysShort[idx]}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-        
-        <div className="flex justify-end">
-           <button onClick={handleAddSlot} className="bg-blue-600 text-white rounded-lg px-6 py-2 text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"><Plus size={18} /> Adicionar</button>
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200">
+           <div className="col-span-1">
+             <label className="block text-xs font-semibold text-slate-500 mb-1">Início</label>
+             <input type="time" className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={newSlot.start} onChange={e => setNewSlot({...newSlot, start: e.target.value})} />
+           </div>
+           <div className="col-span-1">
+             <label className="block text-xs font-semibold text-slate-500 mb-1">Fim</label>
+             <input type="time" className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={newSlot.end} onChange={e => setNewSlot({...newSlot, end: e.target.value})} />
+           </div>
+           <div className="col-span-1">
+             <label className="block text-xs font-semibold text-slate-500 mb-1">Tipo</label>
+             <select className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={newSlot.type} onChange={e => setNewSlot({...newSlot, type: e.target.value})}>
+               <option value="">Escolha o tipo</option>
+               <option value="aula">Aula</option>
+               <option value="intervalo">Intervalo</option>
+               <option value="almoco">Almoço</option>
+               <option value="jantar">Jantar</option>
+             </select>
+           </div>
+           <div className="col-span-1">
+             <label className="block text-xs font-semibold text-slate-500 mb-1">Turno</label>
+             <select className="w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={newSlot.shift} onChange={e => setNewSlot({...newSlot, shift: e.target.value})}>
+               <option value="">Automático</option>
+               <option value="Manhã">Manhã</option>
+               <option value="Tarde">Tarde</option>
+               <option value="Noite">Noite</option>
+               <option value="Integral (Manhã e Tarde)">Integral (Manhã e Tarde)</option>
+               <option value="Integral (Tarde e Noite)">Integral (Tarde e Noite)</option>
+             </select>
+           </div>
+           <button onClick={handleAddSlot} className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"><Plus size={18} /> Adicionar</button>
         </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
         <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-          <h3 className="font-bold text-slate-700">Grade Horária ({filteredSlots.length}{shiftFilter !== 'Todos' ? ` / ${data.timeSlots.length}` : ''})</h3>
+          <div>
+            <h3 className="font-bold text-slate-700">Grade Horária ({filteredSlots.length}{shiftFilter !== 'Todos' ? ` / ${data.timeSlots.length}` : ''})</h3>
+            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+              <GripVertical size={12} /> Arraste os horários para reordenar
+            </p>
+          </div>
         </div>
         <div className="p-2 overflow-x-auto scrollbar-elegant">
           <table className="w-full text-sm text-left min-w-[650px]">
@@ -215,16 +222,38 @@ const TimeSettingsSection = ({ data, setData }) => {
                 <th className="px-4 py-3">Horário</th>
                 <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3">Turno</th>
-                <th className="px-4 py-3">Dias</th>
                 <th className="px-4 py-3 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredSlots.map((slot, index) => {
                 const originalIndex = data.timeSlots.findIndex(s => s.id === slot.id);
+                const isDragging = draggedIndex === originalIndex;
+                const isDragOver = dragOverIndex === originalIndex && draggedIndex !== originalIndex;
                 return (
-                <tr key={slot.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 text-slate-400 font-mono text-xs">{index + 1}</td>
+                <tr 
+                  key={slot.id} 
+                  className={`transition-all ${
+                    isDragging ? 'opacity-40' : 'hover:bg-slate-50'
+                  } ${
+                    isDragOver ? 'border-t-2 border-blue-500 bg-blue-50' : ''
+                  }`}
+                  draggable={editingId !== slot.id}
+                  onDragStart={(e) => handleDragStart(e, originalIndex)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={handleDragOver}
+                  onDragEnter={(e) => handleDragEnter(e, originalIndex)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, originalIndex)}
+                >
+                  <td className="px-4 py-3 text-slate-400 font-mono text-xs">
+                    <div className="flex items-center gap-2">
+                      {editingId !== slot.id && (
+                        <GripVertical size={14} className="text-slate-300 cursor-grab active:cursor-grabbing" />
+                      )}
+                      {index + 1}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 font-bold text-slate-700">
                     {editingId === slot.id ? (
                       <div className="flex items-center gap-2">
@@ -278,39 +307,6 @@ const TimeSettingsSection = ({ data, setData }) => {
                               : 'bg-fuchsia-100 text-fuchsia-700';
                       return <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${styles}`}>{lbl}{slot.shift ? '' : ' (auto)'}</span>;
                     })()}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {editingId === slot.id ? (
-                      <div className="space-y-1">
-                        <div className="text-xs font-semibold text-slate-600 mb-2">Selecione dias:</div>
-                        <div className="grid grid-cols-2 gap-1">
-                          {weekDaysShort.map((day, idx) => (
-                            <label key={idx} className="flex items-center gap-1 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={editSlot.days.includes(idx)}
-                                onChange={e => {
-                                  if (e.target.checked) {
-                                    setEditSlot({...editSlot, days: [...editSlot.days, idx].sort((a,b) => a-b)});
-                                  } else {
-                                    setEditSlot({...editSlot, days: editSlot.days.filter(d => d !== idx)});
-                                  }
-                                }}
-                                className="rounded border-slate-300 w-3 h-3"
-                              />
-                              <span className="text-xs text-slate-600">{day}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-slate-500">
-                        {slot.days && slot.days.length > 0 
-                          ? slot.days.map(d => weekDaysShort[d]).join(', ')
-                          : <span className="text-slate-400 italic">Todos os dias</span>
-                        }
-                      </span>
-                    )}
                   </td>
                   <td className="px-4 py-3 text-right flex justify-end gap-2">
                     {editingId === slot.id ? (

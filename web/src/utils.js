@@ -15,19 +15,3 @@ export const COLORS = [
 
 export const getAllSlots = (timeSlots) => timeSlots.map((slot, index) => ({ ...slot, originalIndex: index }));
 export const getLessonIndices = (timeSlots) => timeSlots.map((slot, index) => ({...slot, originalIndex: index})).filter(s => s.type === 'aula');
-
-/**
- * Verifica se um slot é válido para uma turma em um dia específico.
- * Considera a propriedade 'days' do TimeSlot para horários que variam por dia.
- * @param {Object} slot - TimeSlot
- * @param {number} dayIdx - Índice do dia (0=seg, 1=ter, 2=qua, 3=qui, 4=sex)
- * @returns {boolean} true se o slot é válido para este dia
- */
-export const isSlotValidForDay = (slot, dayIdx) => {
-  // Se o slot não tem restrição de dias, é válido para qualquer dia
-  if (!slot.days || slot.days.length === 0) {
-    return true;
-  }
-  // Se tem restrição de dias, verifica se o dia atual está incluído
-  return slot.days.includes(dayIdx);
-};

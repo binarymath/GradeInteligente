@@ -17,59 +17,217 @@ const ManualEditSection = ({ data, setData }) => {
       const lines = [];
       let totalExpected = 0;
       let totalAllocated = 0;
-      let totalMissing = 0;
+      let totalPending = 0;
 
-      // Índice de alocação por (turma-matéria)
-      const allocatedIndex = {};
-      Object.values(data.schedule || {}).forEach(entry => {
-        const key = `${entry.classId}-${entry.subjectId}`;
-        allocatedIndex[key] = (allocatedIndex[key] || 0) + 1;
+      // === ANÁLISE DE SLOTS (baseado em atividades, não em configuração) ===
+      let totalUsedSlots = 0;
+      const slotAnalysis = [];
+
+      // Helper inline para verificar slot ativo (já que scheduleHelpers pode não estar importado ou queremos garantir isolamento)
+      const isSlotActiveLocal = (classId, dayIdx, slotIdx) => {
+        const cls = data.classes.find(c => c.id === classId);
+        if (!cls) return false;
+        const slotObj = data.timeSlots[slotIdx];
+        const slotId = slotObj ? slotObj.id : String(slotIdx);
+
+        if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+          const activeSlotsForDay = cls.activeSlotsByDay[dayIdx];
+          return activeSlotsForDay && Array.isArray(activeSlotsForDay) && activeSlotsForDay.includes(slotId);
+        }
+        if (cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0) {
+          return cls.activeSlots.includes(slotId);
+        }
+        return true;
+      };
+
+      // Contar alocações por classe
+      const classAllocations = {};
+      Object.entries(data.schedule || {}).forEach(([key, entry]) => {
+        // Tentar extrair dia/slot da key ou entry para validação
+        let dayIdx = entry.dayIdx;
+        let slotIdx = entry.slotIdx;
+
+        if (entry.timeKey) {
+          const parts = entry.timeKey.split('-');
+          const dIdx = DAYS.indexOf(parts[0]);
+          if (dIdx >= 0) {
+            dayIdx = dIdx;
+          } else {
+            const maybeIdx = parseInt(parts[0]);
+            if (!isNaN(maybeIdx) && maybeIdx >= 0 && maybeIdx < DAYS.length) {
+              dayIdx = maybeIdx;
+            }
+          }
+        }
+
+        if (dayIdx === undefined || slotIdx === undefined) {
+          const parts = key.split('-');
+          if (parts.length >= 3) slotIdx = parseInt(parts[2]);
+          // Tentar recuperar dia da key se não tiver no entry
+          if (dayIdx === undefined) {
+            const dayPart = parts[1];
+            const dIdx = DAYS.indexOf(dayPart);
+            if (dIdx >= 0) dayIdx = dIdx;
+          }
+        }
+
+        if (dayIdx === undefined || dayIdx === -1 || slotIdx === undefined) {
+          return; // Ignora entrada malformada
+        }
+
+        if (!isSlotActiveLocal(entry.classId, dayIdx, slotIdx)) {
+          return; // GHOST: Slot inativo
+        }
+
+        // Verificação Adicional: Key Canônica
+        const expectedKey = `${entry.classId}-${DAYS[dayIdx]}-${slotIdx}`;
+        if (key !== expectedKey) {
+          return; // IGNORA KEYS FORA DO PADRÃO (Duplicatas fantasmas)
+        }
+
+        if (!classAllocations[entry.classId]) {
+          classAllocations[entry.classId] = 0;
+        }
+        classAllocations[entry.classId]++;
+        totalUsedSlots++;
       });
 
-      // Agregar esperados por (turma-matéria) e professores
+      // Coletar todas as atividades esperadas
       const expectedByKey = {};
-      const teachersByKey = {};
+      const seenActivities = new Set();
       (data.activities || []).forEach(act => {
-        const key = `${act.classId}-${act.subjectId}`;
-        const qty = parseInt(act.quantity) || 0;
-        expectedByKey[key] = (expectedByKey[key] || 0) + qty;
-        if (!teachersByKey[key]) teachersByKey[key] = new Set();
-        if (act.teacherId) teachersByKey[key].add(act.teacherId);
+        const key = `${act.classId}-${act.subjectId}-${act.teacherId || 'none'}`;
+        if (!seenActivities.has(key)) {
+          const qty = parseInt(act.quantity) || 0;
+          expectedByKey[key] = qty;
+          seenActivities.add(key);
+        }
       });
 
+      // Contar total esperado por classe
+      const classExpected = {};
+      Object.entries(expectedByKey).forEach(([key, expected]) => {
+        const [classId] = key.split('-');
+        if (!classExpected[classId]) {
+          classExpected[classId] = 0;
+        }
+        classExpected[classId] += expected;
+      });
+
+      // Mostrar análise por classe
+      for (const classData of (data.classes || [])) {
+        const expected = classExpected[classData.id] || 0;
+        const allocated = classAllocations[classData.id] || 0;
+        const free = Math.max(0, expected - allocated); // Isso estava errado? User reclamo de -1 livres. 
+        // Não, user reclamou de "Total de slots livres: -1". que é totalExpected - totalAllocated no header.
+        // Aqui é "free" slots na exibição por turma.
+        // Se allocated > expected, free = 0.
+        // Mas se allocated contava ghosts, allocated > expected era comum.
+
+        if (expected > 0) {
+          slotAnalysis.push(`   • ${classData.name}: ${allocated}/${expected} ocupado(s) (${free} livre(s))`);
+        }
+      }
+
+      // === ANÁLISE DE PENDÊNCIAS ===
+      // Índice de alocação por (turma-matéria-professor)
+      const allocatedIndex = {};
+      Object.entries(data.schedule || {}).forEach(([key, entry]) => {
+        // Validation Logic Duplicated/Strict
+        let dayIdx = entry.dayIdx;
+        let slotIdx = entry.slotIdx;
+
+        if (entry.timeKey) {
+          const parts = entry.timeKey.split('-');
+          const dIdx = DAYS.indexOf(parts[0]);
+          if (dIdx >= 0) dayIdx = dIdx;
+          else {
+            const maybeIdx = parseInt(parts[0]);
+            if (!isNaN(maybeIdx) && maybeIdx >= 0 && maybeIdx < DAYS.length) dayIdx = maybeIdx;
+          }
+        }
+        // Fallback key parse
+        if (dayIdx === undefined || slotIdx === undefined) {
+          const parts = key.split('-');
+          if (parts.length >= 3) {
+            slotIdx = parseInt(parts[2]);
+            const dIdx = DAYS.indexOf(parts[1]);
+            if (dIdx >= 0) dayIdx = dIdx;
+          }
+        }
+
+        if (dayIdx === undefined || dayIdx === -1 || slotIdx === undefined) return;
+        if (!isSlotActiveLocal(entry.classId, dayIdx, slotIdx)) return;
+
+        const expectedKey = `${entry.classId}-${DAYS[dayIdx]}-${slotIdx}`;
+        if (key !== expectedKey) return;
+
+        const compositeKey = `${entry.classId}-${entry.subjectId}-${entry.teacherId || 'none'}`;
+        allocatedIndex[compositeKey] = (allocatedIndex[compositeKey] || 0) + 1;
+      });
+
+      const missingDetails = [];
       Object.entries(expectedByKey).forEach(([key, expected]) => {
         const allocated = allocatedIndex[key] || 0;
         const missing = Math.max(0, expected - allocated);
         totalExpected += expected;
         totalAllocated += allocated;
-        totalMissing += missing;
+        totalPending += missing;
 
         if (missing > 0) {
-          const [classId, subjectId] = key.split('-');
+          const [classId, subjectId, teacherId] = key.split('-');
           const className = data.classes.find(c => c.id === classId)?.name || 'Turma';
           const subjectName = data.subjects.find(s => s.id === subjectId)?.name || 'Matéria';
-          const tSet = teachersByKey[key] || new Set();
-          let teacherName = 'Sem professor';
-          if (tSet.size === 1) {
-            const tid = Array.from(tSet)[0];
-            teacherName = data.teachers.find(t => t.id === tid)?.name || 'Professor';
-          } else if (tSet.size > 1) {
-            teacherName = 'Vários professores';
-          }
-          lines.push(`• ${subjectName} - ${className}: ${allocated}/${expected} (faltam ${missing}) — Prof: ${teacherName}`);
+          const teacherName = teacherId !== 'none'
+            ? (data.teachers.find(t => t.id === teacherId)?.name || 'Professor')
+            : 'Sem professor';
+          missingDetails.push({ className, subjectName, teacherName, allocated, expected, missing });
         }
       });
 
+      // Verificar se o totalAllocated por somatório de chaves bate com totalUsedSlots
+      // Se não bater, usar totalUsedSlots como referência (mais confiável)
+      const allocatedViaKeys = totalAllocated;
+      if (allocatedViaKeys !== totalUsedSlots) {
+        // Há discrepância - usar o valor real de slots usados
+        totalAllocated = totalUsedSlots;
+        totalPending = Math.max(0, totalExpected - totalAllocated);
+      }
+
+      // Organizar por matéria/turma para exibição
+      const detailsBySubjectClass = {};
+      missingDetails.forEach(d => {
+        const key = `${d.subjectName}-${d.className}`;
+        if (!detailsBySubjectClass[key]) {
+          detailsBySubjectClass[key] = [];
+        }
+        detailsBySubjectClass[key].push(d);
+      });
+
+      Object.entries(detailsBySubjectClass).forEach(([_, details]) => {
+        details.forEach(d => {
+          lines.push(`• ${d.subjectName} - ${d.className}: ${d.allocated}/${d.expected} (faltam ${d.missing}) — Prof: ${d.teacherName}`);
+        });
+      });
+
       const header = [
-        `📈 Total esperado: ${totalExpected} aula(s)`,
-        `✅ Alocado: ${totalAllocated} aula(s)`,
-        `⏳ Pendências: ${totalMissing} aula(s)`
+        '📊 ANÁLISE DE SLOTS',
+        `   Total de slots ocupados: ${totalUsedSlots}`,
+        `   Total de slots livres: ${totalExpected - totalAllocated}`,
+        '',
+        'Detalhamento por turma:',
+        ...slotAnalysis,
+        '',
+        '📊 ANÁLISE DE PENDÊNCIAS',
+        `   📈 Total esperado: ${totalExpected} aula(s)`,
+        `   ✅ Total alocado: ${totalAllocated} aula(s)`,
+        `   ⏳ Total de pendências: ${totalPending} aula(s)`,
       ];
 
-      if (totalMissing === 0) {
+      if (totalPending === 0) {
         setPendingLog([...header, '', '✅ Sem pendências para esta grade.']);
       } else {
-        setPendingLog([...header, '', ...lines]);
+        setPendingLog([...header, '', 'Detalhamento das pendências:', '', ...lines]);
       }
     } catch (e) {
       setPendingLog([`❌ Erro ao calcular pendências: ${e.message}`]);
@@ -84,7 +242,7 @@ const ManualEditSection = ({ data, setData }) => {
 
   const handlePrint = (classId) => {
     const className = data.classes.find(c => c.id === classId)?.name || 'Grade';
-    
+
     // Criar um estilo temporário para impressão
     const printStyle = document.createElement('style');
     printStyle.id = 'print-style-temp';
@@ -185,10 +343,10 @@ const ManualEditSection = ({ data, setData }) => {
         }
       }
     `;
-    
+
     document.head.appendChild(printStyle);
     setPrintingClass(classId);
-    
+
     setTimeout(() => {
       window.print();
       setTimeout(() => {
@@ -265,7 +423,7 @@ const ManualEditSection = ({ data, setData }) => {
   // Atualiza automaticamente o resumo de pendências quando a grade muda
   React.useEffect(() => {
     recomputePending();
-  }, [data.schedule, data.activities]);
+  }, [JSON.stringify(Object.keys(data.schedule || {})), JSON.stringify(data.activities)]);
 
   const handleCellClick = (dayIdx, slotIdx, classId) => {
     if (!editMode || !classId) return;
@@ -377,9 +535,18 @@ const ManualEditSection = ({ data, setData }) => {
   };
 
   const getLessonCount = (classId, subjectId) => {
-    return Object.values(data.schedule).filter(
-      entry => entry.classId === classId && entry.subjectId === subjectId
-    ).length;
+    const seen = new Set();
+    let count = 0;
+    for (const [key, entry] of Object.entries(data.schedule)) {
+      if (entry.classId === classId && entry.subjectId === subjectId) {
+        const dedupKey = key || `${entry.dayIdx ?? 'd?'}-${entry.slotIdx ?? 's?'}`;
+        if (!seen.has(dedupKey)) {
+          seen.add(dedupKey);
+          count += 1;
+        }
+      }
+    }
+    return count;
   };
 
   // Helper para obter cor consistente da matéria
@@ -431,191 +598,197 @@ const ManualEditSection = ({ data, setData }) => {
           </button>
         </div>
       </div>
-      
 
-        {/* Resumo de Pendências (atualizável) */}
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-semibold text-slate-700">Resumo de Pendências</h4>
-            <div className="flex gap-2">
-              <button
-                onClick={recomputePending}
-                className="text-xs px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700"
-              >
-                Atualizar
-              </button>
-            </div>
+
+      {/* Resumo de Pendências (atualizável) */}
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold text-slate-700">Resumo de Pendências</h4>
+          <div className="flex gap-2">
+            <button
+              onClick={recomputePending}
+              className="text-xs px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700"
+            >
+              Atualizar
+            </button>
           </div>
-          {pendingLog.length === 0 ? (
-            <p className="text-xs text-slate-500">Calculando...</p>
-          ) : (
-            <div className="max-h-48 overflow-y-auto space-y-1 text-xs text-slate-700">
-              {pendingLog.map((line, idx) => (
-                <div key={idx} className="bg-white border border-slate-200 rounded px-2 py-1">
-                  {line}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
-        {/* Log de operações manuais */}
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-semibold text-slate-700">Log de Edição Manual</h4>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setManualLog([])}
-                className="text-xs px-2 py-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300"
-              >
-                Limpar
-              </button>
-            </div>
+        {pendingLog.length === 0 ? (
+          <p className="text-xs text-slate-500">Calculando...</p>
+        ) : (
+          <div className="max-h-48 overflow-y-auto space-y-1 text-xs text-slate-700">
+            {pendingLog.map((line, idx) => (
+              <div key={idx} className="bg-white border border-slate-200 rounded px-2 py-1">
+                {line}
+              </div>
+            ))}
           </div>
-          {manualLog.length === 0 ? (
-            <p className="text-xs text-slate-500">Nenhuma operação registrada ainda.</p>
-          ) : (
-            <div className="max-h-40 overflow-y-auto space-y-1 text-xs text-slate-700">
-              {manualLog.map((line, idx) => (
-                <div key={idx} className="bg-white border border-slate-200 rounded px-2 py-1">
-                  {line}
-                </div>
-              ))}
-            </div>
-          )}
+        )}
+      </div>
+      {/* Log de operações manuais */}
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold text-slate-700">Log de Edição Manual</h4>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setManualLog([])}
+              className="text-xs px-2 py-1 rounded bg-slate-200 text-slate-700 hover:bg-slate-300"
+            >
+              Limpar
+            </button>
+          </div>
         </div>
+        {manualLog.length === 0 ? (
+          <p className="text-xs text-slate-500">Nenhuma operação registrada ainda.</p>
+        ) : (
+          <div className="max-h-40 overflow-y-auto space-y-1 text-xs text-slate-700">
+            {manualLog.map((line, idx) => (
+              <div key={idx} className="bg-white border border-slate-200 rounded px-2 py-1">
+                {line}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Lista de Turmas */}
       <div className="space-y-6">
         {data.classes.map(cls => {
-          // Garantir que activeSlots existe e é um array
-          const classActiveSlots = cls.activeSlots && Array.isArray(cls.activeSlots) ? cls.activeSlots : [];
-          
+          // Suporte a activeSlotsByDay (novo) e activeSlots (legado)
+          const classActiveSlots = (() => {
+            if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+              // Une todos os slots ativos em qualquer dia
+              return Array.from(new Set(Object.values(cls.activeSlotsByDay).flat()));
+            }
+            return cls.activeSlots && Array.isArray(cls.activeSlots) ? cls.activeSlots : [];
+          })();
+
           return (
-          <div
-            key={cls.id}
-            className={`bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden printable-schedule ${printingClass === cls.id ? 'print-now' : ''}`}
-          >
-            <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-indigo-100">
-              <h3 className="font-bold text-slate-800 flex items-center gap-3">
-                {/* Botão de Impressão (Antes do nome) */}
-                <button
-                  onClick={() => handlePrint(cls.id)}
-                  className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors print:hidden"
-                  title="Imprimir Grade"
-                >
-                  <Printer size={18} />
-                </button>
+            <div
+              key={cls.id}
+              className={`bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden printable-schedule ${printingClass === cls.id ? 'print-now' : ''}`}
+            >
+              <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-indigo-100">
+                <h3 className="font-bold text-slate-800 flex items-center gap-3">
+                  {/* Botão de Impressão (Antes do nome) */}
+                  <button
+                    onClick={() => handlePrint(cls.id)}
+                    className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors print:hidden"
+                    title="Imprimir Grade"
+                  >
+                    <Printer size={18} />
+                  </button>
 
-                <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-sm">{cls.name}</span>
-                <span className="text-xs text-slate-600">Turno: {cls.shift}</span>
-                {editMode && (
-                  <span className="ml-auto flex items-center gap-2 text-xs text-amber-700 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200">
-                    <AlertCircle size={14} />
-                    Editável
-                  </span>
-                )}
-              </h3>
-            </div>
+                  <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-sm">{cls.name}</span>
+                  <span className="text-xs text-slate-600">Turno: {cls.shift}</span>
+                  {editMode && (
+                    <span className="ml-auto flex items-center gap-2 text-xs text-amber-700 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200">
+                      <AlertCircle size={14} />
+                      Editável
+                    </span>
+                  )}
+                </h3>
+              </div>
 
-            <div className="p-4 overflow-x-auto">
-              {classActiveSlots.length === 0 ? (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
-                  <p className="text-amber-800 font-semibold mb-2">
-                    ⚠️ Nenhum horário ativo configurado
-                  </p>
-                  <p className="text-amber-700 text-sm">
-                    Esta turma não possui horários ativos selecionados. Vá em "Dados Institucionais" → "Turmas" e edite esta turma para selecionar os horários.
-                  </p>
-                </div>
-              ) : (
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr>
-                    <th className="border border-slate-300 p-3 bg-slate-100 font-bold text-slate-700">
-                      Horário
-                    </th>
-                    {DAYS.map(day => (
-                      <th key={day} className="border border-slate-300 p-3 bg-slate-100 font-bold text-slate-700">
-                        {day}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {lessonSlots
-                    .filter(slot => classActiveSlots.includes(slot.id))
-                    .map((slot, slotIdx) => {
-                    const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
-                    const isEmptyRow = isSlotRowEmpty(slot, cls.id);
-                    
-                    return (
-                      <tr key={slot.id} className={isEmptyRow ? 'print:hidden' : ''}>
-                        <td className="border border-slate-300 p-3 font-semibold text-slate-600 whitespace-nowrap bg-slate-50">
-                          {slot.start} - {slot.end}
-                        </td>
-                        {DAYS.map((_, dayIdx) => {
-                          const entry = getScheduleEntry(dayIdx, slot, cls.id);
-                          const isEmpty = !entry;
-                          const isAvailable = isSlotAvailable(dayIdx, absoluteIndex);
+              <div className="p-4 overflow-x-auto">
+                {classActiveSlots.length === 0 ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+                    <p className="text-amber-800 font-semibold mb-2">
+                      ⚠️ Nenhum horário ativo configurado
+                    </p>
+                    <p className="text-amber-700 text-sm">
+                      Esta turma não possui horários ativos selecionados. Vá em "Dados Institucionais" → "Turmas" e edite esta turma para selecionar os horários.
+                    </p>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr>
+                        <th className="border border-slate-300 p-3 bg-slate-100 font-bold text-slate-700">
+                          Horário
+                        </th>
+                        {DAYS.map(day => (
+                          <th key={day} className="border border-slate-300 p-3 bg-slate-100 font-bold text-slate-700">
+                            {day}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lessonSlots
+                        .filter(slot => classActiveSlots.includes(slot.id))
+                        .map((slot, slotIdx) => {
+                          const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
+                          const isEmptyRow = isSlotRowEmpty(slot, cls.id);
 
                           return (
-                            <td
-                              key={dayIdx}
-                              className={`border border-slate-300 p-2 relative group ${editMode ? 'cursor-pointer hover:bg-indigo-50' : ''
-                                } ${isEmpty ? 'bg-slate-50' : ''} ${isAvailable && isEmpty ? 'bg-green-50 border-2 border-green-300' : ''}`}
-                              onClick={() => editMode && !isEmpty && handleCellClick(dayIdx, absoluteIndex, cls.id)}
-                            >
-                              {entry ? (
-                                <div className="relative">
-                                  {/* Usar função helper para cor consistente */}
-                                  <div className={`p-2 rounded ${getSubjectColor(entry.subjectId).bg} ${getSubjectColor(entry.subjectId).border} border print:border-2 print:text-black`}>
-                                    <div className={`font-bold text-xs mb-1 ${getSubjectColor(entry.subjectId).text} print:text-black`}>
-                                      {data.subjects.find(s => s.id === entry.subjectId)?.name}
-                                    </div>
-                                    <div className="text-[11px] text-slate-600 print:text-slate-800">
-                                      {data.teachers.find(t => t.id === entry.teacherId)?.name}
-                                    </div>
-                                  </div>
-                                  {/* Tooltip com contagem (Ocultar na impressão) */}
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 whitespace-nowrap shadow-lg print:hidden">
-                                    {getLessonCount(entry.classId, entry.subjectId)} aulas alocadas
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
-                                  </div>
-                                  {editMode && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveLesson(dayIdx, absoluteIndex, cls.id);
-                                      }}
-                                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600"
-                                      title="Remover aula"
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
-                                  )}
-                                </div>
-                              ) : editMode ? (
-                                <button
-                                  onClick={() => handleCellClick(dayIdx, absoluteIndex, cls.id)}
-                                  className="w-full h-full min-h-[60px] flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                                >
-                                  <Plus size={20} />
-                                </button>
-                              ) : (
-                                <div className="min-h-[60px]"></div>
-                              )}
-                            </td>
+                            <tr key={slot.id} className={isEmptyRow ? 'print:hidden' : ''}>
+                              <td className="border border-slate-300 p-3 font-semibold text-slate-600 whitespace-nowrap bg-slate-50">
+                                {slot.start} - {slot.end}
+                              </td>
+                              {DAYS.map((_, dayIdx) => {
+                                const entry = getScheduleEntry(dayIdx, slot, cls.id);
+                                const isEmpty = !entry;
+                                const isAvailable = isSlotAvailable(dayIdx, absoluteIndex);
+
+                                return (
+                                  <td
+                                    key={dayIdx}
+                                    className={`border border-slate-300 p-2 relative group ${editMode ? 'cursor-pointer hover:bg-indigo-50' : ''
+                                      } ${isEmpty ? 'bg-slate-50' : ''} ${isAvailable && isEmpty ? 'bg-green-50 border-2 border-green-300' : ''}`}
+                                    onClick={() => editMode && !isEmpty && handleCellClick(dayIdx, absoluteIndex, cls.id)}
+                                  >
+                                    {entry ? (
+                                      <div className="relative">
+                                        {/* Usar função helper para cor consistente */}
+                                        <div className={`p-2 rounded ${getSubjectColor(entry.subjectId).bg} ${getSubjectColor(entry.subjectId).border} border print:border-2 print:text-black`}>
+                                          <div className={`font-bold text-xs mb-1 ${getSubjectColor(entry.subjectId).text} print:text-black`}>
+                                            {data.subjects.find(s => s.id === entry.subjectId)?.name}
+                                          </div>
+                                          <div className="text-[11px] text-slate-600 print:text-slate-800">
+                                            {data.teachers.find(t => t.id === entry.teacherId)?.name}
+                                          </div>
+                                        </div>
+                                        {/* Tooltip com contagem (Ocultar na impressão) */}
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 whitespace-nowrap shadow-lg print:hidden">
+                                          {getLessonCount(entry.classId, entry.subjectId)} aulas alocadas
+                                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                        </div>
+                                        {editMode && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleRemoveLesson(dayIdx, absoluteIndex, cls.id);
+                                            }}
+                                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600"
+                                            title="Remover aula"
+                                          >
+                                            <Trash2 size={12} />
+                                          </button>
+                                        )}
+                                      </div>
+                                    ) : editMode ? (
+                                      <button
+                                        onClick={() => handleCellClick(dayIdx, absoluteIndex, cls.id)}
+                                        className="w-full h-full min-h-[60px] flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                      >
+                                        <Plus size={20} />
+                                      </button>
+                                    ) : (
+                                      <div className="min-h-[60px]"></div>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
                           );
                         })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
-          </div>
-        );
+          );
         })}
       </div>
 

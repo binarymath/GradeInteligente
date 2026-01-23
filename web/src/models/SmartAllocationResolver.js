@@ -1,4 +1,4 @@
-import { DAYS, isSlotValidForDay } from '../utils';
+import { DAYS } from '../utils';
 import { computeSlotShift } from '../utils/time';
 import { LIMITS } from '../constants/schedule';
 
@@ -132,35 +132,42 @@ class SmartAllocationResolver {
     this.bookedEntries = [];
 
     for (const [key, entry] of Object.entries(this.schedule)) {
-      const [classId, dayStr, slotStr] = key.split('-');
+      if (typeof key !== 'string') continue;
+      const parts = key.split('-');
+      if (parts.length < 3) continue;
+
+      const [classId, dayStr, slotStr] = parts;
       const dayIdx = DAYS.indexOf(dayStr);
-      const slotIdx = parseInt(slotStr);
+      const slotIdx = parseInt(slotStr, 10);
 
-      if (dayIdx >= 0 && slotIdx >= 0) {
-        const timeKey = `${dayStr}-${slotIdx}`;
+      if (dayIdx < 0 || Number.isNaN(slotIdx)) continue;
 
-        if (entry.teacherId) {
-          if (!this.teacherSchedule[entry.teacherId]) {
-            this.teacherSchedule[entry.teacherId] = {};
-          }
-          this.teacherSchedule[entry.teacherId][timeKey] = true;
+      const timeKey = `${dayStr}-${slotIdx}`;
+
+      if (entry?.teacherId) {
+        if (!this.teacherSchedule[entry.teacherId]) {
+          this.teacherSchedule[entry.teacherId] = {};
         }
-
-        if (!this.classSchedule[classId]) {
-          this.classSchedule[classId] = {};
-        }
-        this.classSchedule[classId][timeKey] = true;
-
-        this.bookedEntries.push({
-          teacherId: entry.teacherId,
-          classId: entry.classId,
-          subjectId: entry.subjectId,
-          dayIdx,
-          slotIdx,
-          start: this.timeSlots[slotIdx].start,
-          end: this.timeSlots[slotIdx].end
-        });
+        this.teacherSchedule[entry.teacherId][timeKey] = true;
       }
+
+      if (!this.classSchedule[classId]) {
+        this.classSchedule[classId] = {};
+      }
+      this.classSchedule[classId][timeKey] = true;
+
+      const ts = this.timeSlots[slotIdx];
+      if (!ts) continue;
+
+      this.bookedEntries.push({
+        teacherId: entry?.teacherId,
+        classId: entry?.classId,
+        subjectId: entry?.subjectId,
+        dayIdx,
+        slotIdx,
+        start: ts.start,
+        end: ts.end
+      });
     }
   }
 
@@ -427,24 +434,40 @@ class SmartAllocationResolver {
 
     if (!slot) return false;
 
-    // 1. VERIFICAR SE SLOT ESTÁ EM activeSlots DA TURMA E SE É VÁLIDO PARA O DIA
+    // 1. VERIFICAR SE SLOT ESTÁ EM activeSlots/activeSlotsByDay DA TURMA
     const classData = this.data.classes?.find(c => c.id === activity.classId);
     if (!classData) {
       return false;
     }
 
-    // Verifica se o slot é válido para este dia específico (considera propriedade 'days')
-    if (!isSlotValidForDay(slot, dayIdx)) {
-      return false;
+    const slotId = this.timeSlots[slotIdx]?.id || String(slotIdx);
+    
+    // ============================================================
+    // VALIDAÇÃO DE SLOTS: ORDEM RIGOROSA
+    // 1. Se tem activeSlotsByDay com dados, USAR POR DIA
+    // 2. Se tem activeSlots, usar como fallback (mas activeSlotsByDay tem prioridade)
+    // 3. Se nenhum dos dois, apenas slots do tipo 'aula'
+    // ============================================================
+    
+    // Prioridade 1: activeSlotsByDay (novo - por dia)
+    if (classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
+      // Usa activeSlotsByDay: verifica se o slot está ativo especificamente para este dia
+      const activeSlotsForDay = classData.activeSlotsByDay[dayIdx];
+      if (!activeSlotsForDay || !Array.isArray(activeSlotsForDay) || !activeSlotsForDay.includes(slotId)) {
+        return false; // Slot não está ativo neste dia específico - NUNCA alocar aqui
+      }
     }
-
-    // Se a turma tem activeSlots definidos, slot DEVE estar neles
-    if (classData.activeSlots && Array.isArray(classData.activeSlots) && classData.activeSlots.length > 0) {
-      const slotId = this.timeSlots[slotIdx]?.id || String(slotIdx);
-      
-      // Verifica se este slot (por ID) está nos activeSlots da turma
+    // Prioridade 2: activeSlots (legado) - APENAS se activeSlotsByDay está VAZIO
+    else if (classData.activeSlots && Array.isArray(classData.activeSlots) && classData.activeSlots.length > 0) {
+      // Fallback: usa activeSlots (todos os dias)
       if (!classData.activeSlots.includes(slotId)) {
-        return false; // Slot não está nos activeSlots - é intervalo ou inativo
+        return false; // Slot não está nos activeSlots - NUNCA alocar aqui
+      }
+    }
+    // Prioridade 3: Sem restrição - apenas slots de aula
+    else {
+      if (slot.type && slot.type !== 'aula') {
+        return false;
       }
     }
 
@@ -668,17 +691,17 @@ class SmartAllocationResolver {
         if (!slot) continue;
 
         let blocked = false;
+        const slotId = this.timeSlots[slotIdx]?.id || String(slotIdx);
 
-        // Verifica se o slot é válido para este dia (considera dias específicos)
-        if (!isSlotValidForDay(slot, dayIdx)) {
-          blockedByInterval++;
-          blocked = true;
-          continue;
-        }
-
-        // Verifica intervalo/inativo da turma
-        if (classData?.activeSlots && Array.isArray(classData.activeSlots) && classData.activeSlots.length > 0) {
-          const slotId = this.timeSlots[slotIdx]?.id || String(slotIdx);
+        // Verifica intervalo/inativo da turma usando activeSlotsByDay ou activeSlots (legado)
+        if (classData?.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
+          const activeSlotsForDay = classData.activeSlotsByDay[dayIdx];
+          if (!activeSlotsForDay || !activeSlotsForDay.includes(slotId)) {
+            blockedByInterval++;
+            blocked = true;
+            continue;
+          }
+        } else if (classData?.activeSlots && Array.isArray(classData.activeSlots) && classData.activeSlots.length > 0) {
           if (!classData.activeSlots.includes(slotId)) {
             blockedByInterval++;
             blocked = true;
@@ -754,13 +777,21 @@ class SmartAllocationResolver {
 
     const label = `${subjectData?.name || activity.subjectId} (${classData?.name || activity.classId})`;
 
-    // Se a turma tem activeSlots muito restritos, sugerir liberar 1 slot marcado como intervalo
-    if (classData?.activeSlots && classData.activeSlots.length > 0) {
-      const totalLessonSlots = this.lessonIndices.length * DAYS.length;
-      const activeCount = classData.activeSlots.length;
-      if (activeCount < totalLessonSlots / 2) {
-        return `Revisar activeSlots da turma ${classData?.name}: liberar 1 horário marcado como intervalo pode acomodar ${label}.`;
+    // Se a turma tem activeSlots/activeSlotsByDay muito restritos, sugerir liberar 1 slot
+    let activeCount = 0;
+    const totalLessonSlots = this.lessonIndices.length * DAYS.length;
+    
+    if (classData?.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
+      // Conta slots ativos por dia
+      for (const dayIdx of Object.keys(classData.activeSlotsByDay)) {
+        activeCount += classData.activeSlotsByDay[dayIdx].length;
       }
+    } else if (classData?.activeSlots && classData.activeSlots.length > 0) {
+      activeCount = classData.activeSlots.length;
+    }
+    
+    if (activeCount > 0 && activeCount < totalLessonSlots / 2) {
+      return `Revisar horários ativos da turma ${classData?.name}: liberar 1 horário marcado como intervalo pode acomodar ${label}.`;
     }
 
     // Verifica se professor está indisponível em muitos slots

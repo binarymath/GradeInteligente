@@ -46,6 +46,22 @@ export const migrateData = (data) => {
     });
   }
 
+  // 🔧 MIGRAÇÃO: Limpar activeSlots legado quando activeSlotsByDay está definido
+  // Isso previne conflitos onde o sistema usava activeSlots (todos os dias)
+  // mesmo quando activeSlotsByDay (por dia) deveria estar em uso
+  if (migrated.classes && Array.isArray(migrated.classes)) {
+    migrated.classes = migrated.classes.map(cls => {
+      const cleaned = { ...cls };
+      
+      // Se tem activeSlotsByDay com dados, limpar activeSlots legado
+      if (cleaned.activeSlotsByDay && Object.keys(cleaned.activeSlotsByDay).length > 0) {
+        delete cleaned.activeSlots;
+      }
+      
+      return cleaned;
+    });
+  }
+
   return migrated;
 };
 

@@ -396,6 +396,83 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
       return;
     }
 
+    // LIMPAR AULAS EM HORÁRIOS/DIAS NÃO PERMITIDOS
+    const invalidAulas = [];
+    const invalidDetails = []; // Para log detalhado
+    
+    for (const [key, entry] of Object.entries(data.schedule)) {
+      if (!entry.classId || !entry.subjectId) continue;
+      
+      const parts = key.split('-');
+      if (parts.length < 3) continue;
+      const [classId, dayStr, slotStr] = parts;
+      const slotIdx = parseInt(slotStr, 10);
+      
+      const classData = data.classes?.find(c => c.id === classId);
+      const slot = data.timeSlots[slotIdx];
+      const subject = data.subjects?.find(s => s.id === entry.subjectId);
+      const teacher = data.teachers?.find(t => t.id === entry.teacherId);
+      
+      if (!classData || !slot) continue;
+      
+      const slotId = slot.id || String(slotIdx);
+      let allowed = true;
+      
+      // Verificar se slot está permitido
+      if (classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
+        const dayIdx = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'].indexOf(dayStr);
+        const activeForDay = dayIdx >= 0 ? classData.activeSlotsByDay[dayIdx] : null;
+        if (!activeForDay || !activeForDay.includes(slotId)) {
+          allowed = false;
+        }
+      } else if (classData.activeSlots && Array.isArray(classData.activeSlots) && classData.activeSlots.length > 0) {
+        if (!classData.activeSlots.includes(slotId)) {
+          allowed = false;
+        }
+      }
+      
+      if (!allowed) {
+        invalidAulas.push(key);
+        // Guardar detalhes para log
+        const subjectName = subject?.name || 'Desconhecida';
+        const teacherName = teacher?.name || 'Desconhecido';
+        invalidDetails.push({
+          className: classData.name,
+          subjectName,
+          teacherName,
+          day: dayStr,
+          time: `${slot.start}-${slot.end}`
+        });
+      }
+    }
+    
+    if (invalidAulas.length > 0) {
+      log.push(`🧹 Limpando ${invalidAulas.length} aula(s) em horários/dias NÃO permitidos...`);
+      
+      // Detalhar o que será removido
+      const groupedByClass = {};
+      invalidDetails.forEach(detail => {
+        if (!groupedByClass[detail.className]) {
+          groupedByClass[detail.className] = [];
+        }
+        groupedByClass[detail.className].push(detail);
+      });
+      
+      Object.entries(groupedByClass).forEach(([className, details]) => {
+        log.push(`   📍 ${className}:`);
+        details.forEach(d => {
+          log.push(`      • ${d.subjectName} (${d.teacherName}) - ${d.day} ${d.time}`);
+        });
+      });
+      
+      // Remover do schedule
+      for (const key of invalidAulas) {
+        delete data.schedule[key];
+      }
+      setData(prev => ({ ...prev, schedule: { ...data.schedule } }));
+      log.push(`✅ ${invalidAulas.length} aula(s) removida(s) com sucesso!`);
+    }
+
     const manager = new ScheduleManager(data, LIMITS);
     manager.importExistingSchedule(data.schedule);
 

@@ -8,8 +8,16 @@ export function useDisplayPeriods({ data, viewMode, selectedEntity }) {
     if (!selectedEntity) return periods;
     if (viewMode === 'class') {
       const currentClass = data.classes.find(c => c.id === selectedEntity);
-      if (currentClass?.activeSlots) {
-        return periods.filter(p => currentClass.activeSlots.includes(p.id));
+      if (currentClass) {
+        // Prioriza activeSlotsByDay se existir
+        if (currentClass.activeSlotsByDay && Object.keys(currentClass.activeSlotsByDay).length > 0) {
+          // Une todos os slots ativos em qualquer dia
+          const allActiveSlots = new Set(Object.values(currentClass.activeSlotsByDay).flat());
+          return periods.filter(p => allActiveSlots.has(p.id));
+        } else if (currentClass.activeSlots) {
+          // Fallback: usa activeSlots (legado)
+          return periods.filter(p => currentClass.activeSlots.includes(p.id));
+        }
       }
       return periods;
     }

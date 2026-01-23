@@ -29,6 +29,11 @@ export function describeEntry(entry, data) {
  * Formata um rótulo de slot de tempo
  */
 export function formatSlotLabel(timeSlots, dayIdx, slotIdx) {
+  // Validação de segurança
+  if (slotIdx === undefined || slotIdx === null || slotIdx < 0 || slotIdx >= timeSlots.length) {
+    return `${DAYS[dayIdx] || 'Dia?'}-${slotIdx || '?'}`;
+  }
+
   const slot = timeSlots[slotIdx];
   return slot ? `${DAYS[dayIdx]} ${slot.start}-${slot.end}` : `${DAYS[dayIdx]}-${slotIdx}`;
 }
@@ -143,4 +148,126 @@ export function buildPendingActivitiesForRepair(data, manager) {
   }
 
   return pending;
+}
+
+/**
+ * Verifica se um slot é ativo para uma turma
+ */
+export function isSlotActive(classData, dayIdx, slotId) {
+  if (!classData) return false;
+
+  // Prioriza activeSlotsByDay se existir
+  if (classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
+    const activeSlotsForDay = classData.activeSlotsByDay[dayIdx];
+    return activeSlotsForDay && Array.isArray(activeSlotsForDay) && activeSlotsForDay.includes(slotId);
+  }
+
+  // Fallback para activeSlots (global/legado)
+  if (classData.activeSlots && Array.isArray(classData.activeSlots) && classData.activeSlots.length > 0) {
+    return classData.activeSlots.includes(slotId);
+  }
+
+  // Se não houver restrição explícita, assume ativo (ou inativo? Pelo padrão, sem config = inativo ou ativo? 
+  // No ScheduleManager, sem config ele checa se é 'aula'. Vamos assumir que aqui, se não tem config, é melhor 
+  // retornar false para evitar falsos positivos ou true?
+  // ScheduleManager diz: "Sem restrição definida: permitir apenas slots de aula".
+  // Mas aqui não temos acesso a todos os timeSlots facilmente a menos que passemos.
+  // Vamos assumir true por padrão SE não houver configs restritivas, para não quebrar compatibilidade
+  // com turmas antigas sem activeSlots definido.
+  return true;
+}
+
+/**
+ * Remove entradas inválidas da grade (Deep Clean)
+ * Retorna uma nova grade limpa.
+ */
+export function cleanSchedule(data) {
+  const newSchedule = {};
+  const schedule = data.schedule || {};
+  const timeSlots = data.timeSlots || [];
+
+  let removedCount = 0;
+  const totalEntries = Object.keys(schedule).length;
+
+  Object.entries(schedule).forEach(([key, entry]) => {
+    // Validação básica de integridade
+    if (!entry || !entry.classId) {
+      removedCount++;
+      return;
+    }
+
+    // Recuperar índices
+    let dayIdx = entry.dayIdx;
+    let slotIdx = entry.slotIdx;
+
+    // Parse key se necessário
+    if (entry.timeKey) {
+      const parts = entry.timeKey.split('-');
+      const dIdx = DAYS.indexOf(parts[0]);
+      if (dIdx >= 0) dayIdx = dIdx;
+      else {
+        const maybe = parseInt(parts[0]);
+        if (!isNaN(maybe) && maybe >= 0 && maybe < DAYS.length) dayIdx = maybe;
+      }
+    }
+
+    if (dayIdx === undefined || slotIdx === undefined) {
+      const parts = key.split('-');
+      if (parts.length >= 3) {
+        slotIdx = parseInt(parts[2]);
+        // Try day from parts[1]
+        const dIdx = DAYS.indexOf(parts[1]);
+        if (dIdx >= 0) dayIdx = dIdx;
+        else {
+          const m = parseInt(parts[1]);
+          if (!isNaN(m)) dayIdx = m;
+        }
+      }
+    }
+
+    // Se ainda inválido, lixo.
+    if (dayIdx === undefined || dayIdx === -1 || slotIdx === undefined) {
+      removedCount++;
+      return;
+    }
+
+    // Validação de Slot Ativo
+    const cls = data.classes.find(c => c.id === entry.classId);
+    if (!cls) {
+      removedCount++; // Turma não existe mais
+      return;
+    }
+
+    // FIX: Resolver o Slot ID real a partir do índice para validar corretamente
+    const slotObj = timeSlots[slotIdx];
+    const realSlotId = slotObj ? slotObj.id : String(slotIdx);
+
+    if (!isSlotActive(cls, dayIdx, realSlotId)) {
+      removedCount++; // Slot inativo (GHOST)
+      return;
+    }
+
+    // Validação de Key Canônica
+    const expectedKey = `${entry.classId}-${DAYS[dayIdx]}-${slotIdx}`;
+
+    newSchedule[expectedKey] = {
+      ...entry,
+      timeKey: `${DAYS[dayIdx]}-${slotIdx}`, // Garante formato padrão
+      dayIdx,
+      slotIdx
+    };
+  });
+
+  // Safety Circuit Breaker: Se remover mais de 30% dos dados, aborta!
+  // Evita bugs de validação que limpem a grade inteira.
+  if (totalEntries > 0 && (removedCount / totalEntries) > 0.3) {
+    console.warn(`⚠️ Deep Clean ABORTED: Tried to remove ${removedCount}/${totalEntries} entries (${Math.round(removedCount / totalEntries * 100)}%). Verification logic mismatch suspected.`);
+    return schedule; // Retorna o original intacto
+  }
+
+  if (removedCount > 0) {
+    console.log(`🧹 Deep Clean: Removed ${removedCount} invalid entries.`);
+  }
+
+  return newSchedule;
 }

@@ -58,7 +58,7 @@ class SynchronousScheduler {
         this.log.push(`\n   📚 ${subject.name}`);
 
         const activeConfigs = (subject.synchronousConfigs || []).filter(c => c.isActive);
-        
+
         if (activeConfigs.length === 0) {
           this.log.push(`      ⚠️ Nenhuma configuração ativa`);
           continue;
@@ -112,12 +112,12 @@ class SynchronousScheduler {
 
     // Aloca no slot encontrado
     const allocated = this.allocateConfigActivities(configActivities, bestSlot);
-    
+
     if (!allocated) {
       this.log.push(`            ❌ Falha: Conflito de professor detectado`);
       return;
     }
-    
+
     const slotLabel = this.getSlotLabel(bestSlot);
     this.log.push(`            ✅ Alocado: ${slotLabel}`);
 
@@ -155,7 +155,7 @@ class SynchronousScheduler {
 
     // VALIDAÇÃO: Verifica se algum professor já está alocado neste horário
     const teachersInSlot = new Map(); // teacherId -> classId
-    
+
     // Primeiro, verifica o schedule existente
     for (const [schedKey, entry] of Object.entries(this.schedule)) {
       if (entry.timeKey === timeSlotKey && entry.teacherId) {
@@ -165,26 +165,26 @@ class SynchronousScheduler {
         teachersInSlot.get(entry.teacherId).push(entry.classId);
       }
     }
-    
+
     // Verifica se alguma atividade tem professor já ocupado
     for (const activity of activities) {
       if (activity.teacherId && teachersInSlot.has(activity.teacherId)) {
         const existingClasses = teachersInSlot.get(activity.teacherId);
         const teacher = this.data.teachers?.find(t => t.id === activity.teacherId);
         const teacherName = teacher?.name || activity.teacherId;
-        
+
         this.log.push(`            ⚠️ CONFLITO DETECTADO: Professor ${teacherName} já está`);
         this.log.push(`               ocupado neste horário em outra(s) turma(s)`);
         return false; // Não aloca se há conflito
       }
-      
+
       // Adiciona ao mapa para verificar conflitos internos
       if (!teachersInSlot.has(activity.teacherId)) {
         teachersInSlot.set(activity.teacherId, []);
       }
       teachersInSlot.get(activity.teacherId).push(activity.classId);
     }
-    
+
     // Se passou na validação, aloca
     for (const activity of activities) {
       const key = `${activity.classId}-${day}-${slotIndex}`;
@@ -197,7 +197,7 @@ class SynchronousScheduler {
         isGranularSync: true // Marca como sincronizada granularmente (v2.0)
       };
     }
-    
+
     return true;
   }
 
@@ -221,15 +221,28 @@ class SynchronousScheduler {
   isSlotAvailableForActivity(activity, timeSlotKey) {
     const [day, slotIndexStr] = timeSlotKey.split('-');
     const slotIndex = parseInt(slotIndexStr);
-    
+
     // 1. Verifica se está nos activeSlots da turma
     const classData = this.data.classes.find(c => c.id === activity.classId);
     if (!classData) return false;
-    
+
     const timeSlot = this.getTimeSlotByIndex(slotIndex);
     if (!timeSlot || timeSlot.type !== 'aula') return false;
-    
-    if (classData.activeSlots && !classData.activeSlots.includes(timeSlot.id)) {
+
+    // Check activeSlotsByDay (priority)
+    if (classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
+      const activeForDay = classData.activeSlotsByDay[parseInt(day)]; // day is string/index? check getSlotLabel
+      // getSlotLabel uses "Segunda" etc? No, getAllLessonSlots uses DAYS[dayIdx]. So 'day' is "Segunda", "Terça"...
+      // Wait, DAYS is imported. I need the index of 'day'.
+      const dayIdx = DAYS.indexOf(day);
+      if (dayIdx >= 0) {
+        const slotsForDay = classData.activeSlotsByDay[dayIdx];
+        if (!slotsForDay || !slotsForDay.includes(timeSlot.id)) {
+          return false;
+        }
+      }
+    } else if (classData.activeSlots && !classData.activeSlots.includes(timeSlot.id)) {
+      // Fallback to legacy global activeSlots
       return false;
     }
 
@@ -249,7 +262,7 @@ class SynchronousScheduler {
       if (entry.teacherId === teacherId) {
         const [, entryDay, entrySlotStr] = scheduleKey.split('-');
         const entrySlotIndex = parseInt(entrySlotStr);
-        
+
         if (entryDay === day && entrySlotIndex === slotIndex) {
           return false;
         }
@@ -264,13 +277,13 @@ class SynchronousScheduler {
    */
   getAllLessonSlots() {
     const slots = [];
-    
+
     for (let dayIdx = 0; dayIdx < DAYS.length; dayIdx++) {
       const day = DAYS[dayIdx];
-      
+
       for (let slotIdx = 0; slotIdx < this.data.timeSlots.length; slotIdx++) {
         const timeSlot = this.data.timeSlots[slotIdx];
-        
+
         if (timeSlot.type === 'aula') {
           slots.push(`${day}-${slotIdx}`);
         }
@@ -294,11 +307,11 @@ class SynchronousScheduler {
     const [day, slotIndexStr] = timeSlotKey.split('-');
     const slotIndex = parseInt(slotIndexStr);
     const timeSlot = this.getTimeSlotByIndex(slotIndex);
-    
+
     if (timeSlot) {
       return `${day} ${timeSlot.start}-${timeSlot.end}`;
     }
-    
+
     return timeSlotKey;
   }
 

@@ -185,10 +185,20 @@ class ScheduleManager {
     const teacher = this.data.teachers.find(t => t.id === activity.teacherId);
     if (teacher && teacher.unavailable.includes(timeKey)) return false;
 
-    // 2. Turno da Turma
+    // 2. Turno da Turma - verifica activeSlotsByDay primeiro, depois activeSlots (legado)
     const cls = this.data.classes.find(c => c.id === activity.classId);
-    // Se a turma não tem esse slot na grade (activeSlots), não dá
-    if (cls && !cls.activeSlots.includes(this.timeSlots[slotIdx].id)) return false;
+    const slotId = this.timeSlots[slotIdx]?.id || String(slotIdx);
+    
+    if (cls) {
+      // Prioriza activeSlotsByDay se existir
+      if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+        const activeSlotsForDay = cls.activeSlotsByDay[dayIdx];
+        if (!activeSlotsForDay || !activeSlotsForDay.includes(slotId)) return false;
+      } else if (cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0) {
+        // Fallback: usa activeSlots (todos os dias)
+        if (!cls.activeSlots.includes(slotId)) return false;
+      }
+    }
 
     // 3. Matéria Indisponível (se houver)
     const subject = this.data.subjects.find(s => s.id === activity.subjectId);
@@ -290,7 +300,17 @@ class ScheduleManager {
         if (teacher && teacher.unavailable.includes(timeKey)) { stats.teahcherUnavailable++; continue; }
 
         const cls = this.data.classes.find(c => c.id === classId);
-        if (cls && !cls.activeSlots.includes(this.timeSlots[slotIdx].id)) { stats.classInactive++; continue; }
+        const slotId = this.timeSlots[slotIdx]?.id || String(slotIdx);
+        if (cls) {
+          let isSlotActive = false;
+          if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+            const activeSlotsForDay = cls.activeSlotsByDay[dayIdx];
+            isSlotActive = activeSlotsForDay && activeSlotsForDay.includes(slotId);
+          } else if (cls.activeSlots && Array.isArray(cls.activeSlots)) {
+            isSlotActive = cls.activeSlots.includes(slotId);
+          }
+          if (!isSlotActive) { stats.classInactive++; continue; }
+        }
 
         if (cls) {
           const slotShift = computeSlotShift(this.timeSlots[slotIdx]);
@@ -353,9 +373,31 @@ class ScheduleManager {
     const teacher = this.data.teachers.find(t => t.id === teacherId);
     if (teacher && teacher.unavailable.includes(timeKey)) return false;
 
-    // 2. Disponibilidade da Turma (Slots ativos na grade da turma)
+    // 2. Disponibilidade da Turma (Slots ativos na grade da turma) - verifica activeSlotsByDay primeiro
     const cls = this.data.classes.find(c => c.id === classId);
-    if (cls && !cls.activeSlots.includes(this.timeSlots[slotIdx].id)) return false;
+    const slotId = this.timeSlots[slotIdx]?.id || String(slotIdx);
+    if (cls) {
+      let isSlotPermitted = false;
+      
+      if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+        const activeSlotsForDay = cls.activeSlotsByDay[dayIdx];
+        if (activeSlotsForDay && Array.isArray(activeSlotsForDay) && activeSlotsForDay.includes(slotId)) {
+          isSlotPermitted = true;
+        }
+      } else if (cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0) {
+        if (cls.activeSlots.includes(slotId)) {
+          isSlotPermitted = true;
+        }
+      } else {
+        // Sem restrição definida: permitir apenas slots de aula (não intervalo/almoco/etc)
+        const slot = this.timeSlots[slotIdx];
+        if (slot && (!slot.type || slot.type === 'aula')) {
+          isSlotPermitted = true;
+        }
+      }
+      
+      if (!isSlotPermitted) return false; // NUNCA alocar em slot não permitido
+    }
 
     // 3. Compatibilidade de Turno (Manhã/Tarde/Noite/Integral)
     // Garante que uma turma da Manhã não tenha aula à Tarde, etc.
@@ -413,9 +455,17 @@ class ScheduleManager {
    * @private
    */
   _areConsecutive(slotIdx1, slotIdx2) {
+    // Validação de segurança
+    if (slotIdx1 === undefined || slotIdx1 === null || slotIdx2 === undefined || slotIdx2 === null) {
+      return false;
+    }
+    if (slotIdx1 < 0 || slotIdx1 >= this.timeSlots.length || slotIdx2 < 0 || slotIdx2 >= this.timeSlots.length) {
+      return false;
+    }
+    
     return Math.abs(slotIdx1 - slotIdx2) === 1 &&
-      this.timeSlots[slotIdx1].type === 'aula' &&
-      this.timeSlots[slotIdx2].type === 'aula';
+      this.timeSlots[slotIdx1]?.type === 'aula' &&
+      this.timeSlots[slotIdx2]?.type === 'aula';
   }
 
   /**
@@ -497,14 +547,21 @@ class ScheduleManager {
     if (!this.classSchedule[activity.classId]) this.classSchedule[activity.classId] = {};
     this.classSchedule[activity.classId][timeKey] = true;
 
+    // Validação de segurança
+    const timeSlot = this.timeSlots[slotIdx];
+    if (!timeSlot) {
+      console.warn(`⚠️ TimeSlot inválido no índice ${slotIdx}`);
+      return;
+    }
+
     this.bookedEntries.push({
       teacherId: activity.teacherId,
       classId: activity.classId,
       subjectId: activity.subjectId,
       dayIdx,
       slotIdx,
-      start: this.timeSlots[slotIdx].start,
-      end: this.timeSlots[slotIdx].end
+      start: timeSlot.start,
+      end: timeSlot.end
     });
   }
 
@@ -769,12 +826,21 @@ class ScheduleManager {
             // Verificar se o slot é fisicamente válido (turno, etc)
             // Se for válido, marcamos como candidato a resolver limite.
             // Simplificação: Assumimos que shift está ok (verificado em allocate, mas aqui n checamos).
-            // Vamos checar activeSlots da turma pra ser seguro.
+            // Vamos checar activeSlots/activeSlotsByDay da turma pra ser seguro.
             const classObj = this.data.classes.find(c => c.id === activity.classId);
             const slotId = this.timeSlots[slotIdx].id;
             // Se turma pode ter aula nesse slot, então é um candidato LIMIT_BLOCKED
-            if (classObj && classObj.activeSlots.includes(slotId)) {
-              candidates.push({ type: 'LIMIT_BLOCKED', dayIdx, slotIdx });
+            if (classObj) {
+              let isSlotActive = false;
+              if (classObj.activeSlotsByDay && Object.keys(classObj.activeSlotsByDay).length > 0) {
+                const activeSlotsForDay = classObj.activeSlotsByDay[dayIdx];
+                isSlotActive = activeSlotsForDay && activeSlotsForDay.includes(slotId);
+              } else if (classObj.activeSlots) {
+                isSlotActive = classObj.activeSlots.includes(slotId);
+              }
+              if (isSlotActive) {
+                candidates.push({ type: 'LIMIT_BLOCKED', dayIdx, slotIdx });
+              }
             }
           }
         }
@@ -1092,15 +1158,22 @@ class ScheduleManager {
 
     // Reconstrói índices baseados na grade importada
     for (const [key, entry] of Object.entries(this.schedule)) {
+      // Validação de segurança
+      if (!entry || typeof entry !== 'object') continue;
+      if (!entry.timeKey || typeof entry.timeKey !== 'string') continue;
+      
       // Extrai dayIdx e slotIdx da key "classId-DayName-SlotIdx" ? 
       // Não, a key é "classId-timeKey", onde timeKey é "DayName-SlotIdx"
       // entry tem: { subjectId, teacherId, classId, timeKey, isDoubleLesson }
 
-      const [dayName, slotIdxStr] = entry.timeKey.split('-');
+      const parts = entry.timeKey.split('-');
+      if (parts.length < 2) continue;
+      
+      const [dayName, slotIdxStr] = parts;
       const dayIdx = DAYS.indexOf(dayName);
       const slotIdx = parseInt(slotIdxStr, 10);
 
-      if (dayIdx === -1 || isNaN(slotIdx)) continue;
+      if (dayIdx === -1 || Number.isNaN(slotIdx)) continue;
 
       // FIX CRÍTICO: Ignorar slots que não sejam de aula (Ex: Intervalos)
       // Se não filtrarmos, eles contam como "aula dada" e impedem o preenchimento dos slots reais.
