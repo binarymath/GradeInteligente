@@ -18,7 +18,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const [editingSubjectName, setEditingSubjectName] = useState('');
   const [editingSubjectShifts, setEditingSubjectShifts] = useState([]);
   const [editingSubjectIsSynchronous, setEditingSubjectIsSynchronous] = useState(false);
-  
+
   // Editor simplificado inline para aulas síncronas
   const [inlineSyncEditing, setInlineSyncEditing] = useState({ subjectId: null, configId: null, editingConfig: null, selectedDayForSlots: DAYS[0], classSearch: '' });
 
@@ -101,7 +101,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
       ...prev,
       subjects: prev.subjects.map(s => s.id === subject.id ? {
         ...s,
-        synchronousConfigs: [ ...(SynchronousConfigService.getSubjectConfigs(s) || []), dup ]
+        synchronousConfigs: [...(SynchronousConfigService.getSubjectConfigs(s) || []), dup]
       } : s)
     }));
   };
@@ -235,7 +235,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const handleEditClass = (cls) => {
     setNewClassName(cls.name);
     setNewClassShift(cls.shift || 'Manhã');
-    
+
     // Migração: se tem activeSlots (legado), converte para activeSlotsByDay
     if (cls.activeSlotsByDay) {
       setActiveSlotsByDay(cls.activeSlotsByDay);
@@ -252,7 +252,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
       setActiveSlotsByDay({});
       setSelectedClassSlots([]);
     }
-    
+
     setEditingClassId(cls.id);
     setClassNames([cls.name]);
     setIsAddingClass(true);
@@ -293,7 +293,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
         ...prev,
         classes: [...prev.classes, ...newClasses]
       }));
-      
+
       // Só fecha o formulário quando criar novas turmas
       resetClassForm();
     }
@@ -561,8 +561,8 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                               </span>
                             )}
                             {subject.isSynchronous && (
-                              <button 
-                                onClick={() => toggleInlineSyncEditor(subject)} 
+                              <button
+                                onClick={() => toggleInlineSyncEditor(subject)}
                                 className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 p-1 rounded transition-colors"
                                 title="Configurar aulas síncronas (simplificado)"
                               >
@@ -601,15 +601,15 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                               <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs font-bold text-blue-700">Configuração Síncrona Granular (inline)</span>
                                 <div className="flex items-center gap-2">
-                                  <button 
-                                    onClick={() => addInlineSyncConfig(subject)} 
+                                  <button
+                                    onClick={() => addInlineSyncConfig(subject)}
                                     className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
                                     title="Adicionar nova configuração de aula síncrona"
                                   >
                                     Adicionar
                                   </button>
-                                  <button 
-                                    onClick={() => saveAllInlineSyncConfigs(subject)} 
+                                  <button
+                                    onClick={() => saveAllInlineSyncConfigs(subject)}
                                     className="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700"
                                     title="Salvar todas as configurações desta matéria"
                                   >
@@ -636,9 +636,9 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                                             <div className="text-[10px] font-bold text-slate-700 mb-1">Dias da Semana</div>
                                             <div className="flex gap-1 flex-wrap">
                                               {DAYS.map(day => (
-                                                <button 
-                                                  key={day} 
-                                                  type="button" 
+                                                <button
+                                                  key={day}
+                                                  type="button"
                                                   onClick={() => {
                                                     const has = inlineSyncEditing.editingConfig.days.includes(day);
                                                     const updated = has
@@ -646,11 +646,11 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                                                       : [...inlineSyncEditing.editingConfig.days, day];
                                                     const newDay = updated.length > 0 ? updated[0] : DAYS[0];
                                                     setInlineSyncEditing(prev => ({ ...prev, selectedDayForSlots: newDay, editingConfig: { ...prev.editingConfig, days: updated } }));
-                                                  }} 
+                                                  }}
                                                   className={`px-2 py-1 rounded text-[10px] ${inlineSyncEditing.editingConfig.days.includes(day) ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
                                                   title={`${inlineSyncEditing.editingConfig.days.includes(day) ? 'Remover' : 'Adicionar'} ${day}`}
                                                 >
-                                                  {day.substring(0,3)}
+                                                  {day.substring(0, 3)}
                                                 </button>
                                               ))}
                                             </div>
@@ -659,14 +659,14 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                                             <div className="text-[10px] font-bold text-slate-700 mb-1">Horários das Aulas Síncronas ({inlineSyncEditing.selectedDayForSlots})</div>
                                             <div className="flex gap-1 mb-1 flex-wrap">
                                               {inlineSyncEditing.editingConfig.days.map(day => (
-                                                <button 
-                                                  key={day} 
-                                                  type="button" 
-                                                  onClick={() => setInlineSyncEditing(prev => ({ ...prev, selectedDayForSlots: day }))} 
+                                                <button
+                                                  key={day}
+                                                  type="button"
+                                                  onClick={() => setInlineSyncEditing(prev => ({ ...prev, selectedDayForSlots: day }))}
                                                   className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${inlineSyncEditing.selectedDayForSlots === day ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
                                                   title={`Ver horários de ${day}`}
                                                 >
-                                                  {day.substring(0,3)}
+                                                  {day.substring(0, 3)}
                                                 </button>
                                               ))}
                                             </div>
@@ -677,15 +677,15 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                                                   const slotKey = `${inlineSyncEditing.selectedDayForSlots}-${idx}`;
                                                   const isSel = inlineSyncEditing.editingConfig.timeSlots.includes(slotKey);
                                                   return (
-                                                    <button 
-                                                      key={slotKey} 
-                                                      type="button" 
+                                                    <button
+                                                      key={slotKey}
+                                                      type="button"
                                                       onClick={() => {
                                                         const updated = isSel
                                                           ? inlineSyncEditing.editingConfig.timeSlots.filter(k => k !== slotKey)
                                                           : [...inlineSyncEditing.editingConfig.timeSlots, slotKey];
                                                         setInlineSyncEditing(prev => ({ ...prev, editingConfig: { ...prev.editingConfig, timeSlots: updated } }));
-                                                      }} 
+                                                      }}
                                                       className={`w-full text-left px-2 py-1 mb-1 rounded text-[10px] ${isSel ? 'bg-blue-600 text-white' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                                                       title={`${isSel ? 'Remover' : 'Adicionar'} horário ${slot.start}-${slot.end}`}
                                                     >
@@ -699,27 +699,27 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                                             <div className="text-[10px] font-bold text-slate-700 mb-1">Turmas</div>
                                             <div className="flex items-center gap-2 mb-1">
                                               <input type="text" value={inlineSyncEditing.classSearch} onChange={e => setInlineSyncEditing(prev => ({ ...prev, classSearch: e.target.value }))} className="flex-1 border border-slate-300 rounded px-2 py-1 text-[11px] outline-none focus:border-blue-500" placeholder="Pesquisar turmas" />
-                                              <button 
-                                                type="button" 
+                                              <button
+                                                type="button"
                                                 onClick={() => {
                                                   const needle = inlineSyncEditing.classSearch.trim().toLowerCase();
                                                   const ids = data.classes.filter(c => (c.name || '').toLowerCase().includes(needle)).map(c => c.id);
                                                   const setIds = new Set(inlineSyncEditing.editingConfig.classes);
                                                   ids.forEach(id => setIds.add(id));
                                                   setInlineSyncEditing(prev => ({ ...prev, editingConfig: { ...prev.editingConfig, classes: Array.from(setIds) } }));
-                                                }} 
+                                                }}
                                                 className="text-[10px] bg-slate-200 text-slate-700 px-2 py-1 rounded hover:bg-slate-300"
                                                 title="Adicionar turmas filtradas à seleção"
                                               >
                                                 Selecionar filtradas
                                               </button>
-                                              <button 
-                                                type="button" 
+                                              <button
+                                                type="button"
                                                 onClick={() => {
                                                   const needle = inlineSyncEditing.classSearch.trim().toLowerCase();
                                                   const ids = new Set(data.classes.filter(c => (c.name || '').toLowerCase().includes(needle)).map(c => c.id));
                                                   setInlineSyncEditing(prev => ({ ...prev, editingConfig: { ...prev.editingConfig, classes: prev.editingConfig.classes.filter(id => !ids.has(id)) } }));
-                                                }} 
+                                                }}
                                                 className="text-[10px] bg-slate-200 text-slate-700 px-2 py-1 rounded hover:bg-slate-300"
                                                 title="Remover turmas filtradas da seleção"
                                               >
@@ -734,15 +734,15 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                                               }).map(cls => {
                                                 const active = inlineSyncEditing.editingConfig.classes.includes(cls.id);
                                                 return (
-                                                  <button 
-                                                    key={cls.id} 
-                                                    type="button" 
+                                                  <button
+                                                    key={cls.id}
+                                                    type="button"
                                                     onClick={() => {
                                                       const updated = active
                                                         ? inlineSyncEditing.editingConfig.classes.filter(id => id !== cls.id)
                                                         : [...inlineSyncEditing.editingConfig.classes, cls.id];
                                                       setInlineSyncEditing(prev => ({ ...prev, editingConfig: { ...prev.editingConfig, classes: updated } }));
-                                                    }} 
+                                                    }}
                                                     className={`w-full text-left px-2 py-1 mb-1 rounded text-[10px] ${active ? 'bg-indigo-600 text-white' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                                                     title={`${active ? 'Remover' : 'Adicionar'} turma ${cls.name}`}
                                                   >
@@ -758,15 +758,15 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                                             return <div className="text-[10px] text-red-600">{v.errors.join(' • ')}</div>;
                                           })()}
                                           <div className="flex justify-end gap-2">
-                                            <button 
-                                              onClick={() => cancelInlineSyncEdit()} 
+                                            <button
+                                              onClick={() => cancelInlineSyncEdit()}
                                               className="text-xs bg-slate-200 text-slate-700 px-2 py-1 rounded hover:bg-slate-300"
                                               title="Cancelar edição e descartar alterações"
                                             >
                                               Cancelar
                                             </button>
-                                            <button 
-                                              onClick={() => saveInlineSyncEdit(subject)} 
+                                            <button
+                                              onClick={() => saveInlineSyncEdit(subject)}
                                               className="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700"
                                               title="Salvar esta configuração"
                                             >
@@ -779,35 +779,35 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                                           <div className="text-[11px] text-slate-700">
                                             <span className="font-bold">{config.name}</span>
                                             <span className="ml-2 text-slate-500">
-                                              📅 {config.days.length} {config.days.length === 1 ? 'dia' : 'dias'} • 
-                                              🕐 {config.timeSlots.length} {config.timeSlots.length === 1 ? 'horário' : 'horários'} • 
+                                              📅 {config.days.length} {config.days.length === 1 ? 'dia' : 'dias'} •
+                                              🕐 {config.timeSlots.length} {config.timeSlots.length === 1 ? 'horário' : 'horários'} •
                                               👥 {config.classes.length} {config.classes.length === 1 ? 'turma' : 'turmas'}
                                             </span>
                                           </div>
                                           <div className="flex items-center gap-2">
-                                            <button 
-                                              onClick={() => toggleInlineSyncActive(subject, config.id)} 
+                                            <button
+                                              onClick={() => toggleInlineSyncActive(subject, config.id)}
                                               className={`text-xs px-2 py-1 rounded ${config.isActive ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}
                                               title={config.isActive ? 'Desativar esta configuração' : 'Ativar esta configuração'}
                                             >
                                               {config.isActive ? 'Ativa' : 'Inativa'}
                                             </button>
-                                            <button 
-                                              onClick={() => duplicateInlineSyncConfig(subject, config)} 
+                                            <button
+                                              onClick={() => duplicateInlineSyncConfig(subject, config)}
                                               className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded hover:bg-slate-200"
                                               title="Criar uma cópia desta configuração"
                                             >
                                               Duplicar
                                             </button>
-                                            <button 
-                                              onClick={() => editInlineSyncConfig(subject, config)} 
+                                            <button
+                                              onClick={() => editInlineSyncConfig(subject, config)}
                                               className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
                                               title="Editar esta configuração"
                                             >
                                               Editar
                                             </button>
-                                            <button 
-                                              onClick={() => deleteInlineSyncConfig(subject, config.id)} 
+                                            <button
+                                              onClick={() => deleteInlineSyncConfig(subject, config.id)}
                                               className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
                                               title="Remover esta configuração"
                                             >
@@ -1001,7 +1001,11 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                         <Users size={18} className="text-slate-400" />
                         <div>
                           <span className="font-medium text-slate-700 block">{cls.name}</span>
-                          <span className="text-[10px] text-slate-400">{cls.activeSlots.length} horários ativos</span>
+                          <span className="text-[10px] text-slate-400">
+                            {cls.activeSlotsByDay
+                              ? new Set(Object.values(cls.activeSlotsByDay).flat()).size
+                              : (cls.activeSlots || []).length} horários ativos
+                          </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Edit3, Trash2, Plus, X, Save, AlertCircle, Printer } from 'lucide-react';
 import { DAYS, COLORS } from '../utils';
+import { computeSlotShift } from '../utils/time';
 
 const ManualEditSection = ({ data, setData }) => {
   const [editMode, setEditMode] = useState(false);
@@ -12,6 +13,23 @@ const ManualEditSection = ({ data, setData }) => {
   const [manualLog, setManualLog] = useState([]); // Log simples para operações manuais
   const [pendingLog, setPendingLog] = useState([]); // Log de pendências por matéria/turma
 
+  // Helper para verificar se slot é ativo (agora no escopo do componente para reuso)
+  const isSlotActiveLocal = (classId, dayIdx, slotIdx) => {
+    const cls = data.classes.find(c => c.id === classId);
+    if (!cls) return false;
+    const slotObj = data.timeSlots[slotIdx];
+    const slotId = slotObj ? slotObj.id : String(slotIdx);
+
+    if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+      const activeSlotsForDay = cls.activeSlotsByDay[dayIdx];
+      return activeSlotsForDay && Array.isArray(activeSlotsForDay) && activeSlotsForDay.includes(slotId);
+    }
+    if (cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0) {
+      return cls.activeSlots.includes(slotId);
+    }
+    return true;
+  };
+
   const recomputePending = () => {
     try {
       const lines = [];
@@ -22,23 +40,6 @@ const ManualEditSection = ({ data, setData }) => {
       // === ANÁLISE DE SLOTS (baseado em atividades, não em configuração) ===
       let totalUsedSlots = 0;
       const slotAnalysis = [];
-
-      // Helper inline para verificar slot ativo (já que scheduleHelpers pode não estar importado ou queremos garantir isolamento)
-      const isSlotActiveLocal = (classId, dayIdx, slotIdx) => {
-        const cls = data.classes.find(c => c.id === classId);
-        if (!cls) return false;
-        const slotObj = data.timeSlots[slotIdx];
-        const slotId = slotObj ? slotObj.id : String(slotIdx);
-
-        if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
-          const activeSlotsForDay = cls.activeSlotsByDay[dayIdx];
-          return activeSlotsForDay && Array.isArray(activeSlotsForDay) && activeSlotsForDay.includes(slotId);
-        }
-        if (cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0) {
-          return cls.activeSlots.includes(slotId);
-        }
-        return true;
-      };
 
       // Contar alocações por classe
       const classAllocations = {};
@@ -397,7 +398,7 @@ const ManualEditSection = ({ data, setData }) => {
         }
 
         // 4. Verificar se a turma está ativa neste slot
-        if (!targetClass.activeSlots.includes(slot.id)) {
+        if (!isSlotActiveLocal(targetClass.id, dayIdx, absoluteIndex)) {
           return;
         }
 
@@ -537,8 +538,40 @@ const ManualEditSection = ({ data, setData }) => {
   const getLessonCount = (classId, subjectId) => {
     const seen = new Set();
     let count = 0;
+
+    // Obter turma para validação
+    const cls = data.classes.find(c => c.id === classId);
+    if (!cls) return 0;
+
     for (const [key, entry] of Object.entries(data.schedule)) {
       if (entry.classId === classId && entry.subjectId === subjectId) {
+
+        // RECUPERAÇÃO ROBUSTA DO DIA E SLOT (Mesma lógica do Analyzer)
+        let dayIdx = entry.dayIdx;
+        let slotIdx = entry.slotIdx;
+
+        if (entry.timeKey) {
+          const parts = entry.timeKey.split('-');
+          const dIdx = DAYS.indexOf(parts[0]);
+          if (dIdx >= 0) dayIdx = dIdx;
+          else {
+            const maybe = parseInt(parts[0]);
+            if (!isNaN(maybe) && maybe >= 0 && maybe < DAYS.length) dayIdx = maybe;
+          }
+        }
+
+        if (dayIdx === undefined || slotIdx === undefined) {
+          const parts = key.split('-');
+          if (parts.length >= 3) slotIdx = parseInt(parts[2]);
+          const dName = parts[1];
+          const dIdx = DAYS.indexOf(dName);
+          if (dIdx >= 0) dayIdx = dIdx;
+        }
+
+        // Se inválido ou fantasma, ignora na contagem visual
+        if (dayIdx === undefined || dayIdx === -1 || slotIdx === undefined) continue;
+        if (!isSlotActiveLocal(classId, dayIdx, slotIdx)) continue;
+
         const dedupKey = key || `${entry.dayIdx ?? 'd?'}-${entry.slotIdx ?? 's?'}`;
         if (!seen.has(dedupKey)) {
           seen.add(dedupKey);
@@ -716,7 +749,50 @@ const ManualEditSection = ({ data, setData }) => {
                     </thead>
                     <tbody>
                       {lessonSlots
-                        .filter(slot => classActiveSlots.includes(slot.id))
+                        .filter(slot => {
+                          // Filtro 1: Deve estar na lista de slots ATIVOS da classe
+                          if (!classActiveSlots.includes(slot.id)) return false;
+
+                          // Filtro 2 (Novo): Deve ser compatível com o Turno da classe
+                          // Isso remove slots fantasmas onde o activeSlots tem sujeira de outros turnos
+                          const slotShift = computeSlotShift(slot);
+
+                          if (cls.shift === 'Integral (Manhã e Tarde)') {
+                            return slotShift === 'Manhã' || slotShift === 'Tarde' || slotShift === 'Integral (Manhã e Tarde)';
+                          }
+                          if (cls.shift === 'Integral (Tarde e Noite)') {
+                            return slotShift === 'Tarde' || slotShift === 'Noite' || slotShift === 'Integral (Tarde e Noite)';
+                          }
+                          // Para turnos simples, deve ser match exato ou o slot ser "geral" (raro)
+                          if (slotShift !== cls.shift) return false;
+
+                          // Filtro 3 (Novo - Overlap): Remove slots vazios que colidem com slots preenchidos
+                          const parseTime = (t) => {
+                            const [h, m] = t.split(':').map(Number);
+                            return h * 60 + m;
+                          };
+                          const thisStart = parseTime(slot.start);
+                          const thisEnd = parseTime(slot.end);
+
+                          const isEmptyRow = isSlotRowEmpty(slot, cls.id);
+                          if (!isEmptyRow) return true; // Se tem aula, sempre mostra
+
+                          // Se está vazio, verifica se colide com algum slot que TEM aula nesta turma
+                          const hasOverlapWithContent = lessonSlots.some(other => {
+                            if (other.id === slot.id) return false;
+                            if (isSlotRowEmpty(other, cls.id)) return false; // Só nos importamos com colisões com slots CHEIOS
+
+                            const otherStart = parseTime(other.start);
+                            const otherEnd = parseTime(other.end);
+
+                            // Colisão simples: (StartA < EndB) && (EndA > StartB)
+                            return (thisStart < otherEnd && thisEnd > otherStart);
+                          });
+
+                          if (hasOverlapWithContent) return false; // Esconde o vazio colidente
+
+                          return true;
+                        })
                         .map((slot, slotIdx) => {
                           const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
                           const isEmptyRow = isSlotRowEmpty(slot, cls.id);

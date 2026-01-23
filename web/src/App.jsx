@@ -91,14 +91,25 @@ const App = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Auto-scroll para o log quando há novos registros
+  const prevLogLength = useRef(0);
+
+  // Auto-scroll inteligente: Topo ao iniciar, Fundo ao adicionar
   useEffect(() => {
     if (logContainerRef.current && generationLog.length > 0) {
       setTimeout(() => {
         if (logContainerRef.current) {
-          logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+          // Se o log foi resetado (estava vazio e agora tem conteúdo), rolar para o topo (Título)
+          if (prevLogLength.current === 0) {
+            logContainerRef.current.scrollTop = 0;
+          } else {
+            // Se já tinha conteúdo e cresceu, rolar para o fundo (Acompanhar log)
+            logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+          }
+          prevLogLength.current = generationLog.length;
         }
       }, 100);
+    } else if (generationLog.length === 0) {
+      prevLogLength.current = 0;
     }
   }, [generationLog]);
 
@@ -218,6 +229,11 @@ const App = () => {
     setGenerationLog(['🔍 Verificando grade restaurada...']);
 
     setTimeout(() => {
+      // Forçar rolagem para o topo ao iniciar
+      if (logContainerRef.current) {
+        logContainerRef.current.scrollTop = 0;
+      }
+
       const log = ['🔍 Verificando grade restaurada...'];
 
       if (!data.schedule || Object.keys(data.schedule).length === 0) {
