@@ -11,7 +11,9 @@ const ManualEditSection = ({ data, setData }) => {
   const [availableSlots, setAvailableSlots] = useState([]);
   const [printingClass, setPrintingClass] = useState(null);
   const [manualLog, setManualLog] = useState([]); // Log simples para operações manuais
-  const [pendingLog, setPendingLog] = useState([]); // Log de pendências por matéria/turma
+  const [pendingLog, setPendingLog] = useState([]); // Log de pendências por matéria/turma (Legacy text log)
+  const [pendingItems, setPendingItems] = useState([]); // Itens pendentes estruturados { classId, subjectId, missing, allocated, expected }
+  const [resolveModal, setResolveModal] = useState(null); // { item, suggestions: [] } se aberto
 
   // Helper para verificar se slot é ativo (agora no escopo do componente para reuso)
   const isSlotActiveLocal = (classId, dayIdx, slotIdx) => {
@@ -21,13 +23,200 @@ const ManualEditSection = ({ data, setData }) => {
     const slotId = slotObj ? slotObj.id : String(slotIdx);
 
     if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
-      const activeSlotsForDay = cls.activeSlotsByDay[dayIdx];
-      return activeSlotsForDay && Array.isArray(activeSlotsForDay) && activeSlotsForDay.includes(slotId);
+      const activeForDay = cls.activeSlotsByDay[dayIdx];
+      return activeForDay && Array.isArray(activeForDay) && activeForDay.includes(slotId);
     }
     if (cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0) {
       return cls.activeSlots.includes(slotId);
     }
     return true;
+  };
+
+  // Função para calcular sugestões de alocação (Simples + Troca)
+  const calculateSuggestions = (item) => {
+    const { classId, subjectId, teacherIds } = item;
+    const suggestions = [];
+
+    const targetClass = data.classes.find(c => c.id === classId);
+    const subject = data.subjects.find(s => s.id === subjectId);
+    if (!targetClass || !subject) return [];
+
+    const storedTeachers = teacherIds ? Array.from(teacherIds).filter(tid => tid !== 'none') : [];
+    const candidateTeachers = storedTeachers.length > 0
+      ? storedTeachers.map(tid => data.teachers.find(t => t.id === tid)).filter(Boolean)
+      : null;
+
+    // Helper: Validar disponibilidade de um professor num slot/dia
+    const isTeacherFree = (teacher, timeKey) => {
+      if (!teacher) return true; // Se sem prof, assume livre
+      if (teacher.unavailable && teacher.unavailable.includes(timeKey)) return false;
+      const busy = Object.values(data.schedule).some(
+        entry => entry.teacherId === teacher.id && entry.timeKey === timeKey
+      );
+      return !busy;
+    };
+
+    // Helper: Encontrar slots vazios na turma onde um professor X caberia
+    const findEmptySlotsForTeacher = (teacher) => {
+      const emptyList = [];
+      for (let d = 0; d < DAYS.length; d++) {
+        data.timeSlots.forEach((s, sIdx) => { // Assuming lessonSlots is data.timeSlots
+          if (s.type !== 'aula') return; // Ignorar intervalos
+
+          const tKey = `${DAYS[d]}-${sIdx}`;
+          // Slot deve ser Ativo na turma
+          if (!isSlotActiveLocal(classId, d, sIdx)) return;
+          // Slot deve ser Vazio na turma
+          if (data.schedule[`${classId}-${tKey}`]) return;
+          // Professor deve estar livre
+          if (teacher && !isTeacherFree(teacher, tKey)) return;
+
+          emptyList.push({ dayIdx: d, slotIdx: sIdx, timeKey: tKey, slotLabel: `${s.start}-${s.end}` });
+        });
+      }
+      return emptyList;
+    };
+
+    // Iterar sobre todos os slots da grade
+    for (let dayIdx = 0; dayIdx < DAYS.length; dayIdx++) {
+      data.timeSlots.forEach((slot, slotIdx) => { // Assuming lessonSlots is data.timeSlots
+        if (slot.type !== 'aula') return; // Ignorar intervalos
+
+        const absoluteIndex = slotIdx; // Since we are iterating data.timeSlots directly
+        const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
+        const scheduleKey = `${classId}-${timeKey}`;
+
+        // 1. O slot deve estar ativo na turma
+        if (!isSlotActiveLocal(classId, dayIdx, absoluteIndex)) return;
+
+        // 2. Verificar restrição da matéria alvo
+        if (subject.unavailable && subject.unavailable.includes(timeKey)) return;
+
+        const currentEntry = data.schedule[scheduleKey];
+
+        // Loop pelos professores candidatos da matéria pendente
+        const teachersToCheck = candidateTeachers || [{ id: '', name: 'Sem Professor' }];
+
+        teachersToCheck.forEach(teacher => {
+          // O professor alvo deve estar LIVRE neste horário (para assumir a aula)
+          if (!isTeacherFree(teacher, timeKey)) return;
+
+          if (!currentEntry) {
+            // === CENÁRIO 1: SLOT VAZIO (Sugestão Direta) ===
+            suggestions.push({
+              type: 'direct',
+              dayIdx,
+              slotIdx: absoluteIndex,
+              day: DAYS[dayIdx],
+              time: `${slot.start} - ${slot.end}`,
+              teacherId: teacher.id,
+              teacherName: teacher.name,
+              classId
+            });
+          } else {
+            // === CENÁRIO 2: SLOT OCUPADO -> TENTAR TROCA ===
+            // Verificar quem está ocupando (Professor B)
+            const occupantTeacherId = currentEntry.teacherId;
+            const occupantSubjectId = currentEntry.subjectId;
+            const occupantTeacher = data.teachers.find(t => t.id === occupantTeacherId);
+            const occupantSubject = data.subjects.find(s => s.id === occupantSubjectId);
+
+            // Evitar trocar com a mesma matéria (não faz sentido) ou professor fixo/travado?
+            if (occupantSubjectId === subjectId) return;
+
+            // Encontrar para onde o Professor B pode ir (Slot Vazio na mesma turma)
+            const moveCandidates = findEmptySlotsForTeacher(occupantTeacher);
+
+            moveCandidates.forEach(moveDest => {
+              // Verificar se a matéria do ocupante pode ir para o destino
+              if (occupantSubject.unavailable && occupantSubject.unavailable.includes(moveDest.timeKey)) return;
+
+              suggestions.push({
+                type: 'swap',
+                originalSlot: {
+                  day: DAYS[dayIdx], time: `${slot.start}-${slot.end}`,
+                  dayIdx, slotIdx: absoluteIndex, timeKey
+                },
+                destSlot: {
+                  day: DAYS[moveDest.dayIdx], time: moveDest.slotLabel,
+                  dayIdx: moveDest.dayIdx, slotIdx: moveDest.slotIdx, timeKey: moveDest.timeKey
+                },
+                targetTeacher: { id: teacher.id, name: teacher.name },
+                occupant: {
+                  subjectName: occupantSubject.name,
+                  teacherName: occupantTeacher?.name || 'Sem Prof',
+                  teacherId: occupantTeacherId,
+                  subjectId: occupantSubjectId
+                },
+                classId
+              });
+            });
+          }
+        });
+      });
+    }
+    return suggestions;
+  };
+
+  const handleResolveClick = (item) => {
+    const suggestions = calculateSuggestions(item);
+    setResolveModal({ item, suggestions });
+  };
+
+  const applySuggestion = (suggestion) => {
+    const { classId } = suggestion;
+    const { subjectId } = resolveModal.item;
+
+    if (suggestion.type === 'direct') {
+      // Adição Simples
+      const { dayIdx, slotIdx, teacherId } = suggestion;
+      const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
+      const scheduleKey = `${classId}-${timeKey}`;
+
+      setData(prev => ({
+        ...prev,
+        schedule: {
+          ...(prev.schedule || {}),
+          [scheduleKey]: { teacherId, subjectId, classId, timeKey }
+        }
+      }));
+      setManualLog(prev => [`Resolvido: +${data.subjects.find(s => s.id === subjectId)?.name} em ${DAYS[dayIdx]}`, ...prev]);
+
+    } else if (suggestion.type === 'swap') {
+      // Troca Complexa
+      const { originalSlot, destSlot, targetTeacher, occupant } = suggestion;
+
+      const keyOriginal = `${classId}-${originalSlot.timeKey}`; // Onde está o B, vai entrar o A (Alvo)
+      const keyDest = `${classId}-${destSlot.timeKey}`;         // Onde está Vazio, vai entrar o B (Ocupante)
+
+      setData(prev => {
+        const newSchedule = { ...(prev.schedule || {}) };
+
+        // 1. Mover Ocupante (B) para Destino
+        newSchedule[keyDest] = {
+          teacherId: occupant.teacherId,
+          subjectId: occupant.subjectId,
+          classId,
+          timeKey: destSlot.timeKey
+        };
+
+        // 2. Colocar Alvo (A) no Original (agora liberado)
+        newSchedule[keyOriginal] = {
+          teacherId: targetTeacher.id,
+          subjectId: subjectId,
+          classId,
+          timeKey: originalSlot.timeKey
+        };
+
+        return { ...prev, schedule: newSchedule };
+      });
+      setManualLog(prev => [
+        `Troca: ${occupant.subjectName} movido p/ ${destSlot.day} ${destSlot.time}. +${data.subjects.find(s => s.id === subjectId)?.name} em ${originalSlot.day}`,
+        ...prev
+      ]);
+    }
+
+    setResolveModal(null);
   };
 
   const recomputePending = () => {
@@ -36,6 +225,8 @@ const ManualEditSection = ({ data, setData }) => {
       let totalExpected = 0;
       let totalAllocated = 0;
       let totalPending = 0;
+
+      const newPendingItems = []; // Lista estruturada
 
       // === ANÁLISE DE SLOTS (baseado em atividades, não em configuração) ===
       let totalUsedSlots = 0;
@@ -100,15 +291,22 @@ const ManualEditSection = ({ data, setData }) => {
         totalUsedSlots++;
       });
 
-      // Coletar todas as atividades esperadas
+      // Coletar todas as atividades esperadas (Agrupado por MATÉRIA/TURMA)
       const expectedByKey = {};
+      const teachersByKey = {};
       const seenActivities = new Set();
+
       (data.activities || []).forEach(act => {
-        const key = `${act.classId}-${act.subjectId}-${act.teacherId || 'none'}`;
-        if (!seenActivities.has(key)) {
+        const checkKey = `${act.classId}-${act.subjectId}-${act.teacherId}`;
+        const aggKey = `${act.classId}-${act.subjectId}`;
+
+        if (!seenActivities.has(checkKey)) {
           const qty = parseInt(act.quantity) || 0;
-          expectedByKey[key] = qty;
-          seenActivities.add(key);
+          expectedByKey[aggKey] = (expectedByKey[aggKey] || 0) + qty;
+          seenActivities.add(checkKey);
+
+          if (!teachersByKey[aggKey]) teachersByKey[aggKey] = new Set();
+          if (act.teacherId) teachersByKey[aggKey].add(act.teacherId);
         }
       });
 
@@ -138,43 +336,44 @@ const ManualEditSection = ({ data, setData }) => {
       }
 
       // === ANÁLISE DE PENDÊNCIAS ===
-      // Índice de alocação por (turma-matéria-professor)
+      // Índice de alocação por (turma-matéria)
       const allocatedIndex = {};
       Object.entries(data.schedule || {}).forEach(([key, entry]) => {
-        // Validation Logic Duplicated/Strict
         let dayIdx = entry.dayIdx;
         let slotIdx = entry.slotIdx;
 
-        if (entry.timeKey) {
-          const parts = entry.timeKey.split('-');
-          const dIdx = DAYS.indexOf(parts[0]);
-          if (dIdx >= 0) dayIdx = dIdx;
-          else {
-            const maybeIdx = parseInt(parts[0]);
-            if (!isNaN(maybeIdx) && maybeIdx >= 0 && maybeIdx < DAYS.length) dayIdx = maybeIdx;
+        // PRIORIDADE 1: Parsear da Key
+        const parts = key.split('-');
+        if (parts.length >= 3) {
+          const sStr = parts[parts.length - 1];
+          const dStr = parts[parts.length - 2];
+          const maybeSlot = parseInt(sStr, 10);
+          const maybeDay = DAYS.indexOf(dStr);
+          if (!isNaN(maybeSlot) && maybeDay >= 0) {
+            slotIdx = maybeSlot;
+            dayIdx = maybeDay;
           }
         }
-        // Fallback key parse
-        if (dayIdx === undefined || slotIdx === undefined) {
-          const parts = key.split('-');
-          if (parts.length >= 3) {
-            slotIdx = parseInt(parts[2]);
-            const dIdx = DAYS.indexOf(parts[1]);
-            if (dIdx >= 0) dayIdx = dIdx;
+        // PRIORIDADE 2: Internal timeKey
+        if ((dayIdx === undefined || slotIdx === undefined) && entry.timeKey) {
+          const tParts = entry.timeKey.split('-');
+          const dIdx = DAYS.indexOf(tParts[0]);
+          if (dIdx >= 0) dayIdx = dIdx;
+          else {
+            const dNum = parseInt(tParts[0]);
+            if (!isNaN(dNum)) dayIdx = dNum;
           }
         }
 
         if (dayIdx === undefined || dayIdx === -1 || slotIdx === undefined) return;
         if (!isSlotActiveLocal(entry.classId, dayIdx, slotIdx)) return;
 
-        const expectedKey = `${entry.classId}-${DAYS[dayIdx]}-${slotIdx}`;
-        if (key !== expectedKey) return;
-
-        const compositeKey = `${entry.classId}-${entry.subjectId}-${entry.teacherId || 'none'}`;
-        allocatedIndex[compositeKey] = (allocatedIndex[compositeKey] || 0) + 1;
+        // Chave de agregação simplificada: Class-Subject
+        const aggKey = `${entry.classId}-${entry.subjectId}`;
+        allocatedIndex[aggKey] = (allocatedIndex[aggKey] || 0) + 1;
       });
 
-      // Coletar todas as atividades esperadas e calcular pendências
+      // Coletar totais e calcular pendências por MATÉRIA
       let totalExcess = 0;
       const excessDetails = [];
       const missingDetails = [];
@@ -185,37 +384,44 @@ const ManualEditSection = ({ data, setData }) => {
         const excess = Math.max(0, allocated - expected);
 
         totalExpected += expected;
-        totalAllocated += allocated; // Soma tudo que foi alocado para atividades CONHECIDAS
+        totalAllocated += allocated;
         totalPending += missing;
         totalExcess += excess;
 
+        const [classId, subjectId] = key.split('-');
+        const className = data.classes.find(c => c.id === classId)?.name || 'Turma';
+        const subjectName = data.subjects.find(s => s.id === subjectId)?.name || 'Matéria';
+
+        let teacherDisplay = '';
+        const teacherIds = teachersByKey[key];
+        if (teacherIds && teacherIds.size > 0) {
+          const names = Array.from(teacherIds).map(tid =>
+            data.teachers.find(t => t.id === tid)?.name || 'Prof.?'
+          ).join(' / ');
+          teacherDisplay = names;
+        } else {
+          teacherDisplay = 'Sem professor';
+        }
+
         if (missing > 0) {
-          const [classId, subjectId, teacherId] = key.split('-');
-          const className = data.classes.find(c => c.id === classId)?.name || 'Turma';
-          const subjectName = data.subjects.find(s => s.id === subjectId)?.name || 'Matéria';
-          const teacherName = teacherId !== 'none'
-            ? (data.teachers.find(t => t.id === teacherId)?.name || 'Professor')
-            : 'Sem professor';
-          missingDetails.push({ className, subjectName, teacherName, allocated, expected, missing });
+          const item = { className, subjectName, teacherName: teacherDisplay, allocated, expected, missing, classId, subjectId, teacherIds };
+          missingDetails.push(item);
+          newPendingItems.push(item);
         }
 
         if (excess > 0) {
-          const [classId, subjectId] = key.split('-');
-          const className = data.classes.find(c => c.id === classId)?.name || 'Turma';
-          const subjectName = data.subjects.find(s => s.id === subjectId)?.name || 'Matéria';
           excessDetails.push(`${subjectName} - ${className}: +${excess}`);
         }
       });
 
-      // Validar discrepância entre slots usados e alocações conhecidas
-      const unknownAllocationsCount = totalUsedSlots - totalAllocated;
+      const unknownAllocationsCount = Math.max(0, totalUsedSlots - totalAllocated);
       // totalAllocated aqui soma (Expected ou Reference) + Excess.
       // Se eu tenho 1 planned, 10 allocated. totalAllocated+=10.
       // Se totalUsedSlots=10. Diff=0.
       // Se tenho 0 planned (activity removed), 10 allocated. totalAllocated não soma nada (não entra no loop).
       // totalUsedSlots=10. Diff=10. -> Unknown/Unplanned.
 
-      // Organizar por matéria/turma para exibição
+      // Organizar por matéria/turma para exibição NO LOG DE TEXTO (Legado)
       const detailsBySubjectClass = {};
       missingDetails.forEach(d => {
         const key = `${d.subjectName}-${d.className}`;
@@ -241,7 +447,7 @@ const ManualEditSection = ({ data, setData }) => {
         '',
         '📊 ANÁLISE DE PENDÊNCIAS',
         `   📈 Total esperado: ${totalExpected} aula(s)`,
-        `   ✅ Total alocado (Atividades): ${totalAllocated} aula(s)`,
+        `   ✅ Total alocado (Conhecido): ${totalAllocated} aula(s)`,
       ];
 
       if (totalExcess > 0) {
@@ -254,18 +460,13 @@ const ManualEditSection = ({ data, setData }) => {
       header.push(`   ⏳ Total de pendências: ${totalPending} aula(s)`);
 
       const finalLog = [...header];
-
-      if (totalPending === 0) {
-        finalLog.push('', '✅ Sem pendências para esta grade.');
-      } else {
-        finalLog.push('', 'Detalhamento das pendências:', '', ...lines);
-      }
-
-      if (excessDetails.length > 0) {
-        finalLog.push('', 'Detalhamento de Excedentes:', ...excessDetails);
-      }
+      if (totalPending === 0) finalLog.push('', '✅ Sem pendências para esta grade.');
+      else finalLog.push('', 'Detalhamento das pendências:', '', ...lines);
+      if (excessDetails.length > 0) finalLog.push('', 'Detalhamento de Excedentes:', ...excessDetails);
 
       setPendingLog(finalLog);
+      setPendingItems(newPendingItems); // Salva estado estruturado
+
     } catch (e) {
       setPendingLog([`❌ Erro ao calcular pendências: ${e.message}`]);
     }
@@ -690,7 +891,7 @@ const ManualEditSection = ({ data, setData }) => {
       </div>
 
 
-      {/* Resumo de Pendências (atualizável) */}
+      {/* Resumo de Pendências (Visual + Ações) */}
       <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
         <div className="flex items-center justify-between mb-2">
           <h4 className="text-sm font-semibold text-slate-700">Resumo de Pendências</h4>
@@ -703,18 +904,128 @@ const ManualEditSection = ({ data, setData }) => {
             </button>
           </div>
         </div>
-        {pendingLog.length === 0 ? (
+
+        {pendingLog.length === 0 && pendingItems.length === 0 ? (
           <p className="text-xs text-slate-500">Calculando...</p>
         ) : (
-          <div className="max-h-48 overflow-y-auto space-y-1 text-xs text-slate-700">
-            {pendingLog.map((line, idx) => (
-              <div key={idx} className="bg-white border border-slate-200 rounded px-2 py-1">
+          <div className="max-h-64 overflow-y-auto space-y-2 text-xs text-slate-700">
+            {/* Renderização rica de itens pendentes */}
+            {pendingItems.length > 0 && pendingItems.map((item, idx) => (
+              <div key={idx} className="bg-white border border-slate-200 rounded p-2 flex items-center justify-between shadow-sm">
+                <div>
+                  <div className="font-bold text-indigo-700">{item.subjectName}</div>
+                  <div className="text-slate-500">{item.className} — {item.teacherName}</div>
+                  <div className="text-amber-600 font-semibold mt-1">
+                    Faltam {item.missing} de {item.expected}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleResolveClick(item)}
+                  className="flex flex-col items-center gap-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 p-2 rounded transition-colors"
+                  title="Encontrar horários livres para este professor nesta turma"
+                >
+                  <span className="text-lg">💡</span>
+                  <span className="text-[10px] font-bold">Resolver</span>
+                </button>
+              </div>
+            ))}
+
+            {/* Exibir linhas de log genéricas (totais, excessos) que não são itens acionáveis */}
+            {pendingLog.filter(l => !l.startsWith('•')).map((line, idx) => (
+              <div key={`log-${idx}`} className="text-slate-500 px-1 border-l-2 border-transparent">
                 {line}
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Modal de Sugestões (Resolver Pendência) */}
+      {resolveModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-indigo-50 rounded-t-xl">
+              <h3 className="font-bold text-indigo-900 flex items-center gap-2">
+                💡 Sugestões de Alocação
+              </h3>
+              <button onClick={() => setResolveModal(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-b border-slate-200">
+              <p className="text-sm text-slate-700">
+                Resolvendo: <strong>{resolveModal.item.subjectName}</strong> na turma <strong>{resolveModal.item.className}</strong>
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Mostrando horários onde a turma está livre E o professor ({resolveModal.item.teacherName}) está disponível.
+              </p>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1 space-y-2">
+              {resolveModal.suggestions.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  <p className="text-lg mb-2">😕 Nenhum horário encontrado</p>
+                  <p className="text-sm">Não há cruzamento livre entre a turma e o professor.</p>
+                </div>
+              ) : (
+                resolveModal.suggestions.map((sug, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => applySuggestion(sug)}
+                    className="w-full text-left bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 p-3 rounded-lg transition-all group"
+                  >
+                    {sug.type === 'swap' ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded border border-amber-200 font-bold uppercase tracking-wider">Troca</span>
+                            <div className="font-bold text-slate-700 group-hover:text-indigo-700">
+                              {sug.originalSlot.day} às {sug.originalSlot.time}
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-600 space-y-1">
+                            <div className="flex items-center gap-1">
+                              <span className="text-red-500">🔻 Sai:</span>
+                              <span>{sug.occupant.subjectName} ({sug.occupant.teacherName.split(' ')[0]})</span>
+                              <span className="text-slate-400 mx-1">→</span>
+                              <span className="font-semibold">{sug.destSlot.day} {sug.destSlot.time}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-green-600">BV Entra:</span>
+                              <span className="font-semibold">{resolveModal.item.subjectName}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-xs font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity pl-2">
+                          Trocar →
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="bg-green-100 text-green-800 text-[10px] px-1.5 py-0.5 rounded border border-green-200 font-bold uppercase tracking-wider">Direta</span>
+                            <div className="font-bold text-slate-700 group-hover:text-indigo-700">
+                              {sug.day} às {sug.time}
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Prof. {sug.teacherName}
+                          </div>
+                        </div>
+                        <div className="text-xs font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                          Alocar →
+                        </div>
+                      </div>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Log de operações manuais */}
       <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
         <div className="flex items-center justify-between mb-2">
