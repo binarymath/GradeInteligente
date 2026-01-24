@@ -14,6 +14,7 @@ const ManualEditSection = ({ data, setData }) => {
   const [pendingLog, setPendingLog] = useState([]); // Log de pendências por matéria/turma (Legacy text log)
   const [pendingItems, setPendingItems] = useState([]); // Itens pendentes estruturados { classId, subjectId, missing, allocated, expected }
   const [resolveModal, setResolveModal] = useState(null); // { item, suggestions: [] } se aberto
+  const [conflictToResolve, setConflictToResolve] = useState(null); // { teacherName, conflictClass, timeKey, entryKey, slotLabel }
 
   // Helper para verificar se slot é ativo (agora no escopo do componente para reuso)
   const isSlotActiveLocal = (classId, dayIdx, slotIdx) => {
@@ -22,9 +23,9 @@ const ManualEditSection = ({ data, setData }) => {
     const slotObj = data.timeSlots[slotIdx];
     const slotId = slotObj ? slotObj.id : String(slotIdx);
 
-    if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+    if (cls.activeSlotsByDay && typeof cls.activeSlotsByDay === 'object') {
       const activeForDay = cls.activeSlotsByDay[dayIdx];
-      return activeForDay && Array.isArray(activeForDay) && activeForDay.includes(slotId);
+      return !!(activeForDay && Array.isArray(activeForDay) && activeForDay.includes(slotId));
     }
     if (cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0) {
       return cls.activeSlots.includes(slotId);
@@ -32,7 +33,7 @@ const ManualEditSection = ({ data, setData }) => {
     return true;
   };
 
-  // Função para calcular sugestões de alocação (Simples + Troca)
+  // Função para calcular sugestões de alocação (Simples + Troca Local + Troca Remota)
   const calculateSuggestions = (item) => {
     const { classId, subjectId, teacherIds } = item;
     const suggestions = [];
@@ -46,116 +47,298 @@ const ManualEditSection = ({ data, setData }) => {
       ? storedTeachers.map(tid => data.teachers.find(t => t.id === tid)).filter(Boolean)
       : null;
 
-    // Helper: Validar disponibilidade de um professor num slot/dia
+    // --- HELPERS GENÉRICOS ---
+
+    // 1. Verifica se Slot é Ativo numa Turma Específica
+    const isSlotActiveInClass = (clsId, dIdx, sIdx) => {
+      // Se for a mesma turma do contexto, usa a função local (micro-otimização)
+      if (clsId === classId) return isSlotActiveLocal(clsId, dIdx, sIdx);
+
+      // Caso contrário, busca a turma e valida
+      const cls = data.classes.find(c => c.id === clsId);
+      if (!cls) return false;
+
+      const slotObj = data.timeSlots[sIdx];
+      const slotId = slotObj ? slotObj.id : String(sIdx);
+
+      if (cls.activeSlotsByDay && typeof cls.activeSlotsByDay === 'object') {
+        const activeForDay = cls.activeSlotsByDay[dIdx];
+        return !!(activeForDay && Array.isArray(activeForDay) && activeForDay.includes(slotId));
+      }
+      if (cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0) {
+        return cls.activeSlots.includes(slotId);
+      }
+      return true;
+    };
+
+    // 2. Verifica se Professor está Livre num Horário
     const isTeacherFree = (teacher, timeKey) => {
-      if (!teacher) return true; // Se sem prof, assume livre
+      if (!teacher) return true;
       if (teacher.unavailable && teacher.unavailable.includes(timeKey)) return false;
+      // Procura em todo o schedule se ele está alocado
       const busy = Object.values(data.schedule).some(
         entry => entry.teacherId === teacher.id && entry.timeKey === timeKey
       );
       return !busy;
     };
 
-    // Helper: Encontrar slots vazios na turma onde um professor X caberia
-    const findEmptySlotsForTeacher = (teacher) => {
+    // 3. Encontrar slots vazios numa turma específica onde o professor cabe
+    const findEmptySlotsInClass = (clsId, teacher) => {
       const emptyList = [];
       for (let d = 0; d < DAYS.length; d++) {
-        data.timeSlots.forEach((s, sIdx) => { // Assuming lessonSlots is data.timeSlots
-          if (s.type !== 'aula') return; // Ignorar intervalos
-
+        data.timeSlots.forEach((s, sIdx) => {
+          if (s.type !== 'aula') return; // Ignora intervalos
+          if (!s.start || !s.end) return; // Ignora slots mal formados
           const tKey = `${DAYS[d]}-${sIdx}`;
-          // Slot deve ser Ativo na turma
-          if (!isSlotActiveLocal(classId, d, sIdx)) return;
-          // Slot deve ser Vazio na turma
-          if (data.schedule[`${classId}-${tKey}`]) return;
-          // Professor deve estar livre
+
+          // Ativo?
+          if (!isSlotActiveInClass(clsId, d, sIdx)) return;
+
+          // Vazio?
+          if (data.schedule[`${clsId}-${tKey}`]) return;
+
+          // Professor Livre?
           if (teacher && !isTeacherFree(teacher, tKey)) return;
 
-          emptyList.push({ dayIdx: d, slotIdx: sIdx, timeKey: tKey, slotLabel: `${s.start}-${s.end}` });
+          emptyList.push({
+            dayIdx: d, slotIdx: sIdx, timeKey: tKey,
+            slotLabel: `${s.start}-${s.end}`, day: DAYS[d]
+          });
         });
       }
       return emptyList;
     };
 
-    // Iterar sobre todos os slots da grade
-    for (let dayIdx = 0; dayIdx < DAYS.length; dayIdx++) {
-      data.timeSlots.forEach((slot, slotIdx) => { // Assuming lessonSlots is data.timeSlots
-        if (slot.type !== 'aula') return; // Ignorar intervalos
+    // --- LÓGICA PRINCIPAL ---
 
-        const absoluteIndex = slotIdx; // Since we are iterating data.timeSlots directly
+    // Iterar sobre todos os slots da grade da turma ALVO
+    for (let dayIdx = 0; dayIdx < DAYS.length; dayIdx++) {
+      data.timeSlots.forEach((slot, slotIdx) => {
+        if (slot.type !== 'aula') return;
+        if (!slot.start || !slot.end) return; // Validação extra para evitar sugestões vazias "DIRETA às "
+
+        const absoluteIndex = slotIdx;
         const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
         const scheduleKey = `${classId}-${timeKey}`;
 
-        // 1. O slot deve estar ativo na turma
+        // 1. Slot Ativo?
         if (!isSlotActiveLocal(classId, dayIdx, absoluteIndex)) return;
 
-        // 2. Verificar restrição da matéria alvo
+        // 2. Matéria pode neste horário?
         if (subject.unavailable && subject.unavailable.includes(timeKey)) return;
 
         const currentEntry = data.schedule[scheduleKey];
-
-        // Loop pelos professores candidatos da matéria pendente
         const teachersToCheck = candidateTeachers || [{ id: '', name: 'Sem Professor' }];
 
         teachersToCheck.forEach(teacher => {
-          // O professor alvo deve estar LIVRE neste horário (para assumir a aula)
-          if (!isTeacherFree(teacher, timeKey)) return;
+          const teacherFree = isTeacherFree(teacher, timeKey);
 
-          if (!currentEntry) {
-            // === CENÁRIO 1: SLOT VAZIO (Sugestão Direta) ===
-            suggestions.push({
-              type: 'direct',
-              dayIdx,
-              slotIdx: absoluteIndex,
-              day: DAYS[dayIdx],
-              time: `${slot.start} - ${slot.end}`,
-              teacherId: teacher.id,
-              teacherName: teacher.name,
-              classId
-            });
-          } else {
-            // === CENÁRIO 2: SLOT OCUPADO -> TENTAR TROCA ===
-            // Verificar quem está ocupando (Professor B)
-            const occupantTeacherId = currentEntry.teacherId;
-            const occupantSubjectId = currentEntry.subjectId;
-            const occupantTeacher = data.teachers.find(t => t.id === occupantTeacherId);
-            const occupantSubject = data.subjects.find(s => s.id === occupantSubjectId);
-
-            // Evitar trocar com a mesma matéria (não faz sentido) ou professor fixo/travado?
-            if (occupantSubjectId === subjectId) return;
-
-            // Encontrar para onde o Professor B pode ir (Slot Vazio na mesma turma)
-            const moveCandidates = findEmptySlotsForTeacher(occupantTeacher);
-
-            moveCandidates.forEach(moveDest => {
-              // Verificar se a matéria do ocupante pode ir para o destino
-              if (occupantSubject.unavailable && occupantSubject.unavailable.includes(moveDest.timeKey)) return;
-
+          // === OPÇÃO A: Professor está Livre ===
+          if (teacherFree) {
+            if (!currentEntry) {
+              // 1. Sugestão Direta (Slot Vazio)
               suggestions.push({
-                type: 'swap',
-                originalSlot: {
-                  day: DAYS[dayIdx], time: `${slot.start}-${slot.end}`,
-                  dayIdx, slotIdx: absoluteIndex, timeKey
-                },
-                destSlot: {
-                  day: DAYS[moveDest.dayIdx], time: moveDest.slotLabel,
-                  dayIdx: moveDest.dayIdx, slotIdx: moveDest.slotIdx, timeKey: moveDest.timeKey
-                },
-                targetTeacher: { id: teacher.id, name: teacher.name },
-                occupant: {
-                  subjectName: occupantSubject.name,
-                  teacherName: occupantTeacher?.name || 'Sem Prof',
-                  teacherId: occupantTeacherId,
-                  subjectId: occupantSubjectId
-                },
-                classId
+                type: 'direct',
+                dayIdx, slotIdx: absoluteIndex,
+                day: DAYS[dayIdx], time: `${slot.start} - ${slot.end}`,
+                teacherId: teacher.id, teacherName: teacher.name, classId
               });
+            } else {
+              // 2. Sugestão de Troca Local (Slot Ocupado)
+              const occupantTeacherId = currentEntry.teacherId;
+              const occupantSubjectId = currentEntry.subjectId;
+
+              if (occupantSubjectId === subjectId) return; // Mesma matéria
+
+              const occupantTeacher = data.teachers.find(t => t.id === occupantTeacherId);
+              const occupantSubject = data.subjects.find(s => s.id === occupantSubjectId);
+
+              // Achar slot vazio na MESMA turma (classId)
+              const moveCandidates = findEmptySlotsInClass(classId, occupantTeacher);
+
+              moveCandidates.forEach(moveDest => {
+                if (occupantSubject.unavailable && occupantSubject.unavailable.includes(moveDest.timeKey)) return;
+
+                suggestions.push({
+                  type: 'swap',
+                  originalSlot: {
+                    day: DAYS[dayIdx], time: `${slot.start}-${slot.end}`,
+                    dayIdx, slotIdx: absoluteIndex, timeKey
+                  },
+                  destSlot: {
+                    day: moveDest.day, time: moveDest.slotLabel,
+                    dayIdx: moveDest.dayIdx, slotIdx: moveDest.slotIdx, timeKey: moveDest.timeKey
+                  },
+                  targetTeacher: { id: teacher.id, name: teacher.name },
+                  occupant: {
+                    subjectName: occupantSubject.name,
+                    teacherName: occupantTeacher?.name || 'Sem Prof',
+                    teacherId: occupantTeacherId, subjectId: occupantSubjectId
+                  },
+                  classId
+                });
+              });
+            }
+          }
+          // === OPÇÃO B: Professor está Ocupado (Tentativa de Troca Remota) ===
+          else if (teacher.id && !currentEntry) {
+            // Condição: Slot Alvo VAZIO, mas Professor OCUPADO em outra turma.
+            // Vamos achar ONDE ele está e se ele pode se mover LÁ.
+
+            const conflictEntryKey = Object.keys(data.schedule).find(k => {
+              const e = data.schedule[k];
+              return e.teacherId === teacher.id && e.timeKey === timeKey;
             });
+
+            if (conflictEntryKey) {
+              const conflictEntry = data.schedule[conflictEntryKey];
+              const conflictClassId = conflictEntry.classId;
+              const conflictClass = data.classes.find(c => c.id === conflictClassId);
+
+              // Se achou a turma conflituosa, temos 2 Opções Remotas
+              if (conflictClass) {
+
+                // -- OPÇÃO B1: Mover para Slot Vazio (Remote Move - Já Existente) --
+                const remoteCandidates = findEmptySlotsInClass(conflictClassId, teacher);
+                const conflictSubject = data.subjects.find(s => s.id === conflictEntry.subjectId);
+
+                remoteCandidates.forEach(remDest => {
+                  if (conflictSubject && conflictSubject.unavailable && conflictSubject.unavailable.includes(remDest.timeKey)) return;
+
+                  suggestions.push({
+                    type: 'remote_move',
+                    targetSlot: {
+                      day: DAYS[dayIdx], time: `${slot.start}-${slot.end}`,
+                      dayIdx, slotIdx: absoluteIndex, timeKey
+                    },
+                    remoteMove: {
+                      classId: conflictClassId, className: conflictClass.name,
+                      fromTime: `${slot.start}-${slot.end}`, toTime: `${remDest.day} ${remDest.slotLabel}`,
+                      toTimeKey: remDest.timeKey, originalKey: conflictEntryKey,
+                      subjectId: conflictEntry.subjectId, teacherId: teacher.id
+                    },
+                    targetTeacher: { id: teacher.id, name: teacher.name },
+                    classId
+                  });
+                });
+
+                // -- OPÇÃO B2: Trocar com outro Professor na Turma Remota (Remote Swap - NOVO) --
+                // Queremos livrar o horário 'timeKey' na 'conflictClassId' onde está 'teacher'.
+                // Vamos procurar alguém LÁ (occupantRemote) em OUTRO horário (timeKeyRemote)
+                // que possa trocar de lugar com 'teacher'.
+
+                for (let d = 0; d < DAYS.length; d++) {
+                  data.timeSlots.forEach((s, sIdx) => {
+                    if (s.type !== 'aula') return;
+                    const tKeyRem = `${DAYS[d]}-${sIdx}`;
+                    const sKeyRem = `${conflictClassId}-${tKeyRem}`;
+
+                    // Ignorar o próprio horário do conflito
+                    if (tKeyRem === timeKey) return;
+
+                    // Slot deve ser ativo e ter aula
+                    if (!isSlotActiveInClass(conflictClassId, d, sIdx)) return;
+                    const remoteEntry = data.schedule[sKeyRem];
+                    if (!remoteEntry) return;
+
+                    // Quem está lá?
+                    const remTeacherId = remoteEntry.teacherId;
+                    const remSubjectId = remoteEntry.subjectId;
+                    // Se for o mesmo professor, não adianta trocar (ele continuaria ocupado ou preso)
+                    if (remTeacherId === teacher.id) return;
+
+                    const remTeacher = data.teachers.find(t => t.id === remTeacherId);
+                    const remSubject = data.subjects.find(s => s.id === remSubjectId);
+
+                    // Validação da Troca Remota:
+                    // 1. Teacher (A) deve poder ir para tKeyRem
+                    if (!isTeacherFree(teacher, tKeyRem)) return; // Mas ele tem que ser free GLOBALMENTE (excluindo a aula atual dele, claro, mas isTeacherFree checa tudo. Como ele não está em tKeyRem, ok).
+                    if (conflictSubject && conflictSubject.unavailable && conflictSubject.unavailable.includes(tKeyRem)) return;
+
+                    if (remSubject && remSubject.unavailable && remSubject.unavailable.includes(timeKey)) return;
+
+                    // Antigravity Filter: Strict checks for Remote Swap feasibility
+
+                    // 1. Immutable Subjects: Don't swap if the remote subject is Synchronous (complex constraint)
+                    if (remSubject && remSubject.isSynchronous) return;
+
+                    // 2. Shift Compatibility Check
+                    const slotShift = computeSlotShift(slot);
+                    // Teacher A (Original) -> Must accept Remote Slot (tKeyRem)
+                    // We need the shift of tKeyRem. We can infer it or get it from data.timeSlots[sIdx]
+                    const remSlotObj = data.timeSlots[sIdx];
+                    const remSlotShift = computeSlotShift(remSlotObj);
+
+                    const teacherAShifts = new Set(teacher.shifts || []);
+                    if (teacherAShifts.size > 0) {
+                      // He must support the destination shift
+                      if (!teacherAShifts.has(remSlotShift) &&
+                        !teacherAShifts.has('Integral (Manhã e Tarde)') &&
+                        !teacherAShifts.has('Integral (Tarde e Noite)')) {
+                        // Allow if the specific integral shift matches, handled by simple 'has' check usually, 
+                        // but let's be safe: if strict shift doesn't match and no integral covers it.
+                        // Simpler: Just check if one of his shifts covers this slot.
+                        const covers = (teacher.shifts || []).some(s => {
+                          if (s === remSlotShift) return true;
+                          if (s === 'Integral (Manhã e Tarde)' && (remSlotShift === 'Manhã' || remSlotShift === 'Tarde')) return true;
+                          if (s === 'Integral (Tarde e Noite)' && (remSlotShift === 'Tarde' || remSlotShift === 'Noite')) return true;
+                          return false;
+                        });
+                        if (!covers) return;
+                      }
+                    }
+
+                    // Teacher B (Remote) -> Must accept Conflict Slot (timeKey/slotShift)
+                    const teacherBShifts = new Set(remTeacher.shifts || []);
+                    if (teacherBShifts.size > 0) {
+                      const covers = (remTeacher.shifts || []).some(s => {
+                        if (s === slotShift) return true;
+                        if (s === 'Integral (Manhã e Tarde)' && (slotShift === 'Manhã' || slotShift === 'Tarde')) return true;
+                        if (s === 'Integral (Tarde e Noite)' && (slotShift === 'Tarde' || slotShift === 'Noite')) return true;
+                        return false;
+                      });
+                      if (!covers) return;
+                    }
+
+                    // 3. Ensure Teacher B is actually free at the conflict time (timeKey)
+                    // (We checked shift compatibility, but is he busy elsewhere?)
+                    if (!isTeacherFree(remTeacher, timeKey)) return;
+
+                    // Se tudo ok, sugere troca dupla
+                    suggestions.push({
+                      type: 'remote_swap',
+                      targetSlot: {
+                        day: DAYS[dayIdx], time: `${slot.start}-${slot.end}`,
+                        dayIdx, slotIdx: absoluteIndex, timeKey
+                      },
+                      remoteSwap: {
+                        classId: conflictClassId, className: conflictClass.name,
+                        teacherA: { id: teacher.id, name: teacher.name, subjectId: conflictEntry.subjectId, entryKey: conflictEntryKey, timeKey: timeKey, timeLabel: `${slot.start}-${slot.end}` },
+                        teacherB: { id: remTeacherId, name: remTeacher?.name || '?', subjectId: remSubjectId, entryKey: sKeyRem, timeKey: tKeyRem, timeLabel: `${s.start}-${s.end}` }
+                      },
+                      targetTeacher: { id: teacher.id, name: teacher.name },
+                      classId
+                    });
+                  });
+                }
+              }
+            }
           }
         });
       });
     }
-    return suggestions;
+
+    // Antigravity Filter: Ensure all suggestions are valid (have time strings)
+    // "DIRETA às " issue happens when time is undefined or empty
+    return suggestions.filter(s => {
+      if (s.type === 'direct') {
+        if (!s.day || !s.time) return false;
+        // Check for empty time string like " - " or just whitespace
+        const cleanTime = s.time.replace(/[^0-9:]/g, '');
+        if (cleanTime.length < 3) return false;
+      }
+      return true;
+    });
   };
 
   const handleResolveClick = (item) => {
@@ -212,6 +395,86 @@ const ManualEditSection = ({ data, setData }) => {
       });
       setManualLog(prev => [
         `Troca: ${occupant.subjectName} movido p/ ${destSlot.day} ${destSlot.time}. +${data.subjects.find(s => s.id === subjectId)?.name} em ${originalSlot.day}`,
+        ...prev
+      ]);
+    } else if (suggestion.type === 'remote_move') {
+      const { remoteMove, targetSlot, targetTeacher } = suggestion;
+      // 1. Mover a aula da outra turma (Y) para o novo slot
+      const keyY_Old = remoteMove.originalKey;
+      const keyY_New = `${remoteMove.classId}-${remoteMove.toTimeKey}`;
+      // 2. Adicionar a aula na turma atual (X) no slot liberado
+      const keyX_New = `${classId}-${targetSlot.timeKey}`;
+
+      setData(prev => {
+        const newSchedule = { ...(prev.schedule || {}) };
+
+        // Move Y
+        const entryY = newSchedule[keyY_Old];
+        delete newSchedule[keyY_Old];
+        newSchedule[keyY_New] = {
+          ...entryY,
+          timeKey: remoteMove.toTimeKey
+        };
+
+        // Add X
+        newSchedule[keyX_New] = {
+          teacherId: targetTeacher.id,
+          subjectId: subjectId,
+          classId,
+          timeKey: targetSlot.timeKey
+        };
+
+        return { ...prev, schedule: newSchedule };
+      });
+
+      setManualLog(prev => [
+        `Remoto: ${remoteMove.className} movido p/ ${remoteMove.toTime}. +${data.subjects.find(s => s.id === subjectId)?.name} aqui.`,
+        ...prev
+      ]);
+    } else if (suggestion.type === 'remote_swap') {
+      const { remoteSwap, targetSlot, targetTeacher } = suggestion;
+      // 1. Na turma Remota: Trocar A e B de lugar
+      const keyA = remoteSwap.teacherA.entryKey;
+      const keyB = remoteSwap.teacherB.entryKey;
+
+      // 2. Na turma Atual: Adicionar A (que agora liberou o horário targetSlot.timeKey)
+      const keyX = `${classId}-${targetSlot.timeKey}`;
+
+      setData(prev => {
+        const newSchedule = { ...(prev.schedule || {}) };
+
+        const entryA = newSchedule[keyA]; // Teacher A em T1
+        const entryB = newSchedule[keyB]; // Teacher B em T2
+
+        // Swap Remote
+        // A chave do schedule é "Class-Time".
+        // Se trocarmos os tempos, trocamos as chaves.
+        // EntryA estava em TimeA -> Vai para TimeB.
+        // EntryB estava em TimeB -> Vai para TimeA.
+
+        // Chaves novas
+        const newKeyForA = `${remoteSwap.classId}-${remoteSwap.teacherB.timeKey}`; // A vai p/ slot do B
+        const newKeyForB = `${remoteSwap.classId}-${remoteSwap.teacherA.timeKey}`; // B vai p/ slot do A
+
+        // Deleta as entradas antigas
+        delete newSchedule[keyA];
+        delete newSchedule[keyB];
+
+        // Atualiza dados
+        newSchedule[newKeyForA] = { ...entryA, timeKey: remoteSwap.teacherB.timeKey };
+        newSchedule[newKeyForB] = { ...entryB, timeKey: remoteSwap.teacherA.timeKey };
+
+        // Add Local
+        newSchedule[keyX] = {
+          teacherId: targetTeacher.id, subjectId,
+          classId, timeKey: targetSlot.timeKey
+        };
+
+        return { ...prev, schedule: newSchedule };
+      });
+
+      setManualLog(prev => [
+        `Remoto COMPLEXO: ${remoteSwap.teacherB.name} trocou com ${remoteSwap.teacherA.name} na ${remoteSwap.className}. +${data.subjects.find(s => s.id === subjectId)?.name} aqui.`,
         ...prev
       ]);
     }
@@ -708,24 +971,32 @@ const ManualEditSection = ({ data, setData }) => {
     const teacherName = data.teachers.find(t => t.id === newEntry.teacherId)?.name || 'Professor';
 
     // Verificar conflito de professor
-    const teacherConflict = Object.values(data.schedule || {}).find(
-      entry => entry.teacherId === newEntry.teacherId && entry.timeKey === timeKey
-    );
+    const conflictEntryKey = Object.keys(data.schedule || {}).find(k => {
+      const entry = data.schedule[k];
+      return entry.teacherId === newEntry.teacherId && entry.timeKey === timeKey;
+    });
 
-    if (teacherConflict) {
-      const conflictClass = data.classes.find(c => c.id === teacherConflict.classId);
-      // Alerta usuário sobre conflito de professor neste horário
-      window.alert(
-        `Conflito: o(a) prof. ${teacherName} já está na turma ${conflictClass?.name || ''} em ${DAYS[dayIdx]} ${slot?.start || ''}-${slot?.end || ''}`
-      );
-      // Também registra no log de edição manual
-      setManualLog(prev => [
-        `Conflito: Prof. ${teacherName} já está na turma ${conflictClass?.name || ''} em ${DAYS[dayIdx]} ${slot?.start || ''}-${slot?.end || ''}`,
-        ...prev
-      ].slice(0, 200));
+    if (conflictEntryKey) {
+      const conflictEntry = data.schedule[conflictEntryKey];
+      const conflictClass = data.classes.find(c => c.id === conflictEntry.classId);
+
+      // Em vez de alertar, ativa modo de resolução de conflito no modal
+      setConflictToResolve({
+        teacherName,
+        conflictClass,
+        timeKey,
+        entryKey: conflictEntryKey,
+        slotLabel: `${DAYS[dayIdx]} ${slot?.start || ''}-${slot?.end || ''}`,
+        conflictSubjectName: data.subjects.find(s => s.id === conflictEntry.subjectId)?.name
+      });
       return;
     }
 
+    // Sem conflito - Adiciona direto
+    executeAddLesson(scheduleKey, targetClass, timeKey, subjectName, teacherName, className, dayIdx, slot);
+  };
+
+  const executeAddLesson = (scheduleKey, targetClass, timeKey, subjectName, teacherName, className, dayIdx, slot) => {
     setData(prev => ({
       ...prev,
       schedule: {
@@ -739,15 +1010,57 @@ const ManualEditSection = ({ data, setData }) => {
       }
     }));
 
-    // Log da operação
     setManualLog(prev => [
       `Adicionado: ${subjectName} (${teacherName}) na turma ${className} em ${DAYS[dayIdx]} ${slot?.start || ''}-${slot?.end || ''}`,
       ...prev
     ].slice(0, 200));
 
+    closeAddModal();
+  };
+
+  const handleForceAddLesson = () => {
+    if (!conflictToResolve || !selectedCell) return;
+
+    const { dayIdx, slotIdx, classId } = selectedCell;
+    const targetClass = classId;
+    const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
+    const scheduleKey = `${targetClass}-${timeKey}`;
+
+    const slot = data.timeSlots[slotIdx];
+    const className = data.classes.find(c => c.id === targetClass)?.name || 'Turma';
+    const subjectName = data.subjects.find(s => s.id === newEntry.subjectId)?.name || 'Matéria';
+    const teacherName = data.teachers.find(t => t.id === newEntry.teacherId)?.name || 'Professor';
+
+    setData(prev => {
+      const newSchedule = { ...(prev.schedule || {}) };
+
+      // 1. Remove conflitante
+      delete newSchedule[conflictToResolve.entryKey];
+
+      // 2. Adiciona novo
+      newSchedule[scheduleKey] = {
+        teacherId: newEntry.teacherId,
+        subjectId: newEntry.subjectId,
+        classId: targetClass,
+        timeKey: timeKey
+      };
+
+      return { ...prev, schedule: newSchedule };
+    });
+
+    setManualLog(prev => [
+      `Forçado: Removido ${conflictToResolve.conflictSubjectName} da ${conflictToResolve.conflictClass?.name} e Adicionado ${subjectName} aqui (${className}).`,
+      ...prev
+    ].slice(0, 200));
+
+    closeAddModal();
+  };
+
+  const closeAddModal = () => {
     setShowAddModal(false);
     setNewEntry({ teacherId: '', subjectId: '' });
     setSelectedCell(null);
+    setConflictToResolve(null);
   };
 
   const getScheduleEntry = (dayIdx, slot, classId) => {
@@ -979,7 +1292,7 @@ const ManualEditSection = ({ data, setData }) => {
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded border border-amber-200 font-bold uppercase tracking-wider">Troca</span>
+                            <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded border border-amber-200 font-bold uppercase tracking-wider">Troca Local</span>
                             <div className="font-bold text-slate-700 group-hover:text-indigo-700">
                               {sug.originalSlot.day} às {sug.originalSlot.time}
                             </div>
@@ -1001,6 +1314,116 @@ const ManualEditSection = ({ data, setData }) => {
                           Trocar →
                         </div>
                       </div>
+                    ) : sug.type === 'remote_move' ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.5 rounded border border-purple-200 font-bold uppercase tracking-wider">Troca Remota</span>
+                            <div className="font-bold text-slate-700 group-hover:text-indigo-700">
+                              {sug.targetSlot.day} às {sug.targetSlot.time}
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-600 space-y-1">
+                            <div className="flex items-center gap-1">
+                              <span className="text-purple-600">⚡ Desbloqueio:</span>
+                              <span className="italic">Move {sug.targetTeacher.name} na {sug.remoteMove.className}</span>
+                            </div>
+                            <div className="flex items-center gap-1 pl-4 border-l-2 border-purple-100">
+                              <span className="text-slate-500">De:</span> {sug.remoteMove.fromTime}
+                              <span className="text-slate-400">→</span>
+                              <span className="font-semibold">{sug.remoteMove.toTime}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-green-600">BV Entra:</span>
+                              <span className="font-semibold">{resolveModal.item.subjectName}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-xs font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity pl-2">
+                          Mover →
+                        </div>
+                      </div>
+                    ) : sug.type === 'remote_swap' ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="bg-fuchsia-100 text-fuchsia-800 text-[10px] px-1.5 py-0.5 rounded border border-fuchsia-200 font-bold uppercase tracking-wider">Troca Remota Dupla</span>
+                            <div className="font-bold text-slate-700 group-hover:text-indigo-700">
+                              {sug.targetSlot.day} às {sug.targetSlot.time}
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-600 space-y-1">
+                            <div className="flex items-center gap-1">
+                              <span className="text-fuchsia-600">⚡ Na {sug.remoteSwap.className}:</span>
+                            </div>
+                            <div className="pl-4 border-l-2 border-fuchsia-100 space-y-1 my-1">
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1">
+                                  <span className="font-semibold text-slate-700">{sug.remoteSwap.teacherB.name}</span>
+                                  <span className="text-slate-500 text-[10px] bg-slate-100 px-1 rounded">
+                                    {data.subjects.find(s => s.id === sug.remoteSwap.teacherB.subjectId)?.name}
+                                  </span>
+                                  <span className="text-slate-400 mx-1">↔</span>
+                                  <span className="font-semibold text-slate-700">{sug.remoteSwap.teacherA.name}</span>
+                                  <span className="text-slate-500 text-[10px] bg-slate-100 px-1 rounded">
+                                    {data.subjects.find(s => s.id === sug.remoteSwap.teacherA.subjectId)?.name}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-slate-500 italic">
+                                  (Trocam de horário lá para liberar o Prof. {sug.remoteSwap.teacherA.name})
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-green-600">BV Entra Aqui:</span>
+                              <span className="font-semibold">{resolveModal.item.subjectName}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-xs font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity pl-2">
+                          Resolver →
+                        </div>
+                      </div>
+                    ) : sug.type === 'indirect_swap' ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded border border-amber-200 font-bold uppercase tracking-wider">Troca Tripla (Rotação)</span>
+                            <div className="font-bold text-slate-700 group-hover:text-indigo-700">
+                              {sug.targetSlot.day} às {sug.targetSlot.time}
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-600 space-y-1">
+                            <div className="flex items-center gap-1">
+                              <span className="text-amber-600">⚡ Na {sug.rotation.className}:</span>
+                            </div>
+                            <div className="pl-4 border-l-2 border-amber-100 space-y-1 my-1 text-[10px]">
+                              <div className="flex items-center gap-1">
+                                <span className="font-semibold">{sug.rotation.teacherA.name}</span>
+                                <span className="text-slate-400">→</span>
+                                <span>{sug.rotation.teacherB.timeLabel}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="font-semibold">{sug.rotation.teacherB.name}</span>
+                                <span className="text-slate-400">→</span>
+                                <span>{sug.rotation.teacherC.timeLabel}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="font-semibold">{sug.rotation.teacherC.name}</span>
+                                <span className="text-slate-400">→</span>
+                                <span>{sug.rotation.teacherA.timeLabel}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-green-600">BV Entra Aqui:</span>
+                              <span className="font-semibold">{resolveModal.item.subjectName}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-xs font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity pl-2">
+                          Rotação →
+                        </div>
+                      </div>
                     ) : (
                       <div className="flex items-center justify-between">
                         <div>
@@ -1014,7 +1437,7 @@ const ManualEditSection = ({ data, setData }) => {
                             Prof. {sug.teacherName}
                           </div>
                         </div>
-                        <div className="text-xs font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="text-xs font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap ml-2">
                           Alocar →
                         </div>
                       </div>
@@ -1058,8 +1481,15 @@ const ManualEditSection = ({ data, setData }) => {
           // Suporte a activeSlotsByDay (novo) e activeSlots (legado)
           const classActiveSlots = (() => {
             if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
-              // Une todos os slots ativos em qualquer dia
-              return Array.from(new Set(Object.values(cls.activeSlotsByDay).flat()));
+              // Une todos os slots ativos APENAS dos dias visíveis (0..4)
+              const visibleSlots = new Set();
+              for (let d = 0; d < DAYS.length; d++) {
+                const daySlots = cls.activeSlotsByDay[d];
+                if (Array.isArray(daySlots)) {
+                  daySlots.forEach(id => visibleSlots.add(id));
+                }
+              }
+              return Array.from(visibleSlots);
             }
             return cls.activeSlots && Array.isArray(cls.activeSlots) ? cls.activeSlots : [];
           })();
@@ -1172,8 +1602,18 @@ const ManualEditSection = ({ data, setData }) => {
                               </td>
                               {DAYS.map((_, dayIdx) => {
                                 const entry = getScheduleEntry(dayIdx, slot, cls.id);
+                                const isActiveDaySlot = isSlotActiveLocal(cls.id, dayIdx, absoluteIndex);
                                 const isEmpty = !entry;
                                 const isAvailable = isSlotAvailable(dayIdx, absoluteIndex);
+
+                                // Se o slot não está ativo neste dia (config da turma), renderiza célula bloqueada
+                                if (!isActiveDaySlot) {
+                                  return (
+                                    <td key={dayIdx} className="border border-slate-300 p-2 bg-slate-100">
+                                      {/* Célula Vazia / Bloqueada */}
+                                    </td>
+                                  );
+                                }
 
                                 // Calcular detalhes apenas se tiver aula
                                 const lessonInfo = entry ? getLessonDetails(cls.id, entry.subjectId) : null;
@@ -1268,93 +1708,177 @@ const ManualEditSection = ({ data, setData }) => {
             </div>
 
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Professor
-                </label>
-                <select
-                  value={newEntry.teacherId}
-                  onChange={e => setNewEntry({ ...newEntry, teacherId: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">Selecione o professor...</option>
-                  {data.teachers.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Matéria
-                </label>
-                <select
-                  value={newEntry.subjectId}
-                  onChange={e => setNewEntry({ ...newEntry, subjectId: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">Selecione a matéria...</option>
-                  {data.subjects.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Dica de slots disponíveis */}
-              {newEntry.teacherId && newEntry.subjectId && availableSlots.length > 0 && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
-                  <p className="text-green-800 font-semibold mb-1">
-                    ✅ {availableSlots.length} horários livres encontrados
+              {conflictToResolve ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <h4 className="text-red-800 font-bold flex items-center gap-2 mb-2">
+                    <AlertCircle size={20} />
+                    Conflito de Horário
+                  </h4>
+                  <p className="text-red-700 text-sm mb-3">
+                    O professor <strong>{conflictToResolve.teacherName}</strong> já está alocado neste horário:
                   </p>
-                  <p className="text-green-700 text-xs">
-                    Os slots destacados em verde na grade estão disponíveis para este professor e matéria.
+                  <div className="bg-white/60 p-3 rounded border border-red-100 text-sm text-red-900">
+                    <div className="flex justify-between mb-1">
+                      <span className="font-semibold">Turma:</span>
+                      <span>{conflictToResolve.conflictClass?.name}</span>
+                    </div>
+                    <div className="flex justify-between mb-1">
+                      <span className="font-semibold">Matéria:</span>
+                      <span>{conflictToResolve.conflictSubjectName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold">Horário:</span>
+                      <span>{conflictToResolve.slotLabel}</span>
+                    </div>
+                  </div>
+                  <p className="text-red-700 text-xs mt-3">
+                    Deseja remover a aula da outra turma e adicionar aqui?
                   </p>
                 </div>
-              )}
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Professor
+                    </label>
+                    <select
+                      value={newEntry.teacherId}
+                      onChange={e => setNewEntry({ ...newEntry, teacherId: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">Selecione o professor...</option>
+                      {data.teachers
+                        .filter(t => {
+                          if (!selectedCell) return true;
+                          // Filter 1: Check if teacher is assigned to this class in activities
+                          const hasActivity = (data.activities || []).some(act =>
+                            act.classId === selectedCell.classId && act.teacherId === t.id
+                          );
+                          /* Se não tiver atividades, fallback para mostrar todos? 
+                             Não, o user pediu "só apareça o professor atribuido". 
+                             Mas se for uma aula de reforço (extra)? 
+                             Vamos assumir estrito. Se lista ficar vazia, user vai reclamar, ai relaxamos. */
+                          return hasActivity;
+                        })
+                        .map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                    </select>
+                  </div>
 
-              {newEntry.teacherId && newEntry.subjectId && availableSlots.length === 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
-                  <p className="text-amber-800 font-semibold mb-1">
-                    ⚠️ Nenhum horário livre disponível
-                  </p>
-                  <p className="text-amber-700 text-xs">
-                    Este professor não possui horários livres nesta turma, ou todos os slots compatíveis já estão ocupados.
-                  </p>
-                </div>
-              )}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Matéria
+                    </label>
+                    <select
+                      value={newEntry.subjectId}
+                      onChange={e => setNewEntry({ ...newEntry, subjectId: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">Selecione a matéria...</option>
+                      {data.subjects
+                        .filter(s => {
+                          if (!newEntry.teacherId) return true;
 
-              {selectedCell && (
-                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-sm">
-                  <p className="text-slate-700">
-                    <span className="font-semibold">Turma:</span>{' '}
-                    {data.classes.find(c => c.id === selectedCell.classId)?.name}
-                  </p>
-                  <p className="text-slate-700">
-                    <span className="font-semibold">Horário:</span>{' '}
-                    {DAYS[selectedCell.dayIdx]} - {data.timeSlots[selectedCell.slotIdx]?.start} às {data.timeSlots[selectedCell.slotIdx]?.end}
-                  </p>
-                </div>
+                          // Filter 2: Check if teacher teaches this subject IN THIS CLASS
+                          if (selectedCell) {
+                            const validInClass = (data.activities || []).some(act =>
+                              act.classId === selectedCell.classId &&
+                              act.teacherId === newEntry.teacherId &&
+                              act.subjectId === s.id
+                            );
+                            if (validInClass) return true;
+                          }
+
+                          // Fallback: Se não achou na atividade da turma (ex: aula exta), checa global?
+                          // O user pediu: "só apareça a matéria atribuida aquele professor".
+                          // Vamos ser estritos na turma.
+                          return false;
+                        })
+                        .map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                    </select>
+                  </div>
+
+                  {/* Dica de slots disponíveis */}
+                  {newEntry.teacherId && newEntry.subjectId && availableSlots.length > 0 && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
+                      <p className="text-green-800 font-semibold mb-1">
+                        ✅ {availableSlots.length} horários livres encontrados
+                      </p>
+                      <p className="text-green-700 text-xs">
+                        Os slots destacados em verde na grade estão disponíveis para este professor e matéria.
+                      </p>
+                    </div>
+                  )}
+
+                  {newEntry.teacherId && newEntry.subjectId && availableSlots.length === 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                      <p className="text-amber-800 font-semibold mb-1">
+                        ⚠️ Nenhum horário livre disponível
+                      </p>
+                      <p className="text-amber-700 text-xs">
+                        Este professor não possui horários livres nesta turma, ou todos os slots compatíveis já estão ocupados.
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedCell && (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 text-sm">
+                      <p className="text-slate-700">
+                        <span className="font-semibold">Turma:</span>{' '}
+                        {data.classes.find(c => c.id === selectedCell.classId)?.name}
+                      </p>
+                      <p className="text-slate-700">
+                        <span className="font-semibold">Horário:</span>{' '}
+                        {DAYS[selectedCell.dayIdx]} - {data.timeSlots[selectedCell.slotIdx]?.start} às {data.timeSlots[selectedCell.slotIdx]?.end}
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowAddModal(false);
-                  setNewEntry({ teacherId: '', subjectId: '' });
-                  setSelectedCell(null);
-                }}
-                className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleAddLesson}
-                className="px-4 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
-              >
-                <Plus size={16} />
-                Adicionar Aula
-              </button>
+              {conflictToResolve ? (
+                <>
+                  <button
+                    onClick={() => setConflictToResolve(null)}
+                    className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleForceAddLesson}
+                    className="px-4 py-2 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 shadow-sm"
+                  >
+                    <AlertCircle size={16} />
+                    Remover da outra turma e Adicionar aqui
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setNewEntry({ teacherId: '', subjectId: '' });
+                      setSelectedCell(null);
+                      setConflictToResolve(null);
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleAddLesson}
+                    className="px-4 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                  >
+                    <Plus size={16} />
+                    Adicionar Aula
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

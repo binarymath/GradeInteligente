@@ -49,12 +49,45 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const addInlineSyncConfig = (subject) => {
     const currentConfigs = SynchronousConfigService.getSubjectConfigs(subject);
     const newConfig = SynchronousConfigService.createEmptyConfig(`Configuração ${currentConfigs.length + 1}`);
+
+    // Antigravity: Pre-fill with ALL valid slots based on subject shifts
+    const subjectHasShifts = (subject.shifts || []).length > 0;
+    const subjectShiftSet = new Set(subject.shifts || []);
+
+    // Find valid slot indices
+    const validSlotIndices = allSlots
+      .map((slot, idx) => ({ slot, idx }))
+      .filter(({ slot }) => {
+        if (!subjectHasShifts) return true;
+        if (slot.shift && (slot.shift.startsWith('Integral'))) {
+          return subjectShiftSet.has(slot.shift);
+        }
+        const label = slot.shift || (() => {
+          const [h, m] = slot.start.split(':').map(Number);
+          const minutes = h * 60 + m;
+          if (minutes < 12 * 60) return 'Manhã';
+          if (minutes < 18 * 60) return 'Tarde';
+          return 'Noite';
+        })();
+        return subjectShiftSet.has(label);
+      })
+      .map(item => item.idx);
+
+    // Populate all days and all valid slots
+    newConfig.days = [...DAYS];
+    newConfig.timeSlots = [];
+    DAYS.forEach(day => {
+      validSlotIndices.forEach(idx => {
+        newConfig.timeSlots.push(`${day}-${idx}`);
+      });
+    });
+
     const nextConfigs = [...currentConfigs, newConfig];
     setData(prev => ({
       ...prev,
       subjects: prev.subjects.map(s => s.id === subject.id ? { ...s, synchronousConfigs: nextConfigs } : s)
     }));
-    setInlineSyncEditing({ subjectId: subject.id, configId: newConfig.id, editingConfig: newConfig, selectedDayForSlots: newConfig.days[0] || DAYS[0], classSearch: '' });
+    setInlineSyncEditing({ subjectId: subject.id, configId: newConfig.id, editingConfig: newConfig, selectedDayForSlots: DAYS[0], classSearch: '' });
   };
 
   const editInlineSyncConfig = (subject, config) => {
@@ -632,6 +665,9 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                                             className="w-full border border-slate-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
                                             placeholder="Nome da configuração"
                                           />
+                                          {/* Antigravity: Sections "Dias" and "Horários" hidden as requested by user ("sem detalhamento") */}
+                                          {/* To restore, uncomment the block below */}
+                                          {/* 
                                           <div>
                                             <div className="text-[10px] font-bold text-slate-700 mb-1">Dias da Semana</div>
                                             <div className="flex gap-1 flex-wrap">
@@ -695,6 +731,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                                                 })}
                                             </div>
                                           </div>
+                                          */}
                                           <div>
                                             <div className="text-[10px] font-bold text-slate-700 mb-1">Turmas</div>
                                             <div className="flex items-center gap-2 mb-1">

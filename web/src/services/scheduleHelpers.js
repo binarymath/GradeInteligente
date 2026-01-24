@@ -156,10 +156,11 @@ export function buildPendingActivitiesForRepair(data, manager) {
 export function isSlotActive(classData, dayIdx, slotId) {
   if (!classData) return false;
 
-  // Prioriza activeSlotsByDay se existir
-  if (classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
+  // Prioriza activeSlotsByDay se existir (Verificação Estrita: mesmo que vazio, deve ser respeitado)
+  if (classData.activeSlotsByDay && typeof classData.activeSlotsByDay === 'object') {
     const activeSlotsForDay = classData.activeSlotsByDay[dayIdx];
-    return activeSlotsForDay && Array.isArray(activeSlotsForDay) && activeSlotsForDay.includes(slotId);
+    // Se activeSlotsForDay for undefined (não configurado para o dia), retorna false (inativo)
+    return !!(activeSlotsForDay && Array.isArray(activeSlotsForDay) && activeSlotsForDay.includes(slotId));
   }
 
   // Fallback para activeSlots (global/legado)
@@ -167,14 +168,10 @@ export function isSlotActive(classData, dayIdx, slotId) {
     return classData.activeSlots.includes(slotId);
   }
 
-  // Se não houver restrição explícita, assume ativo (ou inativo? Pelo padrão, sem config = inativo ou ativo? 
-  // No ScheduleManager, sem config ele checa se é 'aula'. Vamos assumir que aqui, se não tem config, é melhor 
-  // retornar false para evitar falsos positivos ou true?
-  // ScheduleManager diz: "Sem restrição definida: permitir apenas slots de aula".
-  // Mas aqui não temos acesso a todos os timeSlots facilmente a menos que passemos.
-  // Vamos assumir true por padrão SE não houver configs restritivas, para não quebrar compatibilidade
-  // com turmas antigas sem activeSlots definido.
-  return true;
+  // Se não houver nenhuma configuração de slots ativos (nem nova nem legada),
+  // assumimos que a turma NÃO TEM slots disponíveis (segurança contra alocação fantasma).
+  // Isso força o usuário a configurar a turma.
+  return false;
 }
 
 /**
