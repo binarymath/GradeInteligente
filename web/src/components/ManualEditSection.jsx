@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Edit3, Trash2, Plus, X, Save, AlertCircle, Printer } from 'lucide-react';
+import { Edit3, Trash2, Plus, X, Save, AlertCircle, Printer, FileSpreadsheet } from 'lucide-react';
 import { DAYS, COLORS } from '../utils';
 import { computeSlotShift } from '../utils/time';
+import { exportAllSchedulesToExcel } from '../services/excelExport';
 
 const ManualEditSection = ({ data, setData }) => {
   const [editMode, setEditMode] = useState(false);
@@ -1183,23 +1184,34 @@ const ManualEditSection = ({ data, setData }) => {
               Adicione, remova ou substitua aulas diretamente na grade horária
             </p>
           </div>
-          <button
-            onClick={() => setEditMode(!editMode)}
-            className={`px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2 ${editMode
-              ? 'bg-white text-indigo-600 hover:bg-indigo-50'
-              : 'bg-indigo-800 text-white hover:bg-indigo-900'
-              }`}
-          >
-            {editMode ? (
-              <>
-                <Save size={18} /> Finalizar Edição
-              </>
-            ) : (
-              <>
-                <Edit3 size={18} /> Ativar Modo Edição
-              </>
-            )}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setEditMode(!editMode)}
+              className={`px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2 ${editMode
+                ? 'bg-white text-indigo-600 hover:bg-indigo-50 border border-indigo-200'
+                : 'bg-indigo-800 text-white hover:bg-indigo-900'
+                }`}
+            >
+              {editMode ? (
+                <>
+                  <Save size={18} /> Finalizar Edição
+                </>
+              ) : (
+                <>
+                  <Edit3 size={18} /> Ativar Modo Edição
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={() => exportAllSchedulesToExcel(data)}
+              className="bg-indigo-800 text-white px-4 py-3 rounded-lg hover:bg-indigo-900 transition-colors flex items-center justify-center gap-2 shadow-sm"
+              title="Baixar todas as grades em Excel"
+            >
+              <FileSpreadsheet size={20} />
+              <span className="text-sm font-medium">Baixar Planilha</span>
+            </button>
+          </div>
         </div>
       </div>
 
