@@ -248,6 +248,12 @@ const App = () => {
       const subjectMap = new Map((data.subjects || []).map(s => [s.id, s]));
       const teacherMap = new Map((data.teachers || []).map(t => [t.id, t]));
 
+      // Mapeamento extra para verificar conflito por NOME (Segunda Camada)
+      const teacherNameMap = new Map(); // name -> id (apenas para referência reversa se precisar)
+      (data.teachers || []).forEach(t => {
+        if (t.name) teacherNameMap.set(t.name.trim(), t.id);
+      });
+
       const totalSlots = Object.keys(data.schedule).length;
       log.push(`✅ Grade contém ${totalSlots} aula(s) alocada(s).`);
 
@@ -290,6 +296,77 @@ const App = () => {
         if (invalidSlots.length > 10) {
           log.push(`   ... mais ${invalidSlots.length - 10} ocorrência(s).`);
         }
+      }
+
+      // === SEGUNDA CAMADA: VERIFICAÇÃO DE CONFLITO POR NOME DE PROFESSOR ===
+      const allocationsByName = {}; // Key: "TeacherName|Day|Slot" -> [ {class, subject} ... ]
+      const nameConflicts = [];
+
+      for (const [key, entry] of Object.entries(data.schedule)) {
+        if (!entry.teacherId) continue;
+
+        const teacher = teacherMap.get(entry.teacherId);
+        if (!teacher || !teacher.name) continue; // Pula se não achou professor ou sem nome
+
+        const teacherName = teacher.name.trim(); // Normaliza nome
+
+        // Recuperar Dia/Slot de forma robusta
+        let dayIdx = entry.dayIdx;
+        let slotIdx = entry.slotIdx;
+
+        // Tentativa 1: Do próprio objeto (se salvo)
+        // Tentativa 2: Da key
+        if (dayIdx === undefined || slotIdx === undefined) {
+          const parts = key.split('-');
+          if (parts.length >= 3) {
+            // Formato esperado: classId-Dia-Slot
+            const dayStr = parts[1];
+            const sStr = parts[2];
+            dayIdx = DAYS.indexOf(dayStr);
+            slotIdx = parseInt(sStr, 10);
+          }
+        }
+
+        if (dayIdx === undefined || dayIdx === -1 || slotIdx === undefined || isNaN(slotIdx)) continue;
+
+        const timeKey = `${dayIdx}-${slotIdx}`;
+        const checkKey = `${teacherName}|${timeKey}`;
+
+        if (!allocationsByName[checkKey]) {
+          allocationsByName[checkKey] = [];
+        }
+
+        allocationsByName[checkKey].push({
+          classId: entry.classId,
+          subjectId: entry.subjectId,
+          key: key
+        });
+      }
+
+      for (const [checkKey, entries] of Object.entries(allocationsByName)) {
+        if (entries.length > 1) {
+          const [tName, tKey] = checkKey.split('|');
+          const [dIdxStr, sIdxStr] = tKey.split('-');
+          const dIdx = parseInt(dIdxStr);
+          const sIdx = parseInt(sIdxStr);
+
+          const slotLabel = data.timeSlots[sIdx]
+            ? `${data.timeSlots[sIdx].start}-${data.timeSlots[sIdx].end}`
+            : `Slot ${sIdx}`;
+          const dayLabel = DAYS[dIdx];
+
+          const classesInvolved = entries.map(e => classMap.get(e.classId)?.name || e.classId).join(', ');
+
+          nameConflicts.push(`Prof. ${tName} em ${dayLabel} ${slotLabel} (Turmas: ${classesInvolved})`);
+        }
+      }
+
+      if (nameConflicts.length > 0) {
+        log.push('');
+        log.push('🚨 CONFLITOS DE PROFESSOR (POR NOME):');
+        log.push('   O mesmo professor está alocado em mais de uma turma no mesmo horário.');
+        nameConflicts.forEach(c => log.push(`   • ${c}`));
+        log.push('   💡 Use "Ajustar" para remover as duplicatas automaticamente.');
       }
 
       // Coletar todas as alocações por (matéria-turma-professor)

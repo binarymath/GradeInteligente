@@ -16,6 +16,7 @@ import SynchronousScheduler from './SynchronousScheduler';
 import SynchronousClassValidator from './SynchronousClassValidator';
 import { geminiService } from './geminiService';
 import { LIMITS } from '../constants/schedule';
+import { DAYS } from '../utils';
 
 // Imports dos novos módulos modularizados
 import {
@@ -54,24 +55,24 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
     let currentLimits = { ...LIMITS };
     const hasExistingSchedule = data.schedule && Object.keys(data.schedule).length > 0;
     let shouldUseExisting = false;
-    
+
     if (hasExistingSchedule) {
       const isFirstAnalysis = !data._analyzedOnce;
       const analysis = analyzeExistingSchedule(data);
       const analysisLog = [...analysis.log];
-      
+
       if (isFirstAnalysis) {
         analysisLog.push('');
         analysisLog.push('ℹ️  Esta é uma análise da grade restaurada.');
         analysisLog.push('📝 Nenhuma alteração foi feita no arquivo.');
         analysisLog.push('');
-        
+
         if (analysis.pendingCount === 0 && analysis.conflicts.length === 0) {
           analysisLog.push('✅ Grade perfeita! Sem pendências ou conflitos.');
         } else {
           analysisLog.push('⚠️  Para tentar corrigir os problemas, clique em "Gerar Novamente".');
         }
-        
+
         analysisLog.push('');
         setGenerationLog(analysisLog);
         setData(prev => ({ ...prev, _analyzedOnce: true }));
@@ -109,7 +110,7 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
     const subjectsWithSyncConfigs = data.subjects.filter(
       s => s.isSynchronous && s.synchronousConfigs && s.synchronousConfigs.length > 0
     );
-    
+
     if (subjectsWithSyncConfigs.length > 0) {
       setGenerationLog([`🔄 Processando ${subjectsWithSyncConfigs.length} matéria(s) com configurações síncronas...`]);
     } else {
@@ -119,7 +120,7 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
     // Criar scheduler para processar aulas síncronas
     const synchronousScheduler = new SynchronousScheduler(data, {});
     const syncResult = synchronousScheduler.processAllGroups();
-    
+
     if (!syncResult.success) {
       setGenerationLog([
         `❌ Falha ao alocar aulas síncronas:\n`,
@@ -130,11 +131,11 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
       setGenerating(false);
       return;
     }
-    
+
     if (syncResult.log && syncResult.log.length > 0) {
       setGenerationLog([...syncResult.log]);
     }
-    
+
     const scheduleWithSync = syncResult.schedule || {};
 
     // FASE 1: Gerar múltiplas variações
@@ -143,11 +144,11 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
 
       for (let i = 0; i < MAX_LOCAL_ATTEMPTS; i++) {
         const tempManager = new ScheduleManager(data, currentLimits, [], true);
-        
+
         if (Object.keys(scheduleWithSync).length > 0) {
           tempManager.importExistingSchedule(scheduleWithSync);
         }
-        
+
         const tempResult = tempManager.generate();
 
         let totalExpected = data.activities.reduce((sum, a) => sum + (Number(a.quantity) || 0), 0);
@@ -161,11 +162,11 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
 
           if (pending === 0) {
             const finalManager = new ScheduleManager(data, currentLimits, [], false);
-            
+
             if (Object.keys(scheduleWithSync).length > 0) {
               finalManager.importExistingSchedule(scheduleWithSync);
             }
-            
+
             result = finalManager.generate();
             bestManager = finalManager;
             bestManager.logMessage(`✨ Grade perfeita encontrada na iteração ${i + 1}!`);
@@ -298,17 +299,17 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
     if (!result || !result.schedule) {
       console.warn('⚠️ result era inválido! Recriando...');
       manager.logMessage(`⚠️ Finalizando com resultado atual do manager...`);
-      result = { 
-        schedule: manager ? manager.schedule : {}, 
-        log: manager ? manager.log : [], 
-        conflicts: [] 
+      result = {
+        schedule: manager ? manager.schedule : {},
+        log: manager ? manager.log : [],
+        conflicts: []
       };
     }
 
     // SECURITY CHECK: nunca deixar schedule ser undefined/null
     const safeSchedule = (result && result.schedule) ? result.schedule : (manager ? manager.schedule : {});
     console.log('Salvando schedule:', Object.keys(safeSchedule || {}).length, 'slots');
-    
+
     setData(prev => ({ ...prev, schedule: safeSchedule || {} }));
 
     // FASE 3: Alocação inteligente para pendências
@@ -340,7 +341,7 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
         manager.bookedEntries = resolverResult.bookedEntries;
         totalAllocatedFinal = resolverResult.bookedEntries.length;
         pendingActivities = Math.max(0, totalExpectedActivities - totalAllocatedFinal);
-        
+
         const refreshed = computeOverAllocations(data, manager.bookedEntries);
         overInfo.subjectExcess = refreshed.subjectExcess;
         overInfo.teacherExcess = refreshed.teacherExcess;
@@ -357,7 +358,7 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
           manager.bookedEntries = breakResult.bookedEntries;
           totalAllocatedFinal = breakResult.bookedEntries.length;
           pendingActivities = Math.max(0, totalExpectedActivities - totalAllocatedFinal);
-          
+
           const refreshed = computeOverAllocations(data, manager.bookedEntries);
           overInfo.subjectExcess = refreshed.subjectExcess;
           overInfo.teacherExcess = refreshed.teacherExcess;
@@ -399,25 +400,25 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
     // LIMPAR AULAS EM HORÁRIOS/DIAS NÃO PERMITIDOS
     const invalidAulas = [];
     const invalidDetails = []; // Para log detalhado
-    
+
     for (const [key, entry] of Object.entries(data.schedule)) {
       if (!entry.classId || !entry.subjectId) continue;
-      
+
       const parts = key.split('-');
       if (parts.length < 3) continue;
       const [classId, dayStr, slotStr] = parts;
       const slotIdx = parseInt(slotStr, 10);
-      
+
       const classData = data.classes?.find(c => c.id === classId);
       const slot = data.timeSlots[slotIdx];
       const subject = data.subjects?.find(s => s.id === entry.subjectId);
       const teacher = data.teachers?.find(t => t.id === entry.teacherId);
-      
+
       if (!classData || !slot) continue;
-      
+
       const slotId = slot.id || String(slotIdx);
       let allowed = true;
-      
+
       // Verificar se slot está permitido
       if (classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
         const dayIdx = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'].indexOf(dayStr);
@@ -430,25 +431,32 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
           allowed = false;
         }
       }
-      
+
+      // NOVO: Forçar remoção se o slot não for do tipo 'aula' (ex: intervalo)
+      if (slot.type !== 'aula') {
+        allowed = false;
+      }
+
       if (!allowed) {
         invalidAulas.push(key);
         // Guardar detalhes para log
         const subjectName = subject?.name || 'Desconhecida';
         const teacherName = teacher?.name || 'Desconhecido';
+        const reason = slot.type !== 'aula' ? '(Horário de Intervalo)' : '(Horário Inativo)';
+
         invalidDetails.push({
           className: classData.name,
           subjectName,
           teacherName,
           day: dayStr,
-          time: `${slot.start}-${slot.end}`
+          time: `${slot.start}-${slot.end} ${reason}`
         });
       }
     }
-    
+
     if (invalidAulas.length > 0) {
       log.push(`🧹 Limpando ${invalidAulas.length} aula(s) em horários/dias NÃO permitidos...`);
-      
+
       // Detalhar o que será removido
       const groupedByClass = {};
       invalidDetails.forEach(detail => {
@@ -457,20 +465,101 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
         }
         groupedByClass[detail.className].push(detail);
       });
-      
+
       Object.entries(groupedByClass).forEach(([className, details]) => {
         log.push(`   📍 ${className}:`);
         details.forEach(d => {
           log.push(`      • ${d.subjectName} (${d.teacherName}) - ${d.day} ${d.time}`);
         });
       });
-      
+
       // Remover do schedule
       for (const key of invalidAulas) {
         delete data.schedule[key];
       }
       setData(prev => ({ ...prev, schedule: { ...data.schedule } }));
       log.push(`✅ ${invalidAulas.length} aula(s) removida(s) com sucesso!`);
+    }
+
+    // === SEGUNDA CAMADA: RESOLVER CONFLITO POR NOME DE PROFESSOR ===
+    // Remove duplicatas mantendo apenas a primeira encontrada para evitar que o mesmo professor esteja em 2 turmas
+    const allocationsByName = {}; // Key: "TeacherName|DayIdx|SlotIdx" -> [ {key, entry, className} ]
+    const nameConflictsToRemove = [];
+    const teacherMap = new Map((data.teachers || []).map(t => [t.id, t]));
+
+    // Construir mapa de alocações por nome
+    for (const [key, entry] of Object.entries(data.schedule)) {
+      if (!entry.teacherId) continue;
+
+      const teacher = teacherMap.get(entry.teacherId);
+      if (!teacher || !teacher.name) continue;
+
+      const teacherName = teacher.name.trim();
+
+      // Parse day/slot
+      let dayIdx = entry.dayIdx;
+      let slotIdx = entry.slotIdx;
+
+      if (dayIdx === undefined || slotIdx === undefined) {
+        const parts = key.split('-');
+        if (parts.length >= 3) {
+          const dayStr = parts[1];
+          const sStr = parts[2];
+          dayIdx = DAYS.indexOf(dayStr);
+          slotIdx = parseInt(sStr, 10);
+        }
+      }
+
+      if (dayIdx === undefined || dayIdx === -1 || slotIdx === undefined || isNaN(slotIdx)) continue;
+
+      const checkKey = `${teacherName}|${dayIdx}|${slotIdx}`;
+
+      if (!allocationsByName[checkKey]) {
+        allocationsByName[checkKey] = [];
+      }
+
+      const className = data.classes.find(c => c.id === entry.classId)?.name || entry.classId;
+
+      allocationsByName[checkKey].push({
+        key,
+        entry,
+        className,
+        subjectId: entry.subjectId
+      });
+    }
+
+    // Identificar e remover excedentes
+    for (const [checkKey, entries] of Object.entries(allocationsByName)) {
+      if (entries.length > 1) {
+        const [tName, dIdx, sIdx] = checkKey.split('|');
+        const dayLabel = DAYS[parseInt(dIdx)];
+        const slotLabel = data.timeSlots[parseInt(sIdx)]
+          ? `${data.timeSlots[parseInt(sIdx)].start}`
+          : `Slot ${sIdx}`;
+
+        // Ordenar deterministicamente para decidir quem fica (ex: alfabética de turma, ou aleatório consistente)
+        // Vamos manter o primeiro que entrou no loop (ordem de keys) que é o comportamento natural do array
+        // O primeiro 'kept' fica, os outros 'removed' saem.
+        const kept = entries[0];
+        const removed = entries.slice(1);
+
+        removed.forEach(rem => {
+          nameConflictsToRemove.push(rem.key);
+          const subjName = data.subjects.find(s => s.id === rem.subjectId)?.name || 'Matéria';
+
+          log.push(`🧹 Removendo conflito de nome: Prof. ${tName}`);
+          log.push(`   • Mantido em: ${kept.className}`);
+          log.push(`   • Removido de: ${rem.className} (${subjName} - ${dayLabel} ${slotLabel})`);
+        });
+      }
+    }
+
+    if (nameConflictsToRemove.length > 0) {
+      for (const key of nameConflictsToRemove) {
+        delete data.schedule[key];
+      }
+      setData(prev => ({ ...prev, schedule: { ...data.schedule } }));
+      log.push(`✅ ${nameConflictsToRemove.length} conflito(s) de professor resolvido(s).`);
     }
 
     const manager = new ScheduleManager(data, LIMITS);

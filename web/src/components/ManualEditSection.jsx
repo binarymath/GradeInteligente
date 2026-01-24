@@ -48,28 +48,33 @@ const ManualEditSection = ({ data, setData }) => {
         let dayIdx = entry.dayIdx;
         let slotIdx = entry.slotIdx;
 
-        if (entry.timeKey) {
-          const parts = entry.timeKey.split('-');
-          const dIdx = DAYS.indexOf(parts[0]);
-          if (dIdx >= 0) {
-            dayIdx = dIdx;
-          } else {
-            const maybeIdx = parseInt(parts[0]);
-            if (!isNaN(maybeIdx) && maybeIdx >= 0 && maybeIdx < DAYS.length) {
-              dayIdx = maybeIdx;
-            }
+        // PRIORIDADE 1: Parsear da Key (que é o que define a posição no Grid)
+        // Key format: classId-Dia-Slot
+        const parts = key.split('-');
+        if (parts.length >= 3) {
+          const sStr = parts[parts.length - 1]; // Última parte é slot
+          const maybeSlot = parseInt(sStr, 10);
+
+          const dStr = parts[parts.length - 2]; // Penúltima parte é dia
+          const maybeDay = DAYS.indexOf(dStr);
+
+          if (!isNaN(maybeSlot) && maybeDay >= 0) {
+            slotIdx = maybeSlot;
+            dayIdx = maybeDay;
           }
         }
 
-        if (dayIdx === undefined || slotIdx === undefined) {
-          const parts = key.split('-');
-          if (parts.length >= 3) slotIdx = parseInt(parts[2]);
-          // Tentar recuperar dia da key se não tiver no entry
-          if (dayIdx === undefined) {
-            const dayPart = parts[1];
-            const dIdx = DAYS.indexOf(dayPart);
-            if (dIdx >= 0) dayIdx = dIdx;
+        // PRIORIDADE 2: Internal timeKey (apenas se falhou parse da Key e ele existe)
+        if ((dayIdx === undefined || slotIdx === undefined) && entry.timeKey) {
+          const tParts = entry.timeKey.split('-');
+          const dIdx = DAYS.indexOf(tParts[0]);
+          if (dIdx >= 0) dayIdx = dIdx;
+          else {
+            // Tenta index numérico
+            const dNum = parseInt(tParts[0]);
+            if (!isNaN(dNum)) dayIdx = dNum;
           }
+          // Slot usually implicit or in parts
         }
 
         if (dayIdx === undefined || dayIdx === -1 || slotIdx === undefined) {
@@ -77,14 +82,16 @@ const ManualEditSection = ({ data, setData }) => {
         }
 
         if (!isSlotActiveLocal(entry.classId, dayIdx, slotIdx)) {
-          return; // GHOST: Slot inativo
+          // GHOST: Slot inativo. 
+          // Mas CUIDADO: Se o user vê no grid, é porque activeSlotsByDay permite.
+          // Se isSlotActiveLocal retorna false, então o Grid também não mostra.
+          // Se o grid mostra e aqui retorna false, verifique se isSlotActiveLocal está síncrono.
+          return;
         }
 
-        // Verificação Adicional: Key Canônica
-        const expectedKey = `${entry.classId}-${DAYS[dayIdx]}-${slotIdx}`;
-        if (key !== expectedKey) {
-          return; // IGNORA KEYS FORA DO PADRÃO (Duplicatas fantasmas)
-        }
+        // REMOVIDO Strict Check contra expectedKey pois a key JÁ É a fonte da verdade agora.
+        // Se a entry diz 'Segunda' mas a key diz 'Terca', a key (posição no grid) vence.
+        // A validação de 'ghost' real é se o slot é active.
 
         if (!classAllocations[entry.classId]) {
           classAllocations[entry.classId] = 0;
@@ -167,13 +174,20 @@ const ManualEditSection = ({ data, setData }) => {
         allocatedIndex[compositeKey] = (allocatedIndex[compositeKey] || 0) + 1;
       });
 
+      // Coletar todas as atividades esperadas e calcular pendências
+      let totalExcess = 0;
+      const excessDetails = [];
       const missingDetails = [];
+
       Object.entries(expectedByKey).forEach(([key, expected]) => {
         const allocated = allocatedIndex[key] || 0;
         const missing = Math.max(0, expected - allocated);
+        const excess = Math.max(0, allocated - expected);
+
         totalExpected += expected;
-        totalAllocated += allocated;
+        totalAllocated += allocated; // Soma tudo que foi alocado para atividades CONHECIDAS
         totalPending += missing;
+        totalExcess += excess;
 
         if (missing > 0) {
           const [classId, subjectId, teacherId] = key.split('-');
@@ -184,16 +198,22 @@ const ManualEditSection = ({ data, setData }) => {
             : 'Sem professor';
           missingDetails.push({ className, subjectName, teacherName, allocated, expected, missing });
         }
+
+        if (excess > 0) {
+          const [classId, subjectId] = key.split('-');
+          const className = data.classes.find(c => c.id === classId)?.name || 'Turma';
+          const subjectName = data.subjects.find(s => s.id === subjectId)?.name || 'Matéria';
+          excessDetails.push(`${subjectName} - ${className}: +${excess}`);
+        }
       });
 
-      // Verificar se o totalAllocated por somatório de chaves bate com totalUsedSlots
-      // Se não bater, usar totalUsedSlots como referência (mais confiável)
-      const allocatedViaKeys = totalAllocated;
-      if (allocatedViaKeys !== totalUsedSlots) {
-        // Há discrepância - usar o valor real de slots usados
-        totalAllocated = totalUsedSlots;
-        totalPending = Math.max(0, totalExpected - totalAllocated);
-      }
+      // Validar discrepância entre slots usados e alocações conhecidas
+      const unknownAllocationsCount = totalUsedSlots - totalAllocated;
+      // totalAllocated aqui soma (Expected ou Reference) + Excess.
+      // Se eu tenho 1 planned, 10 allocated. totalAllocated+=10.
+      // Se totalUsedSlots=10. Diff=0.
+      // Se tenho 0 planned (activity removed), 10 allocated. totalAllocated não soma nada (não entra no loop).
+      // totalUsedSlots=10. Diff=10. -> Unknown/Unplanned.
 
       // Organizar por matéria/turma para exibição
       const detailsBySubjectClass = {};
@@ -214,22 +234,38 @@ const ManualEditSection = ({ data, setData }) => {
       const header = [
         '📊 ANÁLISE DE SLOTS',
         `   Total de slots ocupados: ${totalUsedSlots}`,
-        `   Total de slots livres: ${totalExpected - totalAllocated}`,
+        // `   Total de slots livres: ${totalExpected - totalAllocated}`, // Math incorreto se tiver excesso ou unknown
         '',
         'Detalhamento por turma:',
         ...slotAnalysis,
         '',
         '📊 ANÁLISE DE PENDÊNCIAS',
         `   📈 Total esperado: ${totalExpected} aula(s)`,
-        `   ✅ Total alocado: ${totalAllocated} aula(s)`,
-        `   ⏳ Total de pendências: ${totalPending} aula(s)`,
+        `   ✅ Total alocado (Atividades): ${totalAllocated} aula(s)`,
       ];
 
-      if (totalPending === 0) {
-        setPendingLog([...header, '', '✅ Sem pendências para esta grade.']);
-      } else {
-        setPendingLog([...header, '', 'Detalhamento das pendências:', '', ...lines]);
+      if (totalExcess > 0) {
+        header.push(`   ⚠️ Excedentes: ${totalExcess} aula(s) (incluso no total alocado)`);
       }
+      if (unknownAllocationsCount > 0) {
+        header.push(`   ❓ Alocações desconhecidas/fantasmas: ${unknownAllocationsCount} slot(s)`);
+      }
+
+      header.push(`   ⏳ Total de pendências: ${totalPending} aula(s)`);
+
+      const finalLog = [...header];
+
+      if (totalPending === 0) {
+        finalLog.push('', '✅ Sem pendências para esta grade.');
+      } else {
+        finalLog.push('', 'Detalhamento das pendências:', '', ...lines);
+      }
+
+      if (excessDetails.length > 0) {
+        finalLog.push('', 'Detalhamento de Excedentes:', ...excessDetails);
+      }
+
+      setPendingLog(finalLog);
     } catch (e) {
       setPendingLog([`❌ Erro ao calcular pendências: ${e.message}`]);
     }
@@ -535,51 +571,72 @@ const ManualEditSection = ({ data, setData }) => {
     return true; // Linha completamente vazia
   };
 
-  const getLessonCount = (classId, subjectId) => {
+  // Helper para obter detalhes e contagem (suporta tooltip rico)
+  const getLessonDetails = (classId, subjectId) => {
     const seen = new Set();
-    let count = 0;
+    const allocations = [];
 
     // Obter turma para validação
     const cls = data.classes.find(c => c.id === classId);
-    if (!cls) return 0;
+    if (!cls) return { count: 0, allocations: [] };
 
     for (const [key, entry] of Object.entries(data.schedule)) {
       if (entry.classId === classId && entry.subjectId === subjectId) {
 
-        // RECUPERAÇÃO ROBUSTA DO DIA E SLOT (Mesma lógica do Analyzer)
+        // RECUPERAÇÃO ROBUSTA DO DIA E SLOT
         let dayIdx = entry.dayIdx;
         let slotIdx = entry.slotIdx;
 
-        if (entry.timeKey) {
-          const parts = entry.timeKey.split('-');
-          const dIdx = DAYS.indexOf(parts[0]);
-          if (dIdx >= 0) dayIdx = dIdx;
-          else {
-            const maybe = parseInt(parts[0]);
-            if (!isNaN(maybe) && maybe >= 0 && maybe < DAYS.length) dayIdx = maybe;
+        // PRIORIDADE 1: Parsear da Key
+        const parts = key.split('-');
+        if (parts.length >= 3) {
+          const sStr = parts[parts.length - 1];
+          const dStr = parts[parts.length - 2];
+          const maybeSlot = parseInt(sStr, 10);
+          const maybeDay = DAYS.indexOf(dStr);
+          if (!isNaN(maybeSlot) && maybeDay >= 0) {
+            slotIdx = maybeSlot;
+            dayIdx = maybeDay;
           }
         }
 
-        if (dayIdx === undefined || slotIdx === undefined) {
-          const parts = key.split('-');
-          if (parts.length >= 3) slotIdx = parseInt(parts[2]);
-          const dName = parts[1];
-          const dIdx = DAYS.indexOf(dName);
+        // PRIORIDADE 2: Internal timeKey
+        if ((dayIdx === undefined || slotIdx === undefined) && entry.timeKey) {
+          const tParts = entry.timeKey.split('-');
+          const dIdx = DAYS.indexOf(tParts[0]);
           if (dIdx >= 0) dayIdx = dIdx;
+          else {
+            const dNum = parseInt(tParts[0]);
+            if (!isNaN(dNum)) dayIdx = dNum;
+          }
         }
 
-        // Se inválido ou fantasma, ignora na contagem visual
         if (dayIdx === undefined || dayIdx === -1 || slotIdx === undefined) continue;
         if (!isSlotActiveLocal(classId, dayIdx, slotIdx)) continue;
 
         const dedupKey = key || `${entry.dayIdx ?? 'd?'}-${entry.slotIdx ?? 's?'}`;
         if (!seen.has(dedupKey)) {
           seen.add(dedupKey);
-          count += 1;
+
+          const slotTime = data.timeSlots[slotIdx];
+          const timeLabel = slotTime ? `${slotTime.start}` : '?';
+          allocations.push({
+            day: DAYS[dayIdx],
+            time: timeLabel,
+            dayIdx, // para ordenar
+            start: slotTime ? slotTime.start : '00:00'
+          });
         }
       }
     }
-    return count;
+
+    // Ordenar cronologicamente: Dia -> Hora
+    allocations.sort((a, b) => {
+      if (a.dayIdx !== b.dayIdx) return a.dayIdx - b.dayIdx;
+      return a.start.localeCompare(b.start);
+    });
+
+    return { count: allocations.length, allocations };
   };
 
   // Helper para obter cor consistente da matéria
@@ -807,6 +864,9 @@ const ManualEditSection = ({ data, setData }) => {
                                 const isEmpty = !entry;
                                 const isAvailable = isSlotAvailable(dayIdx, absoluteIndex);
 
+                                // Calcular detalhes apenas se tiver aula
+                                const lessonInfo = entry ? getLessonDetails(cls.id, entry.subjectId) : null;
+
                                 return (
                                   <td
                                     key={dayIdx}
@@ -826,8 +886,15 @@ const ManualEditSection = ({ data, setData }) => {
                                           </div>
                                         </div>
                                         {/* Tooltip com contagem (Ocultar na impressão) */}
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 whitespace-nowrap shadow-lg print:hidden">
-                                          {getLessonCount(entry.classId, entry.subjectId)} aulas alocadas
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 whitespace-nowrap shadow-lg print:hidden">
+                                          <div className="font-bold mb-1 border-b border-slate-600 pb-1">
+                                            {lessonInfo?.count} aulas alocadas
+                                          </div>
+                                          <div className="space-y-0.5 opacity-90">
+                                            {lessonInfo?.allocations.map((a, i) => (
+                                              <div key={i}>{a.day} às {a.time}</div>
+                                            ))}
+                                          </div>
                                           <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
                                         </div>
                                         {editMode && (
