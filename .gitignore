@@ -88,3 +88,6 @@ build-installer.bat
 executaveis/
 
 get_hashes.py
+
+# Documentation archive
+MD/
