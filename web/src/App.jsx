@@ -219,6 +219,7 @@ const App = () => {
   const handleExportState = useCallback(() => exportBackup(data), [data]);
 
   const handleImportState = useCallback((e) => {
+    setGenerationLog([]); // Limpar log ao iniciar restauração
     importBackup(e.target.files[0], (rawParsed) => {
       // 1. Migrar para garantir formato atual (v1 data -> v2 structures)
       let newData = migrateData(rawParsed);
