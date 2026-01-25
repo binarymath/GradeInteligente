@@ -668,7 +668,14 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
 
     log.push('');
     log.push(`✅ Smart Repair finalizado: ${recovered} aula(s) realocada(s).`);
-    log.push(`⏳ Pendências remanescentes: ${remainingAfter}`);
+
+    if (remainingAfter <= 0) {
+      log.push('✅ Parabéns pelo trabalho sua grade foi construida com sucesso.');
+      console.log('Smart Repair Success: 0 pendencies remaining.');
+    } else {
+      log.push(`⏳ Pendências remanescentes: ${remainingAfter}`);
+      console.log(`Smart Repair Incomplete: ${remainingAfter} remaining.`);
+    }
 
     setData(prev => ({ ...prev, schedule: manager.schedule }));
     setGenerationLog(log);
