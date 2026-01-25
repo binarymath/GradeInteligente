@@ -34,6 +34,82 @@ const ManualEditSection = ({ data, setData }) => {
     return true;
   };
 
+  // Helper para converter horário "HH:MM" em minutos
+  const timeToMinutes = (time) => {
+    if (!time) return 0;
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  // Helper para detectar conflito de horário real (overlap)
+  const findTeacherConflict = (teacherId, dayIdx, start, end, excludeClassId = null) => {
+    const startMin = timeToMinutes(start);
+    const endMin = timeToMinutes(end);
+
+    // Itera sobre todo o schedule
+    const conflictKey = Object.keys(data.schedule || {}).find(key => {
+      const entry = data.schedule[key];
+
+      // Filtra por professor e dia
+      // Obs: Precisamos saber o dia da entry.
+      // A key é "classId-day-slotIdx" (geralmente) OU entry tem timeKey
+
+      if (entry.teacherId !== teacherId) return false;
+      if (excludeClassId && entry.classId === excludeClassId) return false;
+
+      // Recupera dia e horários da entry
+      let entryDayIdx = -1;
+      let entryStart = "00:00";
+      let entryEnd = "00:00";
+
+      // Tenta parsear da Key
+      const parts = key.split('-');
+      if (parts.length >= 3) {
+        const dStr = parts[parts.length - 2];
+        const sStr = parts[parts.length - 1];
+        const dIdx = DAYS.indexOf(dStr);
+        const sIdx = parseInt(sStr, 10);
+
+        if (dIdx >= 0 && !isNaN(sIdx)) {
+          entryDayIdx = dIdx;
+          const sObj = data.timeSlots[sIdx];
+          if (sObj) {
+            entryStart = sObj.start;
+            entryEnd = sObj.end;
+          }
+        }
+      }
+
+      // Se falhou parse da Key, tenta timeKey (melhor)
+      if (entryDayIdx === -1 && entry.timeKey) {
+        const tParts = entry.timeKey.split('-');
+        const dIdx = DAYS.indexOf(tParts[0]); // "Segunda" -> 0
+        // ou pode ser numero? ScheduleManager usa DAYS[dayIdx].
+        if (dIdx >= 0) {
+          entryDayIdx = dIdx;
+          // Achar slot
+          const sIdx = parseInt(tParts[1], 10);
+          const sObj = data.timeSlots[sIdx];
+          if (sObj) {
+            entryStart = sObj.start;
+            entryEnd = sObj.end;
+          }
+        }
+      }
+
+      if (entryDayIdx !== dayIdx) return false;
+
+      // Check Overlap
+      const eStartMin = timeToMinutes(entryStart);
+      const eEndMin = timeToMinutes(entryEnd);
+
+      // (StartA < EndB) and (EndA > StartB)
+      return (startMin < eEndMin && endMin > eStartMin);
+    });
+
+    return conflictKey;
+  };
+
   // Função para calcular sugestões de alocação (Simples + Troca Local + Troca Remota)
   const calculateSuggestions = (item) => {
     const { classId, subjectId, teacherIds } = item;
@@ -971,24 +1047,34 @@ const ManualEditSection = ({ data, setData }) => {
     const subjectName = data.subjects.find(s => s.id === newEntry.subjectId)?.name || 'Matéria';
     const teacherName = data.teachers.find(t => t.id === newEntry.teacherId)?.name || 'Professor';
 
-    // Verificar conflito de professor
-    const conflictEntryKey = Object.keys(data.schedule || {}).find(k => {
-      const entry = data.schedule[k];
-      return entry.teacherId === newEntry.teacherId && entry.timeKey === timeKey;
-    });
+    // Verificar conflito de professor (Agora usando overlap real)
+    const conflictEntryKey = findTeacherConflict(newEntry.teacherId, dayIdx, slot.start, slot.end, targetClass);
 
     if (conflictEntryKey) {
       const conflictEntry = data.schedule[conflictEntryKey];
       const conflictClass = data.classes.find(c => c.id === conflictEntry.classId);
+      const conflictSubject = data.subjects.find(s => s.id === conflictEntry.subjectId);
+
+      // Tentar recuperar horário legível do conflito
+      let conflictTimeLabel = "?";
+      // ... Lógica para pegar slot time do conflictEntry (já fizemos no findTeacherConflict mas não retornamos, vamos re-buscar rapido)
+      if (conflictEntry.timeKey) {
+        const tParts = conflictEntry.timeKey.split('-');
+        const sIdx = parseInt(tParts[1]);
+        const sObj = data.timeSlots[sIdx];
+        if (sObj) conflictTimeLabel = `${sObj.start}-${sObj.end}`;
+      }
 
       // Em vez de alertar, ativa modo de resolução de conflito no modal
       setConflictToResolve({
         teacherName,
         conflictClass,
-        timeKey,
-        entryKey: conflictEntryKey,
+        timeKey, // Key do slot que estamos tentando adicionar
+        entryKey: conflictEntryKey, // Key da entrada que está bloqueando (overlap)
         slotLabel: `${DAYS[dayIdx]} ${slot?.start || ''}-${slot?.end || ''}`,
-        conflictSubjectName: data.subjects.find(s => s.id === conflictEntry.subjectId)?.name
+        conflictSubjectName: conflictSubject?.name,
+        // Adicional: info sobre o horário do conflito para exibir
+        conflictTimeLabel: `${DAYS[dayIdx]} ${conflictTimeLabel}`
       });
       return;
     }
