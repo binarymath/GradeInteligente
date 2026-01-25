@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Check, X, Trash2, Clock, BookOpen, Star, Save, Coffee, Utensils, Sun, Sunset, Moon, Layers, Users, Edit2, Settings } from 'lucide-react';
+import { Plus, Check, X, Trash2, Clock, BookOpen, Star, Save, Coffee, Utensils, Sun, Sunset, Moon, Layers, Users, Edit2, Settings, HelpCircle } from 'lucide-react';
 import { uid, DAYS, COLORS, getAllSlots } from '../utils';
 import { computeSlotShift } from '../utils/time';
 import SynchronousConfigService from '../services/SynchronousConfigService';
 import ClassForm from './ClassForm';
+import SubjectSyncManager from './SubjectSyncManager';
 
 const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
@@ -19,8 +20,8 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const [editingSubjectShifts, setEditingSubjectShifts] = useState([]);
   const [editingSubjectIsSynchronous, setEditingSubjectIsSynchronous] = useState(false);
 
-  // Editor simplificado inline para aulas síncronas
-  const [inlineSyncEditing, setInlineSyncEditing] = useState({ subjectId: null, configId: null, editingConfig: null, selectedDayForSlots: DAYS[0], classSearch: '' });
+  // State to toggle the new Sync Manager visibility per subject
+  const [openSyncManagerSubjectId, setOpenSyncManagerSubjectId] = useState(null);
 
   const [isAddingClass, setIsAddingClass] = useState(false);
   const [editingClassId, setEditingClassId] = useState(null);
@@ -36,129 +37,6 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const [editingTeacherId, setEditingTeacherId] = useState(null);
   const [editingTeacherName, setEditingTeacherName] = useState('');
   const [editingTeacherShifts, setEditingTeacherShifts] = useState([]);
-
-  const toggleInlineSyncEditor = (subject) => {
-    setInlineSyncEditing(prev => {
-      if (prev.subjectId === subject.id) {
-        return { subjectId: null, configId: null, editingConfig: null, selectedDayForSlots: DAYS[0], classSearch: '' };
-      }
-      return { subjectId: subject.id, configId: null, editingConfig: null, selectedDayForSlots: DAYS[0], classSearch: '' };
-    });
-  };
-
-  const addInlineSyncConfig = (subject) => {
-    const currentConfigs = SynchronousConfigService.getSubjectConfigs(subject);
-    const newConfig = SynchronousConfigService.createEmptyConfig(`Configuração ${currentConfigs.length + 1}`);
-
-    // Antigravity: Pre-fill with ALL valid slots based on subject shifts
-    const subjectHasShifts = (subject.shifts || []).length > 0;
-    const subjectShiftSet = new Set(subject.shifts || []);
-
-    // Find valid slot indices
-    const validSlotIndices = allSlots
-      .map((slot, idx) => ({ slot, idx }))
-      .filter(({ slot }) => {
-        if (!subjectHasShifts) return true;
-        if (slot.shift && (slot.shift.startsWith('Integral'))) {
-          return subjectShiftSet.has(slot.shift);
-        }
-        const label = slot.shift || (() => {
-          const [h, m] = slot.start.split(':').map(Number);
-          const minutes = h * 60 + m;
-          if (minutes < 12 * 60) return 'Manhã';
-          if (minutes < 18 * 60) return 'Tarde';
-          return 'Noite';
-        })();
-        return subjectShiftSet.has(label);
-      })
-      .map(item => item.idx);
-
-    // Populate all days and all valid slots
-    newConfig.days = [...DAYS];
-    newConfig.timeSlots = [];
-    DAYS.forEach(day => {
-      validSlotIndices.forEach(idx => {
-        newConfig.timeSlots.push(`${day}-${idx}`);
-      });
-    });
-
-    const nextConfigs = [...currentConfigs, newConfig];
-    setData(prev => ({
-      ...prev,
-      subjects: prev.subjects.map(s => s.id === subject.id ? { ...s, synchronousConfigs: nextConfigs } : s)
-    }));
-    setInlineSyncEditing({ subjectId: subject.id, configId: newConfig.id, editingConfig: newConfig, selectedDayForSlots: DAYS[0], classSearch: '' });
-  };
-
-  const editInlineSyncConfig = (subject, config) => {
-    setInlineSyncEditing({ subjectId: subject.id, configId: config.id, editingConfig: { ...config }, selectedDayForSlots: config.days[0] || DAYS[0], classSearch: '' });
-  };
-
-  const cancelInlineSyncEdit = () => {
-    setInlineSyncEditing({ subjectId: null, configId: null, editingConfig: null, selectedDayForSlots: DAYS[0], classSearch: '' });
-  };
-
-  const saveInlineSyncEdit = (subject) => {
-    const { editingConfig } = inlineSyncEditing;
-    const validation = SynchronousConfigService.validateConfig(editingConfig, data);
-    if (!validation.isValid) {
-      alert(`Erro na configuração:\n${validation.errors.join('\n')}`);
-      return;
-    }
-    console.log('💾 Salvando configuração inline:', editingConfig);
-    setData(prev => ({
-      ...prev,
-      subjects: prev.subjects.map(s => s.id === subject.id ? {
-        ...s,
-        synchronousConfigs: (SynchronousConfigService.getSubjectConfigs(s) || []).map(c => c.id === editingConfig.id ? editingConfig : c)
-      } : s)
-    }));
-    cancelInlineSyncEdit();
-  };
-
-  const deleteInlineSyncConfig = (subject, configId) => {
-    if (!confirm('Deseja remover esta configuração?')) return;
-    setData(prev => ({
-      ...prev,
-      subjects: prev.subjects.map(s => s.id === subject.id ? {
-        ...s,
-        synchronousConfigs: (SynchronousConfigService.getSubjectConfigs(s) || []).filter(c => c.id !== configId)
-      } : s)
-    }));
-    if (inlineSyncEditing.configId === configId) cancelInlineSyncEdit();
-  };
-
-  const duplicateInlineSyncConfig = (subject, config) => {
-    const dup = SynchronousConfigService.duplicateConfig(config);
-    setData(prev => ({
-      ...prev,
-      subjects: prev.subjects.map(s => s.id === subject.id ? {
-        ...s,
-        synchronousConfigs: [...(SynchronousConfigService.getSubjectConfigs(s) || []), dup]
-      } : s)
-    }));
-  };
-
-  const toggleInlineSyncActive = (subject, configId) => {
-    setData(prev => ({
-      ...prev,
-      subjects: prev.subjects.map(s => s.id === subject.id ? {
-        ...s,
-        synchronousConfigs: (SynchronousConfigService.getSubjectConfigs(s) || []).map(c => c.id === configId ? { ...c, isActive: !c.isActive } : c)
-      } : s)
-    }));
-  };
-
-  const saveAllInlineSyncConfigs = (subject) => {
-    const configs = SynchronousConfigService.getSubjectConfigs(subject) || [];
-    const allValid = configs.every(c => SynchronousConfigService.validateConfig(c, data).isValid);
-    if (!allValid || inlineSyncEditing.configId) {
-      alert(inlineSyncEditing.configId ? 'Conclua a edição antes de salvar.' : 'Algumas configurações possuem erros.');
-      return;
-    }
-    // Já estão salvas no estado global; este botão dá feedback simples
-    alert('Configurações sincronas salvas.');
-  };
 
   const toggleTeacherUnavailable = (teacherId, dayIndex, lessonIndex) => {
     const key = `${DAYS[dayIndex]}-${lessonIndex}`;
@@ -584,7 +462,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                         <BookOpen size={16} className={COLORS[subject.colorIndex].text} />
                       </div>
                       {!isEditing ? (
-                        <div>
+                        <div className="flex-1">
                           <h4 className="font-bold text-slate-700 flex items-center gap-2 flex-wrap">
                             {subject.name}
                             {subject.isSynchronous && (
@@ -593,16 +471,23 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                                 Síncrona
                               </span>
                             )}
-                            {subject.isSynchronous && (
+                            <button onClick={() => startEditSubject(subject)} className="text-slate-400 hover:text-blue-600 transition-colors" title="Editar Nome/Turnos"><Edit2 size={14} /></button>
+                            <div className="flex items-center gap-2 whitespace-nowrap">
                               <button
-                                onClick={() => toggleInlineSyncEditor(subject)}
-                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 p-1 rounded transition-colors"
-                                title="Configurar aulas síncronas (simplificado)"
+                                onClick={() => setOpenSyncManagerSubjectId(openSyncManagerSubjectId === subject.id ? null : subject.id)}
+                                className={`px-2 py-0.5 rounded transition-colors text-xs font-medium flex items-center gap-1 border ${openSyncManagerSubjectId === subject.id || subject.isSynchronous ? 'bg-blue-50 text-blue-700 border-blue-200' : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50 border-transparent hover:border-blue-100'}`}
+                                title="Gerenciar Configurações Síncronas"
                               >
-                                <Settings size={14} />
+                                <Settings size={12} />
+                                Configurar Aula Síncrona
                               </button>
-                            )}
-                            <button onClick={() => startEditSubject(subject)} className="text-slate-400 hover:text-blue-600 transition-colors" title="Editar"><Edit2 size={14} /></button>
+                              <div className="group relative ml-1 inline-flex items-center">
+                                <HelpCircle size={14} className="text-slate-400 cursor-help hover:text-blue-500 transition-colors bg-white rounded-full z-10" />
+                                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 bg-slate-800 text-white text-[10px] p-2 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 text-center whitespace-normal">
+                                  Aulas síncronas ocorrem ao mesmo tempo para várias turmas (ex: {subject.name} acontecendo nas turmas A e B ao mesmo tempo).
+                                </div>
+                              </div>
+                            </div>
                           </h4>
                           {subject.shifts && subject.shifts.length > 0 && (
                             <div className="mt-1 flex flex-wrap gap-1">
@@ -611,253 +496,24 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                               ))}
                             </div>
                           )}
-                          {subject.isSynchronous && (() => {
-                            const activeConfigs = SynchronousConfigService.getActiveConfigs(subject);
-                            if (!activeConfigs || activeConfigs.length === 0) return null;
-                            return (
-                              <div className="mt-2">
-                                <div className="text-[9px] text-slate-500 mb-1">Configurações síncronas ativas ({activeConfigs.length}):</div>
-                                <div className="flex flex-wrap gap-1">
-                                  {activeConfigs.map(cfg => (
-                                    <span key={cfg.id} className="bg-blue-50 text-blue-700 border border-blue-100 rounded px-1.5 py-0.5 text-[9px] font-medium">
-                                      {cfg.name} • {cfg.days.length}d • {cfg.timeSlots.length}h • {cfg.classes.length}t
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })()}
 
-                          {/* Editor inline simplificado */}
-                          {subject.isSynchronous && inlineSyncEditing.subjectId === subject.id && (
-                            <div className="mt-3 border border-blue-200 rounded-lg bg-blue-50 p-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs font-bold text-blue-700">Configuração Síncrona Granular (inline)</span>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => addInlineSyncConfig(subject)}
-                                    className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-                                    title="Adicionar nova configuração de aula síncrona"
-                                  >
-                                    Adicionar
-                                  </button>
-                                  <button
-                                    onClick={() => saveAllInlineSyncConfigs(subject)}
-                                    className="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700"
-                                    title="Salvar todas as configurações desta matéria"
-                                  >
-                                    Salvar Configurações
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="space-y-2">
-                                {(SynchronousConfigService.getSubjectConfigs(subject) || []).length === 0 ? (
-                                  <div className="text-[11px] text-slate-600">Nenhuma configuração criada.</div>
-                                ) : (
-                                  (SynchronousConfigService.getSubjectConfigs(subject) || []).map(config => (
-                                    <div key={config.id} className={`p-2 rounded border ${inlineSyncEditing.configId === config.id ? 'border-blue-500 bg-white' : 'border-slate-200 bg-white'}`}>
-                                      {inlineSyncEditing.configId === config.id ? (
-                                        <div className="space-y-2">
-                                          <input
-                                            type="text"
-                                            value={inlineSyncEditing.editingConfig.name}
-                                            onChange={e => setInlineSyncEditing(prev => ({ ...prev, editingConfig: { ...prev.editingConfig, name: e.target.value } }))}
-                                            className="w-full border border-slate-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
-                                            placeholder="Nome da configuração"
-                                          />
-                                          {/* Antigravity: Sections "Dias" and "Horários" hidden as requested by user ("sem detalhamento") */}
-                                          {/* To restore, uncomment the block below */}
-                                          {/* 
-                                          <div>
-                                            <div className="text-[10px] font-bold text-slate-700 mb-1">Dias da Semana</div>
-                                            <div className="flex gap-1 flex-wrap">
-                                              {DAYS.map(day => (
-                                                <button
-                                                  key={day}
-                                                  type="button"
-                                                  onClick={() => {
-                                                    const has = inlineSyncEditing.editingConfig.days.includes(day);
-                                                    const updated = has
-                                                      ? inlineSyncEditing.editingConfig.days.filter(d => d !== day)
-                                                      : [...inlineSyncEditing.editingConfig.days, day];
-                                                    const newDay = updated.length > 0 ? updated[0] : DAYS[0];
-                                                    setInlineSyncEditing(prev => ({ ...prev, selectedDayForSlots: newDay, editingConfig: { ...prev.editingConfig, days: updated } }));
-                                                  }}
-                                                  className={`px-2 py-1 rounded text-[10px] ${inlineSyncEditing.editingConfig.days.includes(day) ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
-                                                  title={`${inlineSyncEditing.editingConfig.days.includes(day) ? 'Remover' : 'Adicionar'} ${day}`}
-                                                >
-                                                  {day.substring(0, 3)}
-                                                </button>
-                                              ))}
-                                            </div>
-                                          </div>
-                                          <div>
-                                            <div className="text-[10px] font-bold text-slate-700 mb-1">Horários das Aulas Síncronas ({inlineSyncEditing.selectedDayForSlots})</div>
-                                            <div className="flex gap-1 mb-1 flex-wrap">
-                                              {inlineSyncEditing.editingConfig.days.map(day => (
-                                                <button
-                                                  key={day}
-                                                  type="button"
-                                                  onClick={() => setInlineSyncEditing(prev => ({ ...prev, selectedDayForSlots: day }))}
-                                                  className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${inlineSyncEditing.selectedDayForSlots === day ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
-                                                  title={`Ver horários de ${day}`}
-                                                >
-                                                  {day.substring(0, 3)}
-                                                </button>
-                                              ))}
-                                            </div>
-                                            <div className="max-h-28 overflow-y-auto border border-slate-300 rounded p-2 bg-white">
-                                              {allSlots
-                                                .filter(s => s.type === 'aula')
-                                                .map((slot, idx) => {
-                                                  const slotKey = `${inlineSyncEditing.selectedDayForSlots}-${idx}`;
-                                                  const isSel = inlineSyncEditing.editingConfig.timeSlots.includes(slotKey);
-                                                  return (
-                                                    <button
-                                                      key={slotKey}
-                                                      type="button"
-                                                      onClick={() => {
-                                                        const updated = isSel
-                                                          ? inlineSyncEditing.editingConfig.timeSlots.filter(k => k !== slotKey)
-                                                          : [...inlineSyncEditing.editingConfig.timeSlots, slotKey];
-                                                        setInlineSyncEditing(prev => ({ ...prev, editingConfig: { ...prev.editingConfig, timeSlots: updated } }));
-                                                      }}
-                                                      className={`w-full text-left px-2 py-1 mb-1 rounded text-[10px] ${isSel ? 'bg-blue-600 text-white' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
-                                                      title={`${isSel ? 'Remover' : 'Adicionar'} horário ${slot.start}-${slot.end}`}
-                                                    >
-                                                      {slot.start}-{slot.end}
-                                                    </button>
-                                                  );
-                                                })}
-                                            </div>
-                                          </div>
-                                          */}
-                                          <div>
-                                            <div className="text-[10px] font-bold text-slate-700 mb-1">Turmas</div>
-                                            <div className="flex items-center gap-2 mb-1">
-                                              <input type="text" value={inlineSyncEditing.classSearch} onChange={e => setInlineSyncEditing(prev => ({ ...prev, classSearch: e.target.value }))} className="flex-1 border border-slate-300 rounded px-2 py-1 text-[11px] outline-none focus:border-blue-500" placeholder="Pesquisar turmas" />
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  const needle = inlineSyncEditing.classSearch.trim().toLowerCase();
-                                                  const ids = data.classes.filter(c => (c.name || '').toLowerCase().includes(needle)).map(c => c.id);
-                                                  const setIds = new Set(inlineSyncEditing.editingConfig.classes);
-                                                  ids.forEach(id => setIds.add(id));
-                                                  setInlineSyncEditing(prev => ({ ...prev, editingConfig: { ...prev.editingConfig, classes: Array.from(setIds) } }));
-                                                }}
-                                                className="text-[10px] bg-slate-200 text-slate-700 px-2 py-1 rounded hover:bg-slate-300"
-                                                title="Adicionar turmas filtradas à seleção"
-                                              >
-                                                Selecionar filtradas
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  const needle = inlineSyncEditing.classSearch.trim().toLowerCase();
-                                                  const ids = new Set(data.classes.filter(c => (c.name || '').toLowerCase().includes(needle)).map(c => c.id));
-                                                  setInlineSyncEditing(prev => ({ ...prev, editingConfig: { ...prev.editingConfig, classes: prev.editingConfig.classes.filter(id => !ids.has(id)) } }));
-                                                }}
-                                                className="text-[10px] bg-slate-200 text-slate-700 px-2 py-1 rounded hover:bg-slate-300"
-                                                title="Remover turmas filtradas da seleção"
-                                              >
-                                                Limpar filtradas
-                                              </button>
-                                            </div>
-                                            <div className="max-h-28 overflow-y-auto border border-slate-300 rounded p-2 bg-white">
-                                              {(data.classes || []).filter(c => {
-                                                const needle = inlineSyncEditing.classSearch.trim().toLowerCase();
-                                                if (!needle) return true;
-                                                return (c.name || '').toLowerCase().includes(needle);
-                                              }).map(cls => {
-                                                const active = inlineSyncEditing.editingConfig.classes.includes(cls.id);
-                                                return (
-                                                  <button
-                                                    key={cls.id}
-                                                    type="button"
-                                                    onClick={() => {
-                                                      const updated = active
-                                                        ? inlineSyncEditing.editingConfig.classes.filter(id => id !== cls.id)
-                                                        : [...inlineSyncEditing.editingConfig.classes, cls.id];
-                                                      setInlineSyncEditing(prev => ({ ...prev, editingConfig: { ...prev.editingConfig, classes: updated } }));
-                                                    }}
-                                                    className={`w-full text-left px-2 py-1 mb-1 rounded text-[10px] ${active ? 'bg-indigo-600 text-white' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
-                                                    title={`${active ? 'Remover' : 'Adicionar'} turma ${cls.name}`}
-                                                  >
-                                                    {cls.name}
-                                                  </button>
-                                                );
-                                              })}
-                                            </div>
-                                          </div>
-                                          {(() => {
-                                            const v = SynchronousConfigService.validateConfig(inlineSyncEditing.editingConfig, data);
-                                            if (v.isValid) return null;
-                                            return <div className="text-[10px] text-red-600">{v.errors.join(' • ')}</div>;
-                                          })()}
-                                          <div className="flex justify-end gap-2">
-                                            <button
-                                              onClick={() => cancelInlineSyncEdit()}
-                                              className="text-xs bg-slate-200 text-slate-700 px-2 py-1 rounded hover:bg-slate-300"
-                                              title="Cancelar edição e descartar alterações"
-                                            >
-                                              Cancelar
-                                            </button>
-                                            <button
-                                              onClick={() => saveInlineSyncEdit(subject)}
-                                              className="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700"
-                                              title="Salvar esta configuração"
-                                            >
-                                              Salvar
-                                            </button>
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-start justify-between">
-                                          <div className="text-[11px] text-slate-700">
-                                            <span className="font-bold">{config.name}</span>
-                                            <span className="ml-2 text-slate-500">
-                                              📅 {config.days.length} {config.days.length === 1 ? 'dia' : 'dias'} •
-                                              🕐 {config.timeSlots.length} {config.timeSlots.length === 1 ? 'horário' : 'horários'} •
-                                              👥 {config.classes.length} {config.classes.length === 1 ? 'turma' : 'turmas'}
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            <button
-                                              onClick={() => toggleInlineSyncActive(subject, config.id)}
-                                              className={`text-xs px-2 py-1 rounded ${config.isActive ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}
-                                              title={config.isActive ? 'Desativar esta configuração' : 'Ativar esta configuração'}
-                                            >
-                                              {config.isActive ? 'Ativa' : 'Inativa'}
-                                            </button>
-                                            <button
-                                              onClick={() => duplicateInlineSyncConfig(subject, config)}
-                                              className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded hover:bg-slate-200"
-                                              title="Criar uma cópia desta configuração"
-                                            >
-                                              Duplicar
-                                            </button>
-                                            <button
-                                              onClick={() => editInlineSyncConfig(subject, config)}
-                                              className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-                                              title="Editar esta configuração"
-                                            >
-                                              Editar
-                                            </button>
-                                            <button
-                                              onClick={() => deleteInlineSyncConfig(subject, config.id)}
-                                              className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
-                                              title="Remover esta configuração"
-                                            >
-                                              Remover
-                                            </button>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </div>
+                          {/* Subject Sync Manager */}
+                          {openSyncManagerSubjectId === subject.id && (
+                            <SubjectSyncManager
+                              subject={subject}
+                              data={data}
+                              onUpdate={(newConfigs) => {
+                                setData(prev => ({
+                                  ...prev,
+                                  subjects: prev.subjects.map(s => s.id === subject.id ? {
+                                    ...s,
+                                    synchronousConfigs: newConfigs,
+                                    // Auto-enable isSynchronous if configs exist, disable if empty (optional, or just keep enabled)
+                                    isSynchronous: newConfigs.length > 0 ? true : s.isSynchronous
+                                  } : s)
+                                }));
+                              }}
+                            />
                           )}
                         </div>
                       ) : (
@@ -894,18 +550,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                             </div>
                             <p className="text-[10px] text-slate-400">Ajuste os turnos em que esta matéria pode ocorrer.</p>
                           </div>
-                          <div className="border-t border-slate-200 pt-2">
-                            <label className="flex items-center gap-2 text-[11px] font-bold text-slate-600 mb-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={editingSubjectIsSynchronous}
-                                onChange={(e) => setEditingSubjectIsSynchronous(e.target.checked)}
-                                className="w-4 h-4"
-                              />
-                              <Layers size={14} className="text-blue-600" />
-                              Aula Síncrona (todas as turmas ao mesmo tempo)
-                            </label>
-                          </div>
+
                         </div>
                       )}
                     </div>
@@ -914,7 +559,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                     )}
                   </div>
                 </div>
-              )
+              );
             })}
           </div>
         )}
