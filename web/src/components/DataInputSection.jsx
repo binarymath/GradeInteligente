@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { Plus, Check, X, Trash2, Clock, BookOpen, Star, Save, Coffee, Utensils, Sun, Sunset, Moon, Layers, Users, Edit2, Settings, HelpCircle } from 'lucide-react';
 import { uid, DAYS, COLORS, getAllSlots } from '../utils';
 import { computeSlotShift } from '../utils/time';
@@ -7,6 +7,7 @@ import ClassForm from './ClassForm';
 import SubjectSyncManager from './SubjectSyncManager';
 
 const DataInputSection = ({ data, setData, subView, setSubView }) => {
+  const classFormRef = useRef(null);
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
   const [newTeacherName, setNewTeacherName] = useState('');
   const [newTeacherShifts, setNewTeacherShifts] = useState([]);
@@ -167,6 +168,9 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
     setEditingClassId(cls.id);
     setClassNames([cls.name]);
     setIsAddingClass(true);
+    setTimeout(() => {
+      classFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const handleSaveClass = () => {
@@ -566,7 +570,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
 
         {subView === 'classes' && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3" ref={classFormRef}>
               <h3 className="text-lg font-bold text-slate-700">Turmas / Classes</h3>
               {!isAddingClass ? (
                 <button onClick={() => setIsAddingClass(true)} className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 flex items-center gap-1 transition-colors w-full sm:w-auto justify-center"><Plus size={16} /> Nova Turma</button>

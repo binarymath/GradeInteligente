@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Coffee, Utensils } from 'lucide-react';
+import { Calendar, Coffee, Utensils, Plus } from 'lucide-react';
 import { computeSlotShift } from '../utils/time';
 import { DAYS } from '../utils';
 
@@ -18,7 +18,7 @@ const ClassForm = ({ timeSlots, selectedShift, activeSlotsByDay, setActiveSlotsB
     setActiveSlotsByDay(prev => {
       const newMap = { ...prev };
       const daySlots = newMap[dayIdx] || [];
-      
+
       if (daySlots.includes(slotId)) {
         // Remove slot deste dia
         newMap[dayIdx] = daySlots.filter(id => id !== slotId);
@@ -29,7 +29,7 @@ const ClassForm = ({ timeSlots, selectedShift, activeSlotsByDay, setActiveSlotsB
         // Adiciona slot neste dia
         newMap[dayIdx] = [...daySlots, slotId];
       }
-      
+
       return newMap;
     });
   };
@@ -43,10 +43,10 @@ const ClassForm = ({ timeSlots, selectedShift, activeSlotsByDay, setActiveSlotsB
 
     setActiveSlotsByDay(prev => {
       const newMap = { ...prev };
-      
+
       DAYS.forEach((_, dayIdx) => {
         const daySlots = newMap[dayIdx] || [];
-        
+
         if (allDaysHaveSlot) {
           // Remove de todos os dias
           newMap[dayIdx] = daySlots.filter(id => id !== slotId);
@@ -60,7 +60,7 @@ const ClassForm = ({ timeSlots, selectedShift, activeSlotsByDay, setActiveSlotsB
           }
         }
       });
-      
+
       return newMap;
     });
   };
@@ -78,71 +78,72 @@ const ClassForm = ({ timeSlots, selectedShift, activeSlotsByDay, setActiveSlotsB
   });
 
   return (
-    <div className="border-t border-slate-200 pt-3">
+    <div className="border-t border-slate-200 pt-3 max-h-[400px] flex flex-col">
       <h4 className="flex items-center gap-1 text-xs font-bold text-slate-700 mb-2">
         <Calendar size={12} /> Horários Ativos por Dia da Semana
       </h4>
-      
-      {/* Seletor de Dia */}
-      <div className="flex gap-1 mb-3 flex-wrap">
-        {DAYS.map((day, idx) => (
-          <button
-            key={idx}
-            onClick={() => setSelectedDay(idx)}
-            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-              selectedDay === idx
-                ? 'bg-indigo-600 text-white'
-                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-            }`}
-          >
-            {day}
-          </button>
-        ))}
-      </div>
 
-      {/* Grid de Slots para o Dia Selecionado */}
-      <div className="max-h-48 overflow-y-auto border rounded p-2 bg-white scrollbar-elegant">
-        <div className="grid grid-cols-1 gap-1">
-          {filteredSlots.map(slot => {
-            const isSelectedForDay = (activeSlotsByDay[selectedDay] || []).includes(slot.id);
-            const allDaysHaveSlot = DAYS.every((_, dayIdx) => (activeSlotsByDay[dayIdx] || []).includes(slot.id));
-            
-            return (
-              <div key={slot.id} className="flex items-center gap-2 p-2 rounded border border-slate-100 hover:bg-slate-50">
-                <label className={`flex items-center gap-3 cursor-pointer flex-1 ${isSelectedForDay ? 'bg-blue-50' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={isSelectedForDay}
-                    onChange={() => toggleSlotForDay(slot.id, selectedDay)}
-                    className="text-blue-500 rounded focus:ring-blue-500"
-                  />
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="font-bold text-slate-700 w-20">{slot.start} - {slot.end}</span>
-                    {slot.type === 'aula' && <span className="text-slate-500 bg-slate-100 px-1 rounded">Aula</span>}
-                    {slot.type === 'intervalo' && <span className="text-orange-600 bg-orange-50 px-1 rounded flex items-center gap-1"><Coffee size={10} /> Intervalo</span>}
-                    {slot.type === 'almoco' && <span className="text-red-600 bg-red-50 px-1 rounded flex items-center gap-1"><Utensils size={10} /> Almoço</span>}
-                    {slot.type === 'jantar' && <span className="text-indigo-600 bg-indigo-50 px-1 rounded flex items-center gap-1"><Utensils size={10} /> Jantar</span>}
-                  </div>
-                </label>
-                {/* Botão para aplicar em todos os dias */}
-                <button
-                  onClick={() => toggleSlotForAllDays(slot.id)}
-                  className={`text-[10px] px-2 py-1 rounded transition-colors whitespace-nowrap ${
-                    allDaysHaveSlot
-                      ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-medium'
-                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                  }`}
-                  title={allDaysHaveSlot ? 'Remover de todos os dias' : 'Aplicar em todos os dias'}
-                >
-                  {allDaysHaveSlot ? '✓ Todos' : '+ Todos'}
-                </button>
-              </div>
-            );
-          })}
-        </div>
+      <div className="overflow-auto scrollbar-elegant border border-slate-200 rounded-lg">
+        <table className="w-full text-xs text-left border-collapse">
+          <thead className="text-slate-500 bg-slate-50 sticky top-0 z-10 shadow-sm">
+            <tr>
+              <th className="px-3 py-2 font-bold border-b border-slate-200">Horário</th>
+              {DAYS.map((day) => (
+                <th key={day} className="px-2 py-2 font-bold text-center border-b border-slate-200 border-l border-slate-100 uppercase text-[10px]">
+                  {day.substring(0, 3)}
+                </th>
+              ))}
+              <th className="px-2 py-2 font-bold text-center border-b border-slate-200 border-l border-slate-100" title="Ativar/Desativar em todos os dias">
+                Todos
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white">
+            {filteredSlots.map((slot, index) => {
+              const allDaysHaveSlot = DAYS.every((_, dayIdx) => (activeSlotsByDay[dayIdx] || []).includes(slot.id));
+
+              return (
+                <tr key={slot.id} className={`hover:bg-slate-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                  <td className="px-3 py-2 border-b border-slate-100 font-medium text-slate-700 whitespace-nowrap">
+                    <div className="flex flex-col">
+                      <span>{slot.start} - {slot.end}</span>
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {slot.type === 'intervalo' && <span className="text-[9px] text-orange-600 bg-orange-50 px-1 rounded flex items-center gap-0.5 w-fit"><Coffee size={8} /> Intervalo</span>}
+                        {slot.type === 'almoco' && <span className="text-[9px] text-red-600 bg-red-50 px-1 rounded flex items-center gap-0.5 w-fit"><Utensils size={8} /> Almoço</span>}
+                        {slot.type === 'jantar' && <span className="text-[9px] text-indigo-600 bg-indigo-50 px-1 rounded flex items-center gap-0.5 w-fit"><Utensils size={8} /> Jantar</span>}
+                      </div>
+                    </div>
+                  </td>
+                  {DAYS.map((_, dayIdx) => {
+                    const isSelected = (activeSlotsByDay[dayIdx] || []).includes(slot.id);
+                    return (
+                      <td key={dayIdx} className="px-2 py-2 border-b border-l border-slate-100 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSlotForDay(slot.id, dayIdx)}
+                          className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                        />
+                      </td>
+                    );
+                  })}
+                  <td className="px-2 py-2 border-b border-l border-slate-100 text-center">
+                    <button
+                      onClick={() => toggleSlotForAllDays(slot.id)}
+                      className={`w-5 h-5 rounded flex items-center justify-center transition-colors mx-auto ${allDaysHaveSlot ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                      title={allDaysHaveSlot ? "Remover de todos os dias" : "Adicionar a todos os dias"}
+                    >
+                      {allDaysHaveSlot ? <div className="w-2 h-2 bg-emerald-600 rounded-full" /> : <Plus size={12} />}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-      <p className="text-[10px] text-slate-400 mt-1">
-        Selecione os horários ativos para <strong>{DAYS[selectedDay]}</strong>. Use "+ Todos" para aplicar um horário em todos os dias.
+      <p className="text-[10px] text-slate-400 mt-2">
+        Marque os checkbox para ativar horários em dias específicos. Use a coluna "Todos" para preencher a linha inteira.
       </p>
     </div>
   );
