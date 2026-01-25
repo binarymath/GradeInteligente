@@ -481,13 +481,20 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
       log.push(`✅ ${invalidAulas.length} aula(s) removida(s) com sucesso!`);
     }
 
-    // === SEGUNDA CAMADA: RESOLVER CONFLITO POR NOME DE PROFESSOR ===
-    // Remove duplicatas mantendo apenas a primeira encontrada para evitar que o mesmo professor esteja em 2 turmas
-    const allocationsByName = {}; // Key: "TeacherName|DayIdx|SlotIdx" -> [ {key, entry, className} ]
+    // === SEGUNDA CAMADA: RESOLVER CONFLITO POR NOME DE PROFESSOR (COM CHECAGEM DE HORÁRIO REAL) ===
+    // Agora verifica sobreposição de horários (start/end) e não apenas slotIdx igual
+    const allocationsByTeacher = {}; // Key: "TeacherName" -> [ {key, entry, className, startStr, endStr, dayIdx} ]
     const nameConflictsToRemove = [];
     const teacherMap = new Map((data.teachers || []).map(t => [t.id, t]));
 
-    // Construir mapa de alocações por nome
+    // Helper para converter "HH:MM" em minutos
+    const getMinutes = (t) => {
+      if (!t) return 0;
+      const [h, m] = t.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    // 1. Agrupar todas as aulas por Professor (usando Nome para garantir unicidade visual)
     for (const [key, entry] of Object.entries(data.schedule)) {
       if (!entry.teacherId) continue;
 
@@ -512,45 +519,64 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
 
       if (dayIdx === undefined || dayIdx === -1 || slotIdx === undefined || isNaN(slotIdx)) continue;
 
-      const checkKey = `${teacherName}|${dayIdx}|${slotIdx}`;
+      const slot = data.timeSlots[slotIdx];
+      if (!slot) continue;
 
-      if (!allocationsByName[checkKey]) {
-        allocationsByName[checkKey] = [];
+      if (!allocationsByTeacher[teacherName]) {
+        allocationsByTeacher[teacherName] = [];
       }
 
       const className = data.classes.find(c => c.id === entry.classId)?.name || entry.classId;
 
-      allocationsByName[checkKey].push({
+      allocationsByTeacher[teacherName].push({
         key,
         entry,
         className,
-        subjectId: entry.subjectId
+        subjectId: entry.subjectId,
+        dayIdx,
+        slotIdx,
+        startStr: slot.start,
+        endStr: slot.end,
+        startMin: getMinutes(slot.start),
+        endMin: getMinutes(slot.end)
       });
     }
 
-    // Identificar e remover excedentes
-    for (const [checkKey, entries] of Object.entries(allocationsByName)) {
-      if (entries.length > 1) {
-        const [tName, dIdx, sIdx] = checkKey.split('|');
-        const dayLabel = DAYS[parseInt(dIdx)];
-        const slotLabel = data.timeSlots[parseInt(sIdx)]
-          ? `${data.timeSlots[parseInt(sIdx)].start}`
-          : `Slot ${sIdx}`;
+    // 2. Verificar sobreposições dentro da lista de cada professor
+    for (const [tName, entries] of Object.entries(allocationsByTeacher)) {
+      // Comparar todos contra todos dentro do mesmo dia
+      for (let i = 0; i < entries.length; i++) {
+        for (let j = i + 1; j < entries.length; j++) {
+          const A = entries[i];
+          const B = entries[j];
 
-        // Ordenar deterministicamente para decidir quem fica (ex: alfabética de turma, ou aleatório consistente)
-        // Vamos manter o primeiro que entrou no loop (ordem de keys) que é o comportamento natural do array
-        // O primeiro 'kept' fica, os outros 'removed' saem.
-        const kept = entries[0];
-        const removed = entries.slice(1);
+          // Se já foi marcado para remover, ignora
+          if (nameConflictsToRemove.includes(A.key) || nameConflictsToRemove.includes(B.key)) continue;
 
-        removed.forEach(rem => {
-          nameConflictsToRemove.push(rem.key);
-          const subjName = data.subjects.find(s => s.id === rem.subjectId)?.name || 'Matéria';
+          // Se dias diferentes, ok
+          if (A.dayIdx !== B.dayIdx) continue;
 
-          log.push(`🧹 Removendo conflito de nome: Prof. ${tName}`);
-          log.push(`   • Mantido em: ${kept.className}`);
-          log.push(`   • Removido de: ${rem.className} (${subjName} - ${dayLabel} ${slotLabel})`);
-        });
+          // Se mesma turma, ok (não pode ser conflito com ele mesmo, e se tiver duplicado na mesma turma o script de limpeza básica já pegaria, mas ok)
+          if (A.entry.classId === B.entry.classId) continue;
+
+          // Checar OVERLAP: (StartA < EndB) && (EndA > StartB)
+          if (A.startMin < B.endMin && A.endMin > B.startMin) {
+            // CONFLITO DETECTADO! 
+            // Remove o B (arbitrário: remove o segundo encontrado). 
+            // Poderíamos melhorar removendo o que tem menos constraints, mas por hora: remove B.
+
+            nameConflictsToRemove.push(B.key);
+
+            const subjNameA = data.subjects.find(s => s.id === A.subjectId)?.name || 'Matéria';
+            const subjNameB = data.subjects.find(s => s.id === B.subjectId)?.name || 'Matéria';
+            const dayLabel = DAYS[A.dayIdx];
+
+            log.push(`🔥 CONFLITO DE HORÁRIO DETECTADO: Prof. ${tName} em ${dayLabel}`);
+            log.push(`   • Mantido: ${A.className} (${subjNameA} | ${A.startStr}-${A.endStr})`);
+            log.push(`   • Removido: ${B.className} (${subjNameB} | ${B.startStr}-${B.endStr})`);
+            log.push(`     -> Motivo: O professor não pode estar em duas turmas ao mesmo tempo.`);
+          }
+        }
       }
     }
 
@@ -559,7 +585,7 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
         delete data.schedule[key];
       }
       setData(prev => ({ ...prev, schedule: { ...data.schedule } }));
-      log.push(`✅ ${nameConflictsToRemove.length} conflito(s) de professor resolvido(s).`);
+      log.push(`✅ ${nameConflictsToRemove.length} conflito(s) reais de horário corrigidos.`);
     }
 
     const manager = new ScheduleManager(data, LIMITS);
