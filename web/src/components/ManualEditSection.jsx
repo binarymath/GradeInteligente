@@ -1865,6 +1865,7 @@ const ManualEditSection = ({ data, setData }) => {
                              Vamos assumir estrito. Se lista ficar vazia, user vai reclamar, ai relaxamos. */
                           return hasActivity;
                         })
+                        .sort((a, b) => a.name.localeCompare(b.name))
                         .map(t => (
                           <option key={t.id} value={t.id}>{t.name}</option>
                         ))}
@@ -1900,6 +1901,7 @@ const ManualEditSection = ({ data, setData }) => {
                           // Vamos ser estritos na turma.
                           return false;
                         })
+                        .sort((a, b) => a.name.localeCompare(b.name))
                         .map(s => (
                           <option key={s.id} value={s.id}>{s.name}</option>
                         ))}

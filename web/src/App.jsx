@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
-  Layout, Settings, Clock, BookOpen, Calendar, Menu, X, ChevronLeft, ChevronRight, Upload, Download, AlertTriangle, Info, Edit3, Rocket, ChevronUp, ChevronDown
+  Layout, Settings, Clock, BookOpen, Calendar, Menu, X, ChevronLeft, ChevronRight, Upload, Download, AlertTriangle, Info, Edit3, Rocket, ChevronUp, ChevronDown, Printer
 } from 'lucide-react';
 import { DAYS } from './utils';
 import { migrateData } from './services/DataMigration';
@@ -63,7 +63,20 @@ const App = () => {
   const [isVerified, setIsVerified] = useState(false); // Controla se já verificou a grade
   const [generationLog, setGenerationLog] = useState([]);
   const [viewMode, setViewMode] = useState(initialNav.viewMode);
-  const [selectedEntity, setSelectedEntity] = useState(initialNav.selectedEntity);
+  const [selectedEntities, setSelectedEntities] = useState(Array.isArray(initialNav.selectedEntity) ? initialNav.selectedEntity : (initialNav.selectedEntity ? [initialNav.selectedEntity] : []));
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
   const [selectedShift, setSelectedShift] = useState('Todos');
   const [calendarSettings, setCalendarSettings] = useState(() => {
     const curYear = new Date().getFullYear();
@@ -116,12 +129,12 @@ const App = () => {
   // Persiste navegação para manter a página/visualização após reload
   useEffect(() => {
     try {
-      const nav = { view, subView, viewMode, selectedEntity, sidebarOpen };
+      const nav = { view, subView, viewMode, selectedEntity: selectedEntities[0] || '', sidebarOpen }; // Manter compatibilidade com selectedEntity singular por enquanto no storage se quiser, ou mudar para selectedEntities
       localStorage.setItem('app_nav', JSON.stringify(nav));
     } catch (e) {
       // ignore quota or serialization errors
     }
-  }, [view, subView, viewMode, selectedEntity, sidebarOpen]);
+  }, [view, subView, viewMode, selectedEntities, sidebarOpen]);
 
   // Carregar estado persistente via Electron (se disponível) ao iniciar
   useEffect(() => {
@@ -966,6 +979,7 @@ const App = () => {
                   )}
                 </div>
               )}
+
               <div className="flex flex-wrap gap-6 mb-4">
                 <div className="flex flex-col">
                   <label className="text-xs font-semibold text-slate-600 mb-1">Visualizar Grade</label>
@@ -977,7 +991,7 @@ const App = () => {
                 </div>
                 <div className="flex flex-col">
                   <label className="text-xs font-semibold text-slate-600 mb-1">Turno</label>
-                  <select value={selectedShift} onChange={e => { setSelectedShift(e.target.value); setSelectedEntity(''); }} className="border p-2 rounded text-sm bg-white shadow-sm min-w-[180px]">
+                  <select value={selectedShift} onChange={e => { setSelectedShift(e.target.value); }} className="border p-2 rounded text-sm bg-white shadow-sm min-w-[180px]">
                     <option value="Todos">Todos</option>
                     <option value="Manhã">Manhã</option>
                     <option value="Tarde">Tarde</option>
@@ -986,79 +1000,97 @@ const App = () => {
                     <option value="Integral (Tarde e Noite)">Integral (Tarde e Noite)</option>
                   </select>
                 </div>
-                <div className="flex flex-col">
-                  <label className="text-xs font-semibold text-slate-600 mb-1">{viewMode === 'class' ? 'Selecione a Turma' : viewMode === 'teacher' ? 'Selecione o Professor' : 'Selecione a Matéria'}</label>
-                  <select value={selectedEntity} onChange={e => setSelectedEntity(e.target.value)} className="border p-2 rounded text-sm bg-white shadow-sm min-w-[180px]">
-                    <option value="">{viewMode === 'class' ? 'Escolha a turma...' : viewMode === 'teacher' ? 'Escolha o professor...' : 'Escolha a matéria...'}</option>
-                    <option value="all">📋 Todos</option>
-                    {viewMode === 'class' && data.classes
-                      .filter(c => selectedShift === 'Todos' ? true : c.shift === selectedShift)
-                      .map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    {viewMode === 'teacher' && data.teachers
-                      .filter(t => selectedShift === 'Todos' ? true : (t.shifts || []).includes(selectedShift))
-                      .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    {viewMode === 'subject' && data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                <div className="flex flex-col relative" ref={dropdownRef}>
+                  <label className="text-xs font-semibold text-slate-600 mb-1">{viewMode === 'class' ? 'Selecione Turmas' : viewMode === 'teacher' ? 'Selecione Professores' : 'Selecione Matérias'}</label>
+
+                  <button
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    className="border p-2 rounded text-sm bg-white shadow-sm min-w-[220px] text-left flex justify-between items-center"
+                  >
+                    <span className="truncate">
+                      {selectedEntities.length === 0 ? 'Selecione...' :
+                        selectedEntities.length === 1 ? (
+                          viewMode === 'class' ? data.classes.find(c => c.id === selectedEntities[0])?.name :
+                            viewMode === 'teacher' ? data.teachers.find(t => t.id === selectedEntities[0])?.name :
+                              data.subjects.find(s => s.id === selectedEntities[0])?.name
+                        ) : `${selectedEntities.length} selecionados`}
+                    </span>
+                    <ChevronDown size={14} className="text-slate-400" />
+                  </button>
+
+                  {isDropdownOpen && (
+                    <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto p-2">
+                      <div className="flex justify-between items-center mb-2 px-1">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Opções</span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              const items = (viewMode === 'class' ? data.classes.filter(c => selectedShift === 'Todos' ? true : c.shift === selectedShift) :
+                                viewMode === 'teacher' ? data.teachers.filter(t => selectedShift === 'Todos' ? true : (t.shifts || []).includes(selectedShift)) :
+                                  data.subjects
+                              );
+                              setSelectedEntities(items.map(i => i.id));
+                            }}
+                            className="text-xs text-indigo-600 hover:underline"
+                          >
+                            Todos
+                          </button>
+                          <button
+                            onClick={() => setSelectedEntities([])}
+                            className="text-xs text-indigo-600 hover:underline"
+                          >
+                            Limpar
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        {(viewMode === 'class' ? data.classes.filter(c => selectedShift === 'Todos' ? true : c.shift === selectedShift) :
+                          viewMode === 'teacher' ? data.teachers.filter(t => selectedShift === 'Todos' ? true : (t.shifts || []).includes(selectedShift)) :
+                            data.subjects
+                        ).sort((a, b) => a.name.localeCompare(b.name)).map(item => (
+                          <label key={item.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedEntities.includes(item.id)}
+                              onChange={() => {
+                                setSelectedEntities(prev =>
+                                  prev.includes(item.id)
+                                    ? prev.filter(id => id !== item.id)
+                                    : [...prev, item.id]
+                                );
+                              }}
+                              className="rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className="text-sm text-slate-700">{item.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Botão Global de Impressão */}
+                <div className="flex flex-col justify-end">
+                  <button
+                    onClick={() => window.print()}
+                    disabled={selectedEntities.length === 0}
+                    className="h-10 w-10 flex items-center justify-center bg-indigo-600 text-white rounded shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Imprimir Grades"
+                  >
+                    <Printer size={20} />
+                  </button>
                 </div>
               </div>
-              {selectedEntity && selectedEntity !== 'all' && (
-                <TimetableSection
-                  data={data}
-                  viewMode={viewMode}
-                  selectedEntity={selectedEntity}
-                  calendarSettings={calendarSettings}
-                  setCalendarSettings={setCalendarSettings}
-                  filterShift={selectedShift}
-                  showAgendaControls={false}
-                />
-              )}
-              {selectedEntity === 'all' && (
-                <div className="space-y-4">
-                  {viewMode === 'class' && data.classes
-                    .filter(cls => selectedShift === 'Todos' ? true : cls.shift === selectedShift)
-                    .map(cls => (
-                      <div key={cls.id} className="border-t-4 border-indigo-500 pt-4">
-                        <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
-                          <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm">{cls.name}</span>
-                        </h3>
-                        <TimetableSection
-                          data={data}
-                          viewMode={viewMode}
-                          selectedEntity={cls.id}
-                          calendarSettings={calendarSettings}
-                          setCalendarSettings={setCalendarSettings}
-                          filterShift={selectedShift}
-                          showAgendaControls={false}
-                        />
-                      </div>
-                    ))}
-                  {viewMode === 'teacher' && data.teachers
-                    .filter(teacher => selectedShift === 'Todos' ? true : (teacher.shifts || []).includes(selectedShift))
-                    .map(teacher => (
-                      <div key={teacher.id} className="border-t-4 border-emerald-500 pt-4">
-                        <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
-                          <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-sm">{teacher.name}</span>
-                        </h3>
-                        <TimetableSection
-                          data={data}
-                          viewMode={viewMode}
-                          selectedEntity={teacher.id}
-                          calendarSettings={calendarSettings}
-                          setCalendarSettings={setCalendarSettings}
-                          filterShift={selectedShift}
-                          showAgendaControls={false}
-                        />
-                      </div>
-                    ))}
-                  {viewMode === 'subject' && data.subjects.map(subject => (
-                    <div key={subject.id} className="border-t-4 border-violet-500 pt-4">
-                      <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
-                        <span className="bg-violet-100 text-violet-700 px-3 py-1 rounded-full text-sm">{subject.name}</span>
-                      </h3>
+
+              {/* Renderização das Grades Selecionadas */}
+              {selectedEntities.length > 0 ? (
+                <div className="flex flex-col gap-8 print:gap-8 printable-content">
+                  {selectedEntities.map(entityId => (
+                    <div key={entityId} className="printable-block break-inside-avoid">
                       <TimetableSection
                         data={data}
                         viewMode={viewMode}
-                        selectedEntity={subject.id}
+                        selectedEntity={entityId}
                         calendarSettings={calendarSettings}
                         setCalendarSettings={setCalendarSettings}
                         filterShift={selectedShift}
@@ -1067,9 +1099,14 @@ const App = () => {
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="text-center py-12 bg-slate-50 border border-slate-200 rounded-lg border-dashed">
+                  <p className="text-slate-500">Selecione pelo menos uma {viewMode === 'class' ? 'turma' : viewMode === 'teacher' ? 'professor' : 'matéria'} para visualizar.</p>
+                </div>
               )}
             </div>
           )}
+
           {view === 'agenda' && (
             <AgendaSection
               data={data}
@@ -1079,9 +1116,7 @@ const App = () => {
           )}
         </div>
       </main>
-
-
-    </div >
+    </div>
   );
 };
 

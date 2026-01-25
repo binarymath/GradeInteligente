@@ -457,7 +457,7 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
         <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calendar className="w-5 h-5 text-indigo-600" /> Agendas por Turma</h4>
         <p className="text-[11px] text-slate-500">Baixe a agenda individual de cada turma já considerando férias e feriados cadastrados.</p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {data.classes.map(cls => (
+          {[...data.classes].sort((a, b) => a.name.localeCompare(b.name)).map(cls => (
             <div key={cls.id} className="border border-slate-200 rounded-lg p-3 flex items-center justify-between bg-slate-50 hover:bg-white transition-colors">
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-slate-700">{cls.name}</span>
@@ -472,7 +472,7 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
         <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-600" /> Agendas por Professor</h4>
         <p className="text-[11px] text-slate-500">Baixe a agenda individual de cada professor já considerando férias e feriados cadastrados.</p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {data.teachers.map(teacher => (
+          {[...data.teachers].sort((a, b) => a.name.localeCompare(b.name)).map(teacher => (
             <div key={teacher.id} className="border border-slate-200 rounded-lg p-3 flex items-center justify-between bg-slate-50 hover:bg-white transition-colors">
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-slate-700">{teacher.name}</span>

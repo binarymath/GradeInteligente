@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
 @media print {
   @page {
     size: landscape;
@@ -18,16 +28,32 @@
     visibility: hidden;
   }
 
-  /* Mostrar apenas a área de impressão designada */
-  .printable-schedule,
-  .printable-schedule * {
+  /* Resetar overflows para permitir impressão de páginas múltiplas */
+  html,
+  body,
+  #root,
+  main,
+  .overflow-y-auto {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Mostrar apenas a área de impressão designada e seus descendentes */
+  .printable-content,
+  .printable-content * {
     visibility: visible;
   }
 
-  .printable-schedule {
+  .printable-content {
     position: absolute;
     left: 0;
     top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .printable-schedule {
     width: 100%;
     max-width: 100%;
     margin: 0;
@@ -38,7 +64,21 @@
 
     /* Escalar para caber na página e balancear */
     transform: none;
-    /* Resetar transform antigo */
+  }
+
+  /* Bloco individual de impressão (cada tabela) */
+  .printable-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: auto;
+    page-break-after: auto;
+    margin-bottom: 2rem;
+    padding-top: 1rem;
+    border-bottom: 1px dashed #cbd5e1;
+  }
+
+  .printable-block:last-child {
+    border-bottom: none;
   }
 
   /* Ajustar tabela para impressão estilizada */

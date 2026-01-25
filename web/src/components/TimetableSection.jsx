@@ -300,7 +300,15 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
         </div>
       ) : (
         <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center print:hidden">
-          <h3 className="font-bold text-slate-700">Grade Horária</h3>
+          <div className="flex items-center gap-3">
+            <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600">
+              <Calendar size={20} />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{entityLabel}</span>
+              <h3 className="text-lg font-bold text-slate-800 leading-none">{entityName}</h3>
+            </div>
+          </div>
           <ExportButtons viewMode={viewMode} selectedEntity={selectedEntity} data={data} displayPeriods={displayPeriods} />
         </div>
       )}
