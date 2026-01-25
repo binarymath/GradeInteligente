@@ -13,7 +13,7 @@ import TimetableSection from './components/TimetableSection';
 import AgendaSection from './components/AgendaSection';
 import AboutSection from './components/AboutSection';
 import ManualEditSection from './components/ManualEditSection';
-import ApiConfigModal from './components/ApiConfigModal';
+
 import { exportBackup, importBackup } from './services/stateService';
 import { generateScheduleAsync, smartRepairAsync } from './services/scheduleService';
 
@@ -29,12 +29,7 @@ const INITIAL_STATE = {
 
 const App = () => {
   const [data, setData] = useState(INITIAL_STATE);
-  const [isApiModalOpen, setIsApiModalOpen] = useState(false);
-  const [hasApiKey, setHasApiKey] = useState(false);
 
-  useEffect(() => {
-    setHasApiKey(!!localStorage.getItem('gemini_api_key'));
-  }, [isApiModalOpen]); // Checa quando fecha o modal
 
   // Restauração de navegação salva no localStorage (view, subView, viewMode, selectedEntity, sidebarOpen)
   const getInitialNav = () => {
@@ -795,7 +790,6 @@ const App = () => {
           <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={BookOpen} label="Atribuições" active={view === 'activities'} onClick={() => { setView('activities'); if (isMobile) setSidebarOpen(false); }} />
           <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Rocket} label="Gerar/Visualizar" active={view === 'generate'} onClick={() => { setView('generate'); if (isMobile) setSidebarOpen(false); }} />
           <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Edit3} label="Edição Manual" active={view === 'manualEdit'} onClick={() => { setView('manualEdit'); if (isMobile) setSidebarOpen(false); }} />
-          <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Settings} label="Configurar Gemini" active={false} onClick={() => { setIsApiModalOpen(true); if (isMobile) setSidebarOpen(false); }} />
           <div className="my-4 border-t border-slate-100"></div>
           {sidebarOpen && <div className="px-4 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Operações</div>}
           <SidebarItem collapsed={!sidebarOpen && !isMobile} icon={Calendar} label="Agenda e Grade" active={view === 'agenda'} onClick={() => { setView('agenda'); if (isMobile) setSidebarOpen(false); }} />
@@ -833,25 +827,7 @@ const App = () => {
           </div>
           <div className="flex items-center gap-4 shrink-0">
             {/* Status da API e Configuração */}
-            <div className="flex items-center gap-2 mr-2 border-r border-slate-200 pr-4">
-              {hasApiKey ? (
-                <span className="hidden sm:flex items-center gap-1.5 px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-200" title="API Conectada">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                  API OK
-                </span>
-              ) : (
-                <span className="hidden sm:flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-700 text-xs font-bold rounded-full border border-amber-200" title="API Não Configurada">
-                  ⚠ Sem IA
-                </span>
-              )}
-              <button
-                onClick={() => setIsApiModalOpen(true)}
-                className={`p-1.5 rounded-md transition-colors ${hasApiKey ? 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50' : 'text-amber-600 hover:bg-amber-100'}`}
-                title="Configurar Chave API Gemini"
-              >
-                <Settings size={20} />
-              </button>
-            </div>
+
 
             <input type="file" ref={fileInputRef} onChange={handleImportState} style={{ display: 'none' }} accept=".json" />
             <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 bg-white border border-slate-300 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 transition-colors text-sm font-medium" title="Importar Backup"><Upload size={16} /> <span className="hidden sm:inline">Restaurar</span></button>
@@ -877,9 +853,9 @@ const App = () => {
                           disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
                           className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           aria-busy={repairing}
-                          title="Ajustar grade atual sem regenerar"
+                          title="Analisar grade atual sem regenerar"
                         >
-                          {repairing ? 'Ajustando...' : 'Ajustar'}
+                          {repairing ? 'Analisando...' : 'Analisar'}
                         </button>
                       )}
                       <button
@@ -906,9 +882,9 @@ const App = () => {
                           disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
                           className="bg-emerald-600 text-white px-3 py-1.5 text-xs rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           aria-busy={repairing}
-                          title="Ajustar grade atual sem regenerar"
+                          title="Analisar grade atual sem regenerar"
                         >
-                          {repairing ? 'Ajustando...' : 'Ajustar'}
+                          {repairing ? 'Analisando...' : 'Analisar'}
                         </button>
                       )}
                       <button
@@ -1104,10 +1080,7 @@ const App = () => {
         </div>
       </main>
 
-      <ApiConfigModal
-        isOpen={isApiModalOpen}
-        onClose={() => setIsApiModalOpen(false)}
-      />
+
     </div >
   );
 };

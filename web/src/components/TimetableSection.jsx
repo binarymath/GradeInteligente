@@ -98,10 +98,29 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
 
   // Handlers movidos para componente de botões.
 
+  // Resolver nome da entidade para o cabeçalho de impressão
+  const getEntityName = () => {
+    if (!selectedEntity) return 'Grade Geral';
+    if (viewMode === 'class') return data.classes.find(c => c.id === selectedEntity)?.name || 'Turma';
+    if (viewMode === 'teacher') return data.teachers.find(t => t.id === selectedEntity)?.name || 'Professor';
+    if (viewMode === 'subject') return data.subjects.find(s => s.id === selectedEntity)?.name || 'Matéria';
+    return 'Grade';
+  };
+
+  const getEntityLabel = () => {
+    if (viewMode === 'class') return 'Turma';
+    if (viewMode === 'teacher') return 'Professor';
+    if (viewMode === 'subject') return 'Disciplina';
+    return '';
+  };
+
+  const entityName = getEntityName();
+  const entityLabel = getEntityLabel();
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
       {showAgendaControls ? (
-        <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100 flex flex-col gap-6">
+        <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100 flex flex-col gap-6 print:hidden">
           <div className="flex justify-between items-center">
             <h3 className="font-bold text-slate-800 flex items-center gap-2"><Calendar className="w-5 h-5 text-indigo-600" /> Agenda Escolar</h3>
             <ExportButtons viewMode={viewMode} selectedEntity={selectedEntity} data={data} displayPeriods={displayPeriods} calendarSettings={calendarSettings} />
@@ -176,7 +195,7 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
             </div>
             <p className="text-xs text-slate-600 mb-4 leading-relaxed">
               <span className="font-semibold text-emerald-700">Sobrescrever grade de um dia:</span> Crie eventos para dias específicos (ex: reunião, formatura, apresentação) que substituem a grade normal.
-              Depois baixe um .ics incremental apenas com esse dia para atualizar sua agenda.
+              Depois baixe um .ics incremental apenas com esses dias para atualizar sua agenda.
             </p>
 
             {!isAddingSpecificDay ? (
@@ -280,12 +299,29 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
           </div>
         </div>
       ) : (
-        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center print:hidden">
           <h3 className="font-bold text-slate-700">Grade Horária</h3>
           <ExportButtons viewMode={viewMode} selectedEntity={selectedEntity} data={data} displayPeriods={displayPeriods} />
         </div>
       )}
-      <div className="p-4 overflow-x-auto">
+
+      {/* Container de Impressão */}
+      <div className="p-4 overflow-x-auto printable-schedule">
+
+        {/* Cabeçalho exclusivo de impressão */}
+        <div className="hidden print:flex flex-col mb-4 border-b-2 border-slate-800 pb-2">
+          <h1 className="text-2xl font-bold text-slate-900 uppercase tracking-tight">Grade Horária Escolar</h1>
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold uppercase text-slate-500 tracking-wider bg-slate-100 px-2 py-0.5 rounded">{entityLabel}</span>
+              <span className="text-xl font-bold text-indigo-900">{entityName}</span>
+            </div>
+            <div className="text-xs text-slate-500 font-medium">
+              {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+            </div>
+          </div>
+        </div>
+
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr>

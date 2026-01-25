@@ -11,13 +11,13 @@ class BacktrackingResolver {
     this.data = data;
     this.limits = { ...LIMITS, ...limits };
     this.schedule = { ...existingSchedule }; // Cópia do schedule existente
-    
+
     this.teacherSchedule = {};
     this.classSchedule = {};
     this.bookedEntries = [];
     this.timeSlots = data.timeSlots;
     this.lessonIndices = this.timeSlots.map((_, i) => i).filter(i => this.timeSlots[i].type === 'aula');
-    
+
     this.maxTimeMs = 30000; // 30 segundos máximo
     this.startTime = Date.now();
     this.attemptCount = 0;
@@ -272,13 +272,13 @@ class BacktrackingResolver {
     if (activity.isDoubleLesson) {
       const nextSlotIdx = slotIdx + 1;
       const nextSlot = this.timeSlots[nextSlotIdx];
-      
+
       // Validação de segurança
       if (!nextSlot) {
         console.warn(`⚠️ Tentativa de alocar dupla mas próximo slot (${nextSlotIdx}) não existe`);
         return;
       }
-      
+
       const nextTimeKey = `${day}-${nextSlotIdx}`;
 
       this.schedule[`${activity.classId}-${day}-${nextSlotIdx}`] = {
@@ -325,9 +325,9 @@ class BacktrackingResolver {
 
     // Remove do array de entradas
     this.bookedEntries = this.bookedEntries.filter(e =>
-      !(e.teacherId === activity.teacherId && 
-        e.classId === activity.classId && 
-        e.dayIdx === dayIdx && 
+      !(e.teacherId === activity.teacherId &&
+        e.classId === activity.classId &&
+        e.dayIdx === dayIdx &&
         e.slotIdx === slotIdx)
     );
 
@@ -346,9 +346,9 @@ class BacktrackingResolver {
       }
 
       this.bookedEntries = this.bookedEntries.filter(e =>
-        !(e.teacherId === activity.teacherId && 
-          e.classId === activity.classId && 
-          e.dayIdx === dayIdx && 
+        !(e.teacherId === activity.teacherId &&
+          e.classId === activity.classId &&
+          e.dayIdx === dayIdx &&
           e.slotIdx === nextSlotIdx)
       );
     }

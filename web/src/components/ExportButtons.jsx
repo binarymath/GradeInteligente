@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Download, Calendar, CalendarPlus } from 'lucide-react';
+import { FileText, Download, Calendar, CalendarPlus, Printer } from 'lucide-react';
 import { exportPDF, exportExcel, exportDOC } from '../services/exporters';
 import { exportICS, exportIncrementalICS } from '../services/icsExporter';
 
@@ -25,12 +25,12 @@ const ExportButtons = ({ viewMode, selectedEntity, data, displayPeriods, calenda
       </button>
       <button
         type="button"
-        onClick={() => exportPDF({ viewMode, selectedEntity, data, displayPeriods })}
+        onClick={() => window.print()}
         disabled={disabled}
-        title="Exportar PDF"
+        title="Imprimir"
         className={`${commonCls} bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700`}
       >
-        <FileText size={14} /> <span className="sr-only">PDF</span>
+        <Printer size={14} /> <span className="sr-only">Imprimir</span>
       </button>
       <button
         type="button"

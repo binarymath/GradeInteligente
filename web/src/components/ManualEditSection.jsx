@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Edit3, Trash2, Plus, X, Save, AlertCircle, Printer, FileSpreadsheet } from 'lucide-react';
+import { Edit3, Trash2, Plus, X, Save, AlertCircle, Printer, FileSpreadsheet, Edit2 } from 'lucide-react';
 import { DAYS, COLORS } from '../utils';
 import { computeSlotShift } from '../utils/time';
 import { exportAllSchedulesToExcel } from '../services/excelExport';
@@ -1609,6 +1609,13 @@ const ManualEditSection = ({ data, setData }) => {
                   </button>
 
                   <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-sm">{cls.name}</span>
+                  <button
+                    onClick={() => setEditMode(!editMode)}
+                    className={`p-1.5 rounded-lg transition-colors ${editMode ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-200' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                    title={editMode ? "Finalizar Edição" : "Ativar Modo Edição"}
+                  >
+                    <Edit2 size={16} strokeWidth={editMode ? 3 : 2} />
+                  </button>
                   <span className="text-xs text-slate-600">Turno: {cls.shift}</span>
                   {editMode && (
                     <span className="ml-auto flex items-center gap-2 text-xs text-amber-700 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200">

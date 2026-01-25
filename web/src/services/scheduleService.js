@@ -14,7 +14,7 @@ import SmartAllocationResolver from '../models/SmartAllocationResolver';
 import DoubleBreakResolver from '../models/DoubleBreakResolver';
 import SynchronousScheduler from './SynchronousScheduler';
 import SynchronousClassValidator from './SynchronousClassValidator';
-import { geminiService } from './geminiService';
+
 import { LIMITS } from '../constants/schedule';
 import { DAYS } from '../utils';
 
@@ -200,100 +200,7 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
       result = { schedule: manager.schedule, log: manager.log, conflicts: [] };
     }
 
-    // FASE 2: IA de otimização
-    let attempts = 0;
-    const MAX_AI_ATTEMPTS = 3;
-    let totalExpected = data.activities.reduce((sum, a) => sum + (Number(a.quantity) || 0), 0);
-    let totalAllocated = manager.bookedEntries.length;
-    let pendingCount = totalExpected - totalAllocated;
 
-    const apiKey = geminiService.getApiKey();
-    manager.logMessage(`🔍 Diagnóstico IA: Pendentes=${pendingCount} (Esperado:${totalExpected} - Alocado:${totalAllocated}), Chave=${apiKey ? 'DETECTADA' : 'AUSENTE'}`);
-
-    if (pendingCount > 0 && !apiKey) {
-      manager.logMessage(`⚠ ${pendingCount} aulas não alocadas. Configure a API Key para correções automáticas.`);
-    }
-
-    while (pendingCount > 0 && attempts < MAX_AI_ATTEMPTS && apiKey) {
-      const failures = manager.failures;
-      manager.logMessage(`🤖 [IA] Tentativa ${attempts + 1}: Analisando ${failures.length} bloqueios...`);
-      setGenerationLog([...manager.log]);
-
-      try {
-        const suggestion = await geminiService.analyzeAndFix(
-          failures,
-          result.conflicts,
-          currentLimits
-        );
-
-        if (!suggestion || !suggestion.suggestedLimits) {
-          manager.logMessage(`🤖 [IA] Sem resposta válida da API.`);
-          break;
-        }
-
-        manager.logMessage(`💡 [IA] Raciocínio: ${suggestion.rationale}`);
-
-        let changed = false;
-        if (suggestion.suggestedLimits.MAX_SAME_SUBJECT_PER_DAY > currentLimits.MAX_SAME_SUBJECT_PER_DAY) {
-          currentLimits.MAX_SAME_SUBJECT_PER_DAY = suggestion.suggestedLimits.MAX_SAME_SUBJECT_PER_DAY;
-          manager.logMessage(`  -> 🟢 Novo limite de Aulas/Dia: ${suggestion.suggestedLimits.MAX_SAME_SUBJECT_PER_DAY}`);
-          changed = true;
-        }
-        if (suggestion.suggestedLimits.MAX_TEACHER_LOGGED_PER_DAY > currentLimits.MAX_TEACHER_LOGGED_PER_DAY) {
-          currentLimits.MAX_TEACHER_LOGGED_PER_DAY = suggestion.suggestedLimits.MAX_TEACHER_LOGGED_PER_DAY;
-          manager.logMessage(`  -> 🟢 Novo limite de Prof/Dia: ${suggestion.suggestedLimits.MAX_TEACHER_LOGGED_PER_DAY}`);
-          changed = true;
-        }
-
-        if (suggestion.priorityFocus && Array.isArray(suggestion.priorityFocus) && suggestion.priorityFocus.length > 0) {
-          manager.logMessage(`  -> 🎯 IA definiu prioridade absoluta para: ${suggestion.priorityFocus.length} itens.`);
-          changed = true;
-        }
-
-        if (!changed) {
-          manager.logMessage(`  -> IA sugeriu limites que já estão em vigor. Parando para evitar loop.`);
-          break;
-        }
-
-        const globalFailureIds = manager.failures.map(f => f.activityId);
-        const aiPriorityIds = suggestion.priorityFocus || [];
-        const combinedPriority = [...new Set([...aiPriorityIds, ...globalFailureIds])];
-
-        const oldLog = manager.log;
-        manager = new ScheduleManager(data, currentLimits, combinedPriority);
-        manager.log = oldLog;
-
-        if (result && result.schedule) {
-          manager.logMessage(`🔄 Mantendo grade parcial e tentando alocar as falhas com novos parâmetros...`);
-          manager.importExistingSchedule(result.schedule);
-
-          if (combinedPriority.length > 0) {
-            manager.bumpPriorityBlockers(combinedPriority);
-          }
-
-          result = manager.fillPendingOnly();
-        } else {
-          manager.logMessage(`🔄 Re-gerando grade do zero com novos parâmetros...`);
-          result = manager.generate();
-        }
-
-        if (manager.failures.length > 0) {
-          manager.logMessage(`🕵️‍♀️ Tentando otimizar ${manager.failures.length} falhas com Trocas Inteligentes...`);
-          const optResult = manager.optimize();
-          result = optResult;
-        }
-
-        totalExpected = data.activities.reduce((sum, a) => sum + (Number(a.quantity) || 0), 0);
-        totalAllocated = manager.bookedEntries.length;
-        pendingCount = totalExpected - totalAllocated;
-
-        attempts++;
-
-      } catch (err) {
-        manager.logMessage(`🤖 [IA] Exceção ao consultar API: ${err.message}`);
-        break;
-      }
-    }
 
     // Garantir que result SEMPRE tem um valor antes de usar
     if (!result || !result.schedule) {

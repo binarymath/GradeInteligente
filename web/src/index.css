@@ -3,6 +3,16 @@
 @tailwind utilities;
 
 @media print {
+  @page {
+    size: landscape;
+    margin: 5mm;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   /* Ocultar tudo por padrão */
   body * {
     visibility: hidden;
@@ -14,31 +24,68 @@
     visibility: visible;
   }
 
-  /* Posicionar a tabela no topo */
   .printable-schedule {
     position: absolute;
     left: 0;
     top: 0;
     width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 0 !important;
     border: none;
     box-shadow: none;
     overflow: visible !important;
+
+    /* Escalar para caber na página e balancear */
+    transform: none;
+    /* Resetar transform antigo */
   }
-  
-  /* Garantir que containers internos não limitem o overflow */
+
+  /* Ajustar tabela para impressão estilizada */
+  .printable-schedule table {
+    width: 100%;
+    font-size: 11px;
+    /* Fonte levemente maior para leitura */
+    border-collapse: collapse;
+    table-layout: fixed;
+    /* Distribuição equilibrada */
+  }
+
+  /* Cabeçalhos estilizados */
+  .printable-schedule th {
+    background-color: #1e3a8a !important;
+    /* Azul escuro (Indigo 900) */
+    color: white !important;
+    font-weight: bold;
+    text-transform: uppercase;
+    padding: 8px 4px !important;
+    border: 1px solid #1e3a8a !important;
+    text-align: center;
+  }
+
+  /* Células */
+  .printable-schedule td {
+    padding: 6px 4px !important;
+    border: 1px solid #cbd5e1 !important;
+    /* Slate 300 - borda suave */
+    vertical-align: middle;
+    text-align: center;
+    background-color: white !important;
+  }
+
+  /* Linha zebra suave para leitura */
+  .printable-schedule tr:nth-child(even) td {
+    background-color: #f8fafc !important;
+    /* Slate 50 */
+  }
+
+  /* Esconder scrollbars */
   .printable-schedule .overflow-x-auto {
-      overflow: visible !important;
+    overflow: visible !important;
   }
 
-  /* Forçar impressão de background e cores exatas */
-  @page {
-    size: landscape;
-    margin: 5mm;
-  }
-
-  /* Ajustes específicos para impressão */
-  * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
+  /* Garantir que o cabeçalho de print apareça bem */
+  .printable-schedule .flex-col {
+    display: flex !important;
   }
 }
