@@ -8,6 +8,11 @@ const generateICSForClass = (data, calendarSettings, classId) => {
   const cls = data.classes.find(c => c.id === classId);
   if (!cls) return;
 
+  if (!data.schedule || Object.keys(data.schedule).length === 0) {
+    alert('A grade ainda não foi gerada. Por favor, gere a grade antes de exportar a agenda.');
+    return;
+  }
+
   const parseDateInput = (dateStr) => {
     if (!dateStr) return new Date();
     const [y, m, d] = dateStr.split('-').map(Number);
@@ -65,8 +70,11 @@ const generateICSForClass = (data, calendarSettings, classId) => {
     if (slot.classId !== cls.id) return;
 
     const parts = key.split('-');
-    const dayIdx = parseInt(parts[1]);
+    const dayIdx = DAYS.indexOf(parts[1]);
     const slotIdx = parseInt(parts[2]);
+
+    // Safety check if day parsing failed
+    if (dayIdx === -1) return;
 
     const timeSlot = data.timeSlots[slotIdx];
     if (!timeSlot || timeSlot.type !== 'aula') return;
@@ -139,14 +147,25 @@ const generateICSForTeacher = (data, calendarSettings, teacherId) => {
   const teacher = data.teachers.find(t => t.id === teacherId);
   if (!teacher) return;
 
+  if (!data.schedule || Object.keys(data.schedule).length === 0) {
+    alert('A grade ainda não foi gerada. Por favor, gere a grade antes de exportar a agenda.');
+    return;
+  }
+
   const parseDateInput = (dateStr) => {
-    if (!dateStr) return new Date();
+    if (!dateStr || dateStr.length !== 10) return null; // Simple validation 'YYYY-MM-DD'
     const [y, m, d] = dateStr.split('-').map(Number);
+    if (!y || !m || !d) return null;
     return new Date(y, m - 1, d);
   };
 
   const schoolStart = parseDateInput(calendarSettings.schoolYearStart);
   const schoolEnd = parseDateInput(calendarSettings.schoolYearEnd);
+
+  if (!schoolStart || !schoolEnd || isNaN(schoolStart.getTime()) || isNaN(schoolEnd.getTime())) {
+    alert('Datas do Período Calendário inválidas. Verifique a configuração.');
+    return;
+  }
 
   const formatICSTime = (date, h, m) => {
     const y = date.getFullYear();
@@ -192,12 +211,17 @@ const generateICSForTeacher = (data, calendarSettings, teacherId) => {
     'END:VTIMEZONE'
   ];
 
+  let eventCount = 0;
+
   Object.entries(data.schedule).forEach(([key, slot]) => {
     if (slot.teacherId !== teacher.id) return;
 
     const parts = key.split('-');
-    const dayIdx = parseInt(parts[1]);
+    const dayIdx = DAYS.indexOf(parts[1]);
     const slotIdx = parseInt(parts[2]);
+
+    // Safety check if day parsing failed
+    if (dayIdx === -1) return;
 
     const timeSlot = data.timeSlots[slotIdx];
     if (!timeSlot || timeSlot.type !== 'aula') return;
@@ -220,10 +244,13 @@ const generateICSForTeacher = (data, calendarSettings, teacherId) => {
       if (!evt.start || !evt.end) return;
       const evtStart = parseDateInput(evt.start);
       const evtEnd = parseDateInput(evt.end);
+      if (!evtStart || !evtEnd) return;
 
       let cursor = new Date(evtStart);
+      // Align cursor to this weekday
       let diff = (targetJSDay - cursor.getDay() + 7) % 7;
       cursor.setDate(cursor.getDate() + diff);
+
       while (cursor <= evtEnd) {
         if (cursor >= evtStart) {
           exDates.push(formatICSTime(cursor, startH, startM));
@@ -232,6 +259,7 @@ const generateICSForTeacher = (data, calendarSettings, teacherId) => {
       }
     });
 
+    eventCount++;
     icsLines.push('BEGIN:VEVENT');
     icsLines.push(`UID:${uid()}@gradeinteligente.com`);
     icsLines.push(`DTSTAMP:${nowString}`);
@@ -251,8 +279,18 @@ const generateICSForTeacher = (data, calendarSettings, teacherId) => {
     icsLines.push('END:VEVENT');
   });
 
+  if (eventCount === 0) {
+    alert(`Nenhuma aula encontrada para o professor ${teacher.name} no período letivo configurado.`);
+    return;
+  }
+
   icsLines.push('END:VCALENDAR');
   const finalContent = icsLines.map(foldLine).join('\r\n');
+
+  console.log('--- ICS Content Start ---');
+  console.log(finalContent);
+  console.log('--- ICS Content End ---');
+
   const blob = new Blob([finalContent], { type: 'text/calendar;charset=utf-8' });
   const link = document.createElement('a');
   link.href = window.URL.createObjectURL(blob);
@@ -297,11 +335,67 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
     <div className="flex flex-col gap-6">
       <div className="p-4 bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200 rounded-xl shadow-sm flex flex-col gap-6">
         <div className="flex justify-between items-center">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2"><Calendar className="w-5 h-5 text-indigo-600"/> Agenda Escolar</h3>
+          <h3 className="font-bold text-slate-800 flex items-center gap-2"><Calendar className="w-5 h-5 text-indigo-600" /> Agenda Escolar</h3>
         </div>
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm flex flex-col gap-3">
-            <h4 className="font-semibold text-slate-700 text-sm">Período Letivo</h4>
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-slate-700 text-sm">Período Calendário</h4>
+              <button
+                onClick={() => {
+                  const dates = [];
+                  const start = new Date(schoolStart || calendarSettings.schoolYearStart);
+                  const end = new Date(schoolEnd || calendarSettings.schoolYearEnd);
+
+                  // Reset hours
+                  start.setHours(0, 0, 0, 0);
+                  end.setHours(0, 0, 0, 0);
+
+                  const parseDateInput = (str) => {
+                    const [y, m, d] = str.split('-').map(Number);
+                    return new Date(y, m - 1, d);
+                  };
+
+                  const isDayExcluded = (d) => {
+                    return (calendarSettings.events || []).some(ev => {
+                      if (!ev.start) return false;
+                      const s = parseDateInput(ev.start);
+                      const e = ev.end ? parseDateInput(ev.end) : s;
+                      return d >= s && d <= e;
+                    });
+                  };
+
+                  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                    const day = d.getDay();
+                    if (day === 0 || day === 6) continue; // Skip weekend
+                    if (isDayExcluded(d)) continue; // Skip holidays
+
+                    dates.push({
+                      date: d.toLocaleDateString('pt-BR'),
+                      weekday: DAYS[day - 1], // DAYS is 0=Seg...
+                      fullDate: d.toISOString().split('T')[0]
+                    });
+                  }
+
+                  let csvContent = "data:text/csv;charset=utf-8,Data,Dia da Semana\n";
+                  dates.forEach(item => {
+                    csvContent += `${item.date},${item.weekday}\n`;
+                  });
+
+                  const encodedUri = encodeURI(csvContent);
+                  const link = document.createElement("a");
+                  link.setAttribute("href", encodedUri);
+                  link.setAttribute("download", "dias_letivos.csv");
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }}
+                className="text-xs flex items-center gap-1 bg-slate-100 text-slate-600 hover:bg-slate-200 px-2 py-1 rounded transition-colors"
+                title="Baixar lista CSV de dias letivos"
+              >
+                <Download size={12} /> Baixar Datas
+              </button>
+            </div>
             <div className="flex flex-col gap-3">
               <div className="flex flex-col">
                 <label className="text-xs font-semibold text-slate-600 mb-1">Início</label>
@@ -331,7 +425,7 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={addEvent} className="flex items-center gap-1 bg-indigo-600 text-white px-3 py-2 rounded text-sm font-medium hover:bg-indigo-700 shadow-sm"><Plus size={16}/> Adicionar Evento</button>
+              <button onClick={addEvent} className="flex items-center gap-1 bg-indigo-600 text-white px-3 py-2 rounded text-sm font-medium hover:bg-indigo-700 shadow-sm"><Plus size={16} /> Adicionar Evento</button>
               <p className="text-[11px] text-slate-500">Para feriado de um dia, deixe Início = Fim.</p>
             </div>
             {calendarSettings.events && calendarSettings.events.length > 0 && (
@@ -353,14 +447,14 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
           </div>
         </div>
         <div className="bg-white border border-blue-100 rounded-lg p-4 shadow-sm flex gap-4 items-start">
-          <div className="text-indigo-600"><Calendar size={20}/></div>
+          <div className="text-indigo-600"><Calendar size={20} /></div>
           <div className="flex-1">
             <p className="text-xs text-slate-600 leading-relaxed"><span className="font-semibold text-slate-700">Como funciona:</span> Cada aula é exportada semanalmente no arquivo .ics até o fim do ano letivo. Eventos de <span className="font-semibold">Férias</span> ou <span className="font-semibold">Feriado</span> excluem automaticamente essas aulas para manter a agenda limpa.</p>
           </div>
         </div>
       </div>
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
-        <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calendar className="w-5 h-5 text-indigo-600"/> Agendas por Turma</h4>
+        <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calendar className="w-5 h-5 text-indigo-600" /> Agendas por Turma</h4>
         <p className="text-[11px] text-slate-500">Baixe a agenda individual de cada turma já considerando férias e feriados cadastrados.</p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {data.classes.map(cls => (
@@ -369,13 +463,13 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
                 <span className="text-sm font-semibold text-slate-700">{cls.name}</span>
                 <span className="text-[10px] text-slate-500">Turno: {cls.shift}</span>
               </div>
-              <button onClick={() => generateICSForClass(data, calendarSettings, cls.id)} className="flex items-center gap-1 bg-blue-600 text-white px-2 py-1.5 rounded text-xs font-medium hover:bg-blue-700"><Download size={14}/> Agenda</button>
+              <button onClick={() => generateICSForClass(data, calendarSettings, cls.id)} className="flex items-center gap-1 bg-blue-600 text-white px-2 py-1.5 rounded text-xs font-medium hover:bg-blue-700"><Download size={14} /> Agenda</button>
             </div>
           ))}
         </div>
       </div>
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
-        <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-600"/> Agendas por Professor</h4>
+        <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-600" /> Agendas por Professor</h4>
         <p className="text-[11px] text-slate-500">Baixe a agenda individual de cada professor já considerando férias e feriados cadastrados.</p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {data.teachers.map(teacher => (
@@ -384,17 +478,17 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
                 <span className="text-sm font-semibold text-slate-700">{teacher.name}</span>
                 <span className="text-[10px] text-slate-500">Turnos: {teacher.shifts?.join(', ') || 'N/A'}</span>
               </div>
-              <button onClick={() => generateICSForTeacher(data, calendarSettings, teacher.id)} className="flex items-center gap-1 bg-emerald-600 text-white px-2 py-1.5 rounded text-xs font-medium hover:bg-emerald-700"><Download size={14}/> Agenda</button>
+              <button onClick={() => generateICSForTeacher(data, calendarSettings, teacher.id)} className="flex items-center gap-1 bg-emerald-600 text-white px-2 py-1.5 rounded text-xs font-medium hover:bg-emerald-700"><Download size={14} /> Agenda</button>
             </div>
           ))}
         </div>
       </div>
 
       {/* Eventos Pontuais (Dias Específicos) */}
-      <SpecificDayEvents 
-        data={data} 
-        calendarSettings={calendarSettings} 
-        setCalendarSettings={setCalendarSettings} 
+      <SpecificDayEvents
+        data={data}
+        calendarSettings={calendarSettings}
+        setCalendarSettings={setCalendarSettings}
       />
 
       {/* Calculadora de Aulas */}
@@ -480,7 +574,7 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
   };
 
   const getModeModeLabel = (mode) => {
-    switch(mode) {
+    switch (mode) {
       case 'replace': return 'Substituir tudo';
       case 'add': return 'Acrescentar';
       case 'partial': return 'Modificar parcialmente';
@@ -489,7 +583,7 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
   };
 
   const getModeColor = (mode) => {
-    switch(mode) {
+    switch (mode) {
       case 'replace': return 'bg-red-100 text-red-700';
       case 'add': return 'bg-blue-100 text-blue-700';
       case 'partial': return 'bg-amber-100 text-amber-700';
@@ -503,29 +597,29 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
       <div className="flex justify-between items-center">
         <h4 className="font-bold text-slate-700 flex items-center gap-2">
-          <Calendar className="w-5 h-5 text-blue-600"/> 
+          <Calendar className="w-5 h-5 text-blue-600" />
           Eventos de Dias Específicos
         </h4>
-        <button 
+        <button
           onClick={() => setIsAddingSpecificDay(!isAddingSpecificDay)}
           className="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-blue-700"
         >
-          <Plus size={14}/> {isAddingSpecificDay ? 'Cancelar' : 'Novo Evento'}
+          <Plus size={14} /> {isAddingSpecificDay ? 'Cancelar' : 'Novo Evento'}
         </button>
       </div>
 
       <p className="text-[11px] text-slate-500">
-        Crie eventos pontuais para modificar a agenda em dias específicos (reuniões, eventos especiais, etc). 
+        Crie eventos pontuais para modificar a agenda em dias específicos (reuniões, eventos especiais, etc).
         Após criar, exporte o ICS incremental para sobrescrever o dia no seu calendário.
       </p>
 
       {isAddingSpecificDay && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
           <h5 className="font-semibold text-blue-800 text-sm">Adicionar Evento Específico</h5>
-          
+
           <div className="flex items-center gap-2 bg-white border border-blue-200 rounded p-2">
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
               id="isMultipleDays"
               checked={isMultipleDays}
               onChange={e => setIsMultipleDays(e.target.checked)}
@@ -541,9 +635,9 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
               <label className="text-xs font-semibold text-slate-600 mb-1">
                 {isMultipleDays ? 'Data Inicial' : 'Data do Evento'}
               </label>
-              <input 
-                type="date" 
-                value={specificDayDate} 
+              <input
+                type="date"
+                value={specificDayDate}
                 onChange={e => setSpecificDayDate(e.target.value)}
                 className="border rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               />
@@ -551,9 +645,9 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
             {isMultipleDays && (
               <div className="flex flex-col">
                 <label className="text-xs font-semibold text-slate-600 mb-1">Data Final</label>
-                <input 
-                  type="date" 
-                  value={specificDayEndDate} 
+                <input
+                  type="date"
+                  value={specificDayEndDate}
                   onChange={e => setSpecificDayEndDate(e.target.value)}
                   className="border rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
@@ -561,9 +655,9 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
             )}
             <div className="flex flex-col">
               <label className="text-xs font-semibold text-slate-600 mb-1">Título do Evento</label>
-              <input 
-                type="text" 
-                value={specificDayTitle} 
+              <input
+                type="text"
+                value={specificDayTitle}
                 onChange={e => setSpecificDayTitle(e.target.value)}
                 placeholder="Ex: Reunião de Pais, Dia da Escola"
                 className="border rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
@@ -574,35 +668,34 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
           <div className="grid md:grid-cols-2 gap-3">
             <div className="flex flex-col">
               <label className="text-xs font-semibold text-slate-600 mb-1">Horário de Início</label>
-              <input 
-                type="time" 
-                value={startTime} 
+              <input
+                type="time"
+                value={startTime}
                 onChange={e => setStartTime(e.target.value)}
                 className="border rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               />
             </div>
             <div className="flex flex-col">
               <label className="text-xs font-semibold text-slate-600 mb-1">Horário de Término</label>
-              <input 
-                type="time" 
-                value={endTime} 
+              <input
+                type="time"
+                value={endTime}
                 onChange={e => setEndTime(e.target.value)}
                 className="border rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               />
             </div>
           </div>
-          
+
           <div className="flex flex-col">
             <label className="text-xs font-semibold text-slate-600 mb-2">Tipo de Modificação</label>
             <div className="grid md:grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setModificationMode('replace')}
-                className={`px-3 py-2 rounded text-xs font-medium border transition-colors ${
-                  modificationMode === 'replace' 
-                    ? 'bg-red-600 text-white border-red-600' 
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                }`}
+                className={`px-3 py-2 rounded text-xs font-medium border transition-colors ${modificationMode === 'replace'
+                  ? 'bg-red-600 text-white border-red-600'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
               >
                 <div className="font-semibold">Substituir Tudo</div>
                 <div className="text-[10px] opacity-80 mt-0.5">Remove horário normal nas datas de evento</div>
@@ -610,11 +703,10 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
               <button
                 type="button"
                 onClick={() => setModificationMode('add')}
-                className={`px-3 py-2 rounded text-xs font-medium border transition-colors ${
-                  modificationMode === 'add' 
-                    ? 'bg-blue-600 text-white border-blue-600' 
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                }`}
+                className={`px-3 py-2 rounded text-xs font-medium border transition-colors ${modificationMode === 'add'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
               >
                 <div className="font-semibold">Acrescentar</div>
                 <div className="text-[10px] opacity-80 mt-0.5">Mantém horário + novo</div>
@@ -622,11 +714,10 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
               <button
                 type="button"
                 onClick={() => setModificationMode('partial')}
-                className={`px-3 py-2 rounded text-xs font-medium border transition-colors ${
-                  modificationMode === 'partial' 
-                    ? 'bg-amber-600 text-white border-amber-600' 
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                }`}
+                className={`px-3 py-2 rounded text-xs font-medium border transition-colors ${modificationMode === 'partial'
+                  ? 'bg-amber-600 text-white border-amber-600'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
               >
                 <div className="font-semibold">Modificar Parcialmente</div>
                 <div className="text-[10px] opacity-80 mt-0.5">Altera períodos específicos</div>
@@ -636,7 +727,7 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
 
           <div className="flex flex-col">
             <label className="text-xs font-semibold text-slate-600 mb-1">Descrição (opcional)</label>
-            <textarea 
+            <textarea
               value={specificDayDescription}
               onChange={e => setSpecificDayDescription(e.target.value)}
               placeholder="Detalhes adicionais sobre o evento..."
@@ -644,11 +735,11 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
               className="border rounded px-2 py-1.5 text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
           </div>
-          <button 
+          <button
             onClick={addSpecificDayEvent}
             className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700"
           >
-            <Plus size={16}/> Adicionar Evento
+            <Plus size={16} /> Adicionar Evento
           </button>
         </div>
       )}
@@ -660,22 +751,22 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
             {specificDayEvents.map(evt => {
               const isMultiDay = evt.endDate && evt.endDate !== evt.date;
               return (
-                <div 
-                  key={evt.id} 
+                <div
+                  key={evt.id}
                   className="bg-sky-50 border border-sky-200 rounded-lg p-3 flex items-start justify-between"
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-700">
-                        <Calendar size={12}/> 
-                        {isMultiDay 
+                        <Calendar size={12} />
+                        {isMultiDay
                           ? `${formatDateBR(evt.date)} a ${formatDateBR(evt.endDate)}`
                           : formatDateBR(evt.date)
                         }
                       </span>
                       {evt.startTime && evt.endTime && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
-                          <Clock size={12}/> {evt.startTime} - {evt.endTime}
+                          <Clock size={12} /> {evt.startTime} - {evt.endTime}
                         </span>
                       )}
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${getModeColor(evt.modificationMode || 'replace')}`}>
@@ -687,9 +778,9 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
                       <p className="text-xs text-slate-600">{evt.description}</p>
                     )}
                   </div>
-                  <button 
+                  <button
                     onClick={() => removeSpecificDayEvent(evt.id)}
-                    className="text-red-600 hover:text-red-700 p-1 shrink-0" 
+                    className="text-red-600 hover:text-red-700 p-1 shrink-0"
                     title="Remover"
                   >
                     <Trash2 size={14} />
@@ -721,7 +812,7 @@ const LessonCalculator = ({ data, calendarSettings }) => {
     const [y, m, d] = str.split('-').map(Number);
     return new Date(y, m - 1, d);
   };
-  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
   const schoolStart = useMemo(() => parseDate(calendarSettings.schoolYearStart), [calendarSettings.schoolYearStart]);
   const schoolEnd = useMemo(() => parseDate(calendarSettings.schoolYearEnd), [calendarSettings.schoolYearEnd]);
@@ -756,8 +847,9 @@ const LessonCalculator = ({ data, calendarSettings }) => {
 
     Object.entries(data.schedule || {}).forEach(([key, slot]) => {
       const parts = key.split('-');
-      const dayIdx = parseInt(parts[1]);
+      const dayIdx = DAYS.indexOf(parts[1]);
       const slotIdx = parseInt(parts[2]);
+      if (dayIdx === -1) return;
       const timeSlot = data.timeSlots[slotIdx];
       if (!timeSlot || timeSlot.type !== 'aula') return;
 
@@ -795,7 +887,7 @@ const LessonCalculator = ({ data, calendarSettings }) => {
   const bimesterRanges = useMemo(() => {
     if (!schoolStart || !schoolEnd) return [];
     const ranges = [];
-    const totalDays = Math.floor((schoolEnd - schoolStart) / (1000*60*60*24)) + 1;
+    const totalDays = Math.floor((schoolEnd - schoolStart) / (1000 * 60 * 60 * 24)) + 1;
     const chunk = Math.floor(totalDays / 4);
     let curStart = new Date(schoolStart);
     for (let i = 0; i < 4; i++) {
@@ -846,6 +938,24 @@ const LessonCalculator = ({ data, calendarSettings }) => {
     doc.save(`Contagem_Aulas_${classLabel.replace(/\s+/g, '_')}.pdf`);
   };
 
+  const exportExcel = () => {
+    let csvContent = "data:text/csv;charset=utf-8,Matéria,Aulas\n";
+    subjectsList.forEach(s => {
+      const count = countBySubject.map.get(s.id) || 0;
+      csvContent += `${s.name},${count}\n`;
+    });
+    csvContent += `TOTAL,${countBySubject.total}\n`;
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    const classLabel = selectedClass === 'all' ? 'Todas_Turmas' : (data.classes.find(c => c.id === selectedClass)?.name || 'Turma');
+    link.setAttribute("download", `Contagem_Aulas_${classLabel.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const toggleSubject = (subjectId) => {
     setExpandedSubjects(prev => {
       const newSet = new Set(prev);
@@ -870,9 +980,11 @@ const LessonCalculator = ({ data, calendarSettings }) => {
     }
   };
 
+
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
-      <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calculator className="w-5 h-5 text-blue-600"/> Calculadora de Aulas</h4>
+      <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calculator className="w-5 h-5 text-blue-600" /> Calculadora de Aulas</h4>
       <p className="text-[11px] text-slate-500">Selecione o período (bimestre) e a turma para contar aulas por matéria, já considerando eventos de exclusão.</p>
       <div className="grid md:grid-cols-3 gap-3">
         <div className="flex flex-col">
@@ -901,7 +1013,10 @@ const LessonCalculator = ({ data, calendarSettings }) => {
         </div>
         <div className="bg-slate-50 border border-slate-200 rounded p-3 lg:col-span-2 flex items-center justify-between">
           <div className="text-xs text-slate-500">Exportação</div>
-          <button onClick={exportPDF} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><FileText size={14}/> PDF ({selectedClass === 'all' ? 'todas as turmas' : data.classes.find(c => c.id === selectedClass)?.name || 'turma'})</button>
+          <div className="flex gap-2">
+            <button onClick={exportExcel} className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-emerald-700" title="Baixar planilha CSV"><FileText size={14} /> Excel</button>
+            <button onClick={exportPDF} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><FileText size={14} /> PDF ({selectedClass === 'all' ? 'todas as turmas' : data.classes.find(c => c.id === selectedClass)?.name || 'turma'})</button>
+          </div>
         </div>
       </div>
 
@@ -919,7 +1034,7 @@ const LessonCalculator = ({ data, calendarSettings }) => {
               const isExpanded = expandedSubjects.has(s.id);
               const subjectDetails = countBySubject.details.get(s.id);
               const totalCount = countBySubject.map.get(s.id) || 0;
-              
+
               return (
                 <React.Fragment key={s.id}>
                   <tr className="hover:bg-slate-50 cursor-pointer" onClick={() => totalCount > 0 && toggleSubject(s.id)}>
@@ -945,8 +1060,8 @@ const LessonCalculator = ({ data, calendarSettings }) => {
                                   <div key={dayIdx} className="flex items-center justify-between px-3 py-2 rounded bg-slate-50 border border-slate-200">
                                     <span className="text-[12px] font-medium text-slate-700">{DAYS[dayIdx]}</span>
                                     <div className="flex items-center gap-2">
-                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] ${colorByDay(dayIdx)}`}><Calendar size={12}/> {daysQty} {daysQty === 1 ? 'dia' : 'dias'}</span>
-                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] ${colorByDay(dayIdx)}`}><BookOpen size={12}/> {lessonsQty} {lessonsQty === 1 ? 'aula' : 'aulas'}</span>
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] ${colorByDay(dayIdx)}`}><Calendar size={12} /> {daysQty} {daysQty === 1 ? 'dia' : 'dias'}</span>
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] ${colorByDay(dayIdx)}`}><BookOpen size={12} /> {lessonsQty} {lessonsQty === 1 ? 'aula' : 'aulas'}</span>
                                     </div>
                                   </div>
                                 );

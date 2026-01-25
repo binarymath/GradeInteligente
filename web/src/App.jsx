@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
-  Layout, Settings, Clock, BookOpen, Calendar, Menu, X, ChevronLeft, ChevronRight, Upload, Download, AlertTriangle, Info, Edit3, Rocket
+  Layout, Settings, Clock, BookOpen, Calendar, Menu, X, ChevronLeft, ChevronRight, Upload, Download, AlertTriangle, Info, Edit3, Rocket, ChevronUp, ChevronDown
 } from 'lucide-react';
 import { DAYS } from './utils';
 import { migrateData } from './services/DataMigration';
@@ -70,11 +70,16 @@ const App = () => {
   const [viewMode, setViewMode] = useState(initialNav.viewMode);
   const [selectedEntity, setSelectedEntity] = useState(initialNav.selectedEntity);
   const [selectedShift, setSelectedShift] = useState('Todos');
-  const [calendarSettings, setCalendarSettings] = useState({
-    schoolYearStart: '2025-02-01',
-    schoolYearEnd: '2025-12-15',
-    events: []
+  const [calendarSettings, setCalendarSettings] = useState(() => {
+    const curYear = new Date().getFullYear();
+    return {
+      schoolYearStart: `${curYear}-02-01`,
+      schoolYearEnd: `${curYear}-12-15`,
+      events: []
+    };
   });
+
+  const [showLog, setShowLog] = useState(true);
 
   const fileInputRef = useRef(null);
   const logContainerRef = useRef(null);
@@ -864,76 +869,125 @@ const App = () => {
               <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-slate-200">
                 <h2 className="text-lg font-bold text-slate-800">Gerar Grade</h2>
                 <div className="flex items-center gap-2">
-                  {isVerified && (
-                    <button
-                      onClick={handleSmartRepair}
-                      disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
-                      className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      aria-busy={repairing}
-                      title="Ajustar grade atual sem regenerar"
-                    >
-                      {repairing ? 'Ajustando...' : 'Ajustar'}
-                    </button>
+                  {generationLog.length === 0 && (
+                    <>
+                      {isVerified && (
+                        <button
+                          onClick={handleSmartRepair}
+                          disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
+                          className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          aria-busy={repairing}
+                          title="Ajustar grade atual sem regenerar"
+                        >
+                          {repairing ? 'Ajustando...' : 'Ajustar'}
+                        </button>
+                      )}
+                      <button
+                        onClick={isVerified ? generateSchedule : verifySchedule}
+                        disabled={generating || repairing}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        aria-busy={generating}
+                      >
+                        {generating ? (isVerified ? 'Gerando...' : 'Verificando...') :
+                          (isVerified ? 'Gerar Novamente' :
+                            (Object.keys(data.schedule || {}).length > 0 ? 'Verificar' : 'Gerar Agora'))}
+                      </button>
+                    </>
                   )}
-                  <button
-                    onClick={isVerified ? generateSchedule : verifySchedule}
-                    disabled={generating || repairing}
-                    className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    aria-busy={generating}
-                  >
-                    {generating ? (isVerified ? 'Gerando...' : 'Verificando...') :
-                      (isVerified ? 'Gerar Novamente' :
-                        (Object.keys(data.schedule || {}).length > 0 ? 'Verificar' : 'Gerar Agora'))}
-                  </button>
                 </div>
               </div>
               {generationLog.length > 0 && (
-                <div
-                  ref={logContainerRef}
-                  className="bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100 p-4 rounded-lg border-l-4 border-emerald-500 shadow-lg max-h-96 overflow-y-auto"
-                  role="log"
-                  aria-live="polite"
-                  aria-label="Log de geração da grade"
-                >
-                  <div className="mb-3 font-bold text-emerald-400 text-sm">📋 Log de Operação:</div>
-                  {generationLog.map((logLine, i) => {
-                    // Colorir diferentes tipos de mensagens
-                    let textColor = 'text-slate-300';
-                    let bgColor = '';
-                    let fontWeight = '';
-
-                    if (logLine.includes('✅')) {
-                      textColor = 'text-emerald-300';
-                      fontWeight = 'font-semibold';
-                    } else if (logLine.includes('❌') || logLine.includes('⚠️')) {
-                      textColor = 'text-orange-300';
-                      fontWeight = 'font-semibold';
-                    } else if (logLine.includes('🧹')) {
-                      textColor = 'text-blue-300';
-                      fontWeight = 'font-semibold';
-                    } else if (logLine.includes('💡')) {
-                      textColor = 'text-amber-300';
-                    } else if (logLine.includes('📍')) {
-                      textColor = 'text-cyan-300';
-                      fontWeight = 'font-medium';
-                    } else if (logLine.includes('•')) {
-                      textColor = 'text-slate-400';
-                      bgColor = 'bg-slate-800/50';
-                    } else if (logLine.includes('🔧') || logLine.includes('⏳')) {
-                      textColor = 'text-violet-300';
-                      fontWeight = 'font-semibold';
-                    }
-
-                    return (
-                      <div
-                        key={i}
-                        className={`text-xs py-1 px-2 ${textColor} ${bgColor} ${fontWeight} leading-relaxed`}
-                        style={{ fontFamily: 'menlo, monospace' }}
+                <div className="flex flex-col">
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="flex items-center gap-2">
+                      {isVerified && (
+                        <button
+                          onClick={handleSmartRepair}
+                          disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
+                          className="bg-emerald-600 text-white px-3 py-1.5 text-xs rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          aria-busy={repairing}
+                          title="Ajustar grade atual sem regenerar"
+                        >
+                          {repairing ? 'Ajustando...' : 'Ajustar'}
+                        </button>
+                      )}
+                      <button
+                        onClick={isVerified ? generateSchedule : verifySchedule}
+                        disabled={generating || repairing}
+                        className="bg-indigo-600 text-white px-3 py-1.5 text-xs rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        aria-busy={generating}
                       >
-                        {logLine}
-                      </div>
-                    );
-                  })}
+                        {generating ? (isVerified ? 'Gerando...' : 'Verificando...') :
+                          (isVerified ? 'Gerar Novamente' :
+                            (Object.keys(data.schedule || {}).length > 0 ? 'Verificar' : 'Gerar Agora'))}
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => setShowLog(!showLog)}
+                      className="flex items-center gap-1 text-slate-500 hover:text-indigo-600 text-xs font-semibold uppercase tracking-wider transition-colors"
+                    >
+                      {showLog ? (
+                        <>
+                          <ChevronUp size={14} /> Ocultar Log
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown size={14} /> Mostrar Log
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {showLog && (
+                    <div
+                      ref={logContainerRef}
+                      className="bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100 p-4 rounded-lg border-l-4 border-emerald-500 shadow-lg max-h-96 overflow-y-auto"
+                      role="log"
+                      aria-live="polite"
+                      aria-label="Log de geração da grade"
+                    >
+                      <div className="mb-3 font-bold text-emerald-400 text-sm">📋 Log de Operação:</div>
+                      {generationLog.map((logLine, i) => {
+                        // Colorir diferentes tipos de mensagens
+                        let textColor = 'text-slate-300';
+                        let bgColor = '';
+                        let fontWeight = '';
+
+                        if (logLine.includes('✅')) {
+                          textColor = 'text-emerald-300';
+                          fontWeight = 'font-semibold';
+                        } else if (logLine.includes('❌') || logLine.includes('⚠️')) {
+                          textColor = 'text-orange-300';
+                          fontWeight = 'font-semibold';
+                        } else if (logLine.includes('🧹')) {
+                          textColor = 'text-blue-300';
+                          fontWeight = 'font-semibold';
+                        } else if (logLine.includes('💡')) {
+                          textColor = 'text-amber-300';
+                        } else if (logLine.includes('📍')) {
+                          textColor = 'text-cyan-300';
+                          fontWeight = 'font-medium';
+                        } else if (logLine.includes('•')) {
+                          textColor = 'text-slate-400';
+                          bgColor = 'bg-slate-800/50';
+                        } else if (logLine.includes('🔧') || logLine.includes('⏳')) {
+                          textColor = 'text-violet-300';
+                          fontWeight = 'font-semibold';
+                        }
+
+                        return (
+                          <div
+                            key={i}
+                            className={`text-xs py-1 px-2 ${textColor} ${bgColor} ${fontWeight} leading-relaxed`}
+                            style={{ fontFamily: 'menlo, monospace' }}
+                          >
+                            {logLine}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
               <div className="flex flex-wrap gap-6 mb-4">
