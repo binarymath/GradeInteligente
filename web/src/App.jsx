@@ -158,43 +158,26 @@ const App = () => {
   useEffect(() => {
     const loadPersisted = async () => {
       try {
-        if (window && window.grade) {
-          const persistedData = await window.grade.get('data');
-          const persistedCalendar = await window.grade.get('calendarSettings');
-          if (persistedData && typeof persistedData === 'object') {
-            let migratedData = migrateData(persistedData);
+        // Fallback para LocalStorage
+        const lsData = localStorage.getItem('grade_data');
+        if (lsData) {
+          const parsed = JSON.parse(lsData);
+          if (parsed && typeof parsed === 'object') {
+            let migratedData = migrateData(parsed);
             if (migratedData) {
+              // DEEP CLEAN: Remove ghost allocations on load
               if (migratedData.schedule) {
                 migratedData.schedule = cleanSchedule(migratedData);
               }
               setData(prev => ({ ...prev, ...migratedData }));
             }
           }
-          if (persistedCalendar && typeof persistedCalendar === 'object') {
-            setCalendarSettings(prev => ({ ...prev, ...persistedCalendar }));
-          }
-        } else {
-          // Fallback para LocalStorage se não estiver no Electron
-          const lsData = localStorage.getItem('grade_data');
-          if (lsData) {
-            const parsed = JSON.parse(lsData);
-            if (parsed && typeof parsed === 'object') {
-              let migratedData = migrateData(parsed);
-              if (migratedData) {
-                // DEEP CLEAN: Remove ghost allocations on load
-                if (migratedData.schedule) {
-                  migratedData.schedule = cleanSchedule(migratedData);
-                }
-                setData(prev => ({ ...prev, ...migratedData }));
-              }
-            }
-          }
+        }
 
-          const lsCalendar = localStorage.getItem('grade_calendar');
-          if (lsCalendar) {
-            const parsed = JSON.parse(lsCalendar);
-            if (parsed && typeof parsed === 'object') setCalendarSettings(prev => ({ ...prev, ...parsed }));
-          }
+        const lsCalendar = localStorage.getItem('grade_calendar');
+        if (lsCalendar) {
+          const parsed = JSON.parse(lsCalendar);
+          if (parsed && typeof parsed === 'object') setCalendarSettings(prev => ({ ...prev, ...parsed }));
         }
       } catch (e) {
         // ignore IPC errors
@@ -203,15 +186,11 @@ const App = () => {
     loadPersisted();
   }, []);
 
-  // Salvar estado persistente via Electron ou LocalStorage quando mudar
+  // Salvar estado persistente via LocalStorage quando mudar
   useEffect(() => {
     const savePersisted = async () => {
       try {
-        if (window && window.grade) {
-          await window.grade.set('data', data);
-        } else {
-          localStorage.setItem('grade_data', JSON.stringify(data));
-        }
+        localStorage.setItem('grade_data', JSON.stringify(data));
       } catch (e) {
         // ignore errors
       }
@@ -222,11 +201,7 @@ const App = () => {
   useEffect(() => {
     const saveCalendar = async () => {
       try {
-        if (window && window.grade) {
-          await window.grade.set('calendarSettings', calendarSettings);
-        } else {
-          localStorage.setItem('grade_calendar', JSON.stringify(calendarSettings));
-        }
+        localStorage.setItem('grade_calendar', JSON.stringify(calendarSettings));
       } catch (e) {
         // ignore errors
       }

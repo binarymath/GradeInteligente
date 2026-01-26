@@ -17,7 +17,7 @@ const Card = ({ icon: Icon, title, children }) => (
 );
 
 const AboutSection = () => {
-  const isElectron = typeof window !== 'undefined' && window.grade;
+
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 md:space-y-10">

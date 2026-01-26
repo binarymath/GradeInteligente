@@ -8,9 +8,9 @@ export default defineConfig({
     '__BUILD_DATE__': JSON.stringify(new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date()))
   },
   root: 'web',
-  base: process.env.ELECTRON === 'true' ? './' : '/',
+  base: '/',
   build: {
-    outDir: '../dist',
+    outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
     emptyOutDir: true
