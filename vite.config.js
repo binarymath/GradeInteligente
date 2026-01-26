@@ -10,9 +10,18 @@ export default defineConfig({
   root: 'web',
   base: '/',
   build: {
-    outDir: 'dist',
+    outDir: '../dist',
     assetsDir: 'assets',
     sourcemap: false,
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'lucide-react'],
+          pdf: ['jspdf', 'jspdf-autotable'],
+          excel: ['exceljs', 'xlsx', 'file-saver']
+        }
+      }
+    }
   }
 })
