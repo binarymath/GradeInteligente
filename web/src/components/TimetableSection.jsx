@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { Calendar, Plus, Trash2 } from 'lucide-react';
 import { DAYS } from '../utils';
-import ExportButtons from './ExportButtons';
 import { useDisplayPeriods } from '../hooks/useDisplayPeriods';
 import { computeSlotShift } from '../utils/time';
 
-const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, setCalendarSettings, showAgendaControls = true, filterShift = 'Todos' }) => {
+const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, setCalendarSettings, showAgendaControls = true, filterShift = 'Todos', filteredClassIds = null }) => {
   const displayPeriods = useDisplayPeriods({ data, viewMode, selectedEntity });
   // Se o filtro global for "Todos", aplica por padrão o Turno da entidade (quando disponível)
   let effectiveShift = filterShift;
@@ -18,6 +17,9 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
       effectiveShift = 'Todos';
     } else if (viewMode === 'subject') {
       // Matéria não possui turno próprio; manter Todos
+      effectiveShift = 'Todos';
+    } else if (viewMode === 'day') {
+      // Dia mostra todas as turmas (filtrar por turno se necessário)
       effectiveShift = 'Todos';
     }
   }
@@ -104,6 +106,7 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
     if (viewMode === 'class') return data.classes.find(c => c.id === selectedEntity)?.name || 'Turma';
     if (viewMode === 'teacher') return data.teachers.find(t => t.id === selectedEntity)?.name || 'Professor';
     if (viewMode === 'subject') return data.subjects.find(s => s.id === selectedEntity)?.name || 'Matéria';
+    if (viewMode === 'day') return selectedEntity || 'Dia';
     return 'Grade';
   };
 
@@ -111,6 +114,7 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
     if (viewMode === 'class') return 'Turma';
     if (viewMode === 'teacher') return 'Professor';
     if (viewMode === 'subject') return 'Disciplina';
+    if (viewMode === 'day') return 'Dia';
     return '';
   };
 
@@ -309,7 +313,6 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
               <h3 className="text-lg font-bold text-slate-800 leading-none">{entityName}</h3>
             </div>
           </div>
-          <ExportButtons viewMode={viewMode} selectedEntity={selectedEntity} data={data} displayPeriods={displayPeriods} />
         </div>
       )}
 
@@ -334,7 +337,21 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
           <thead>
             <tr>
               <th className="border p-2 bg-slate-50">Horário</th>
-              {DAYS.map(d => <th key={d} className="border p-2 bg-slate-50">{d}</th>)}
+              {viewMode === 'day'
+                ? (
+                  // Logic to show Classes as columns
+                  data.classes
+                    .filter(c => {
+                      if (effectiveShift === 'Todos') return true;
+                      if (effectiveShift === 'Integral (Manhã e Tarde)') return c.shift === 'Manhã' || c.shift === 'Tarde' || c.shift === 'Integral (Manhã e Tarde)';
+                      if (effectiveShift === 'Integral (Tarde e Noite)') return c.shift === 'Tarde' || c.shift === 'Noite' || c.shift === 'Integral (Tarde e Noite)';
+                      return c.shift === effectiveShift;
+                    })
+                    .filter(c => filteredClassIds === null || filteredClassIds.includes(c.id)) // NEW FILTER
+                    .map(c => <th key={c.id} className="border p-2 bg-slate-50 min-w-[120px]">{c.name}</th>)
+                )
+                : DAYS.map(d => <th key={d} className="border p-2 bg-slate-50">{d}</th>)
+              }
             </tr>
           </thead>
           <tbody>
@@ -358,59 +375,96 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
                   <tr key={slot.id}>
                     <td className="border p-2 font-bold whitespace-nowrap">{slot.start} - {slot.end}</td>
                     {slot.type !== 'aula' ? (
-                      <td colSpan={5} className="border p-2 text-center bg-slate-100 text-slate-500 font-bold uppercase">
+                      <td colSpan={viewMode === 'day' ?
+                        (filteredClassIds === null ? data.classes.length : filteredClassIds.length)
+                        : 5} className="border p-2 text-center bg-slate-100 text-slate-500 font-bold uppercase">
                         {slot.type}
                       </td>
                     ) : (
-                      DAYS.map((_, dayIdx) => {
-                        const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
-                        let cellContent = null;
-                        if (viewMode === 'class') {
-                          const scheduleKey = `${selectedEntity}-${timeKey}`;
-                          const entry = data.schedule[scheduleKey];
-                          if (entry) {
-                            const subj = data.subjects.find(s => s.id === entry.subjectId);
-                            const teacher = data.teachers.find(t => t.id === entry.teacherId);
-                            cellContent = (
-                              <div className="text-xs">
-                                <div className="font-bold text-slate-700">{subj?.name}</div>
-                                <div className="text-slate-500">{teacher?.name}</div>
-                              </div>
-                            );
+                      (viewMode === 'day' ? (
+                        data.classes
+                          .filter(c => {
+                            if (effectiveShift === 'Todos') return true;
+                            if (effectiveShift === 'Integral (Manhã e Tarde)') return c.shift === 'Manhã' || c.shift === 'Tarde' || c.shift === 'Integral (Manhã e Tarde)';
+                            if (effectiveShift === 'Integral (Tarde e Noite)') return c.shift === 'Tarde' || c.shift === 'Noite' || c.shift === 'Integral (Tarde e Noite)';
+                            return c.shift === effectiveShift;
+                          })
+                          .filter(c => filteredClassIds === null || filteredClassIds.includes(c.id)) // NEW FILTER: null=all, []=none
+                          .map(c => {
+                            // DAY VIEW: Iterate over Classes
+                            // selectedEntity holds the Day Name (e.g., "Segunda-feira")
+                            const dayName = selectedEntity || DAYS[0]; // Default to monday if not set
+                            const timeKey = `${dayName}-${absoluteIndex}`; // Correct: Format is ClassId-Day-SlotIndex
+                            const scheduleKey = `${c.id}-${timeKey}`; // e.g. "CLASS123-Segunda-feira-0"
+
+                            const entry = data.schedule[scheduleKey];
+                            let cellContent = null;
+
+                            if (entry) {
+                              const subj = data.subjects.find(s => s.id === entry.subjectId);
+                              const teacher = data.teachers.find(t => t.id === entry.teacherId);
+                              cellContent = (
+                                <div className="text-xs">
+                                  <div className="font-bold text-slate-700">{subj?.name}</div>
+                                  <div className="text-slate-500">{teacher?.name}</div>
+                                </div>
+                              );
+                            }
+                            return <td key={c.id} className="border p-2 min-w-[120px]">{cellContent}</td>;
+                          })
+                      ) : (
+                        // NORMAL MODES: Iterate over DAYS
+                        DAYS.map((_, dayIdx) => {
+                          const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
+                          let cellContent = null;
+
+                          if (viewMode === 'class') {
+                            const scheduleKey = `${selectedEntity}-${timeKey}`;
+                            const entry = data.schedule[scheduleKey];
+                            if (entry) {
+                              const subj = data.subjects.find(s => s.id === entry.subjectId);
+                              const teacher = data.teachers.find(t => t.id === entry.teacherId);
+                              cellContent = (
+                                <div className="text-xs">
+                                  <div className="font-bold text-slate-700">{subj?.name}</div>
+                                  <div className="text-slate-500">{teacher?.name}</div>
+                                </div>
+                              );
+                            }
+                          } else if (viewMode === 'teacher') {
+                            const entry = Object.entries(data.schedule).find(([key, val]) => val.teacherId === selectedEntity && val.timeKey === timeKey);
+                            if (entry) {
+                              const item = entry[1];
+                              const subj = data.subjects.find(s => s.id === item.subjectId);
+                              const cls = data.classes.find(c => c.id === item.classId);
+                              cellContent = (
+                                <div className="text-xs">
+                                  <div className="font-bold text-slate-700">{subj?.name}</div>
+                                  <div className="text-slate-500">{cls?.name}</div>
+                                </div>
+                              );
+                            }
+                          } else if (viewMode === 'subject') {
+                            const entries = Object.values(data.schedule).filter(val => val.subjectId === selectedEntity && val.timeKey === timeKey);
+                            if (entries.length > 0) {
+                              cellContent = (
+                                <div className="flex flex-col gap-1">
+                                  {entries.map(e => {
+                                    const cls = data.classes.find(c => c.id === e.classId);
+                                    const teacher = data.teachers.find(t => t.id === e.teacherId);
+                                    return (
+                                      <div key={e.classId + e.teacherId} className="text-[11px] leading-tight">
+                                        <span className="font-bold text-slate-700">{cls?.name}</span> <span className="text-slate-500">({teacher?.name})</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            }
                           }
-                        } else if (viewMode === 'teacher') {
-                          const entry = Object.entries(data.schedule).find(([key, val]) => val.teacherId === selectedEntity && val.timeKey === timeKey);
-                          if (entry) {
-                            const item = entry[1];
-                            const subj = data.subjects.find(s => s.id === item.subjectId);
-                            const cls = data.classes.find(c => c.id === item.classId);
-                            cellContent = (
-                              <div className="text-xs">
-                                <div className="font-bold text-slate-700">{subj?.name}</div>
-                                <div className="text-slate-500">{cls?.name}</div>
-                              </div>
-                            );
-                          }
-                        } else if (viewMode === 'subject') {
-                          const entries = Object.values(data.schedule).filter(val => val.subjectId === selectedEntity && val.timeKey === timeKey);
-                          if (entries.length > 0) {
-                            cellContent = (
-                              <div className="flex flex-col gap-1">
-                                {entries.map(e => {
-                                  const cls = data.classes.find(c => c.id === e.classId);
-                                  const teacher = data.teachers.find(t => t.id === e.teacherId);
-                                  return (
-                                    <div key={e.classId + e.teacherId} className="text-[11px] leading-tight">
-                                      <span className="font-bold text-slate-700">{cls?.name}</span> <span className="text-slate-500">({teacher?.name})</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          }
-                        }
-                        return <td key={dayIdx} className="border p-2">{cellContent}</td>;
-                      })
+                          return <td key={dayIdx} className="border p-2">{cellContent}</td>;
+                        })
+                      ))
                     )}
                   </tr>
                 );

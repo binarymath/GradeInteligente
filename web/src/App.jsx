@@ -4,15 +4,18 @@ import {
 } from 'lucide-react';
 import { DAYS } from './utils';
 import { migrateData } from './services/DataMigration';
+import { exportExcel } from './services/exporters';
 import { cleanSchedule } from './services/scheduleHelpers';
 import SidebarItem from './components/SidebarItem';
 import TimeSettingsSection from './components/TimeSettingsSection';
 import DataInputSection from './components/DataInputSection';
 import ActivitiesSection from './components/ActivitiesSection';
+import { useDisplayPeriods } from './hooks/useDisplayPeriods';
 import TimetableSection from './components/TimetableSection';
 import AgendaSection from './components/AgendaSection';
 import AboutSection from './components/AboutSection';
 import ManualEditSection from './components/ManualEditSection';
+import ExportButtons from './components/ExportButtons';
 
 import { exportBackup, importBackup } from './services/stateService';
 import { generateScheduleAsync, smartRepairAsync } from './services/scheduleService';
@@ -64,14 +67,22 @@ const App = () => {
   const [generationLog, setGenerationLog] = useState([]);
   const [viewMode, setViewMode] = useState(initialNav.viewMode);
   const [selectedEntities, setSelectedEntities] = useState(Array.isArray(initialNav.selectedEntity) ? initialNav.selectedEntity : (initialNav.selectedEntity ? [initialNav.selectedEntity] : []));
+  const [filteredClassIds, setFilteredClassIds] = useState(null); // null = ALL, [] = NONE
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isClassFilterOpen, setIsClassFilterOpen] = useState(false); // Toggle for the class filter dropdown
   const dropdownRef = useRef(null);
+  const classFilterRef = useRef(null); // Ref for Class Filter dropdown
 
-  // Fechar dropdown ao clicar fora
+  // Fechar dropdowns ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event) => {
+      // Main Dropdown
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsDropdownOpen(false);
+      }
+      // Class Filter Dropdown
+      if (classFilterRef.current && !classFilterRef.current.contains(event.target)) {
+        setIsClassFilterOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -103,6 +114,13 @@ const App = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Hook para calcular períodos de exibição (usado para exportação e visualização)
+  const displayPeriods = useDisplayPeriods({
+    data,
+    viewMode,
+    selectedEntity: selectedEntities[0]
+  });
 
   const prevLogLength = useRef(0);
 
@@ -988,6 +1006,7 @@ const App = () => {
                     <option value="class">Turmas</option>
                     <option value="teacher">Professores</option>
                     <option value="subject">Matérias</option>
+                    <option value="day">Dias da Semana</option>
                   </select>
                 </div>
                 <div className="flex flex-col">
@@ -1002,7 +1021,7 @@ const App = () => {
                   </select>
                 </div>
                 <div className="flex flex-col relative" ref={dropdownRef}>
-                  <label className="text-xs font-semibold text-slate-600 mb-1">{viewMode === 'class' ? 'Selecione Turmas' : viewMode === 'teacher' ? 'Selecione Professores' : 'Selecione Matérias'}</label>
+                  <label className="text-xs font-semibold text-slate-600 mb-1">{viewMode === 'class' ? 'Selecione Turmas' : viewMode === 'teacher' ? 'Selecione Professores' : viewMode === 'day' ? 'Selecione Dias' : 'Selecione Matérias'}</label>
 
                   <button
                     onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -1013,7 +1032,8 @@ const App = () => {
                         selectedEntities.length === 1 ? (
                           viewMode === 'class' ? data.classes.find(c => c.id === selectedEntities[0])?.name :
                             viewMode === 'teacher' ? data.teachers.find(t => t.id === selectedEntities[0])?.name :
-                              data.subjects.find(s => s.id === selectedEntities[0])?.name
+                              viewMode === 'day' ? selectedEntities[0] :
+                                data.subjects.find(s => s.id === selectedEntities[0])?.name
                         ) : `${selectedEntities.length} selecionados`}
                     </span>
                     <ChevronDown size={14} className="text-slate-400" />
@@ -1028,7 +1048,8 @@ const App = () => {
                             onClick={() => {
                               const items = (viewMode === 'class' ? data.classes.filter(c => selectedShift === 'Todos' ? true : c.shift === selectedShift) :
                                 viewMode === 'teacher' ? data.teachers.filter(t => selectedShift === 'Todos' ? true : (t.shifts || []).includes(selectedShift)) :
-                                  data.subjects
+                                  viewMode === 'day' ? DAYS.map(d => ({ id: d, name: d })) :
+                                    data.subjects
                               );
                               setSelectedEntities(items.map(i => i.id));
                             }}
@@ -1047,8 +1068,12 @@ const App = () => {
                       <div className="space-y-1">
                         {(viewMode === 'class' ? data.classes.filter(c => selectedShift === 'Todos' ? true : c.shift === selectedShift) :
                           viewMode === 'teacher' ? data.teachers.filter(t => selectedShift === 'Todos' ? true : (t.shifts || []).includes(selectedShift)) :
-                            data.subjects
-                        ).sort((a, b) => a.name.localeCompare(b.name)).map(item => (
+                            viewMode === 'day' ? DAYS.map(d => ({ id: d, name: d })) :
+                              data.subjects
+                        ).sort((a, b) => {
+                          if (viewMode === 'day') return DAYS.indexOf(a.name) - DAYS.indexOf(b.name); // Sort days correctly
+                          return a.name.localeCompare(b.name)
+                        }).map(item => (
                           <label key={item.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
                             <input
                               type="checkbox"
@@ -1070,16 +1095,86 @@ const App = () => {
                   )}
                 </div>
 
+                {/* --- SECONDARY DROPDOWN: FILTER CLASSES (Day Mode Only) --- */}
+                {viewMode === 'day' && (
+                  <div className="flex flex-col relative" ref={classFilterRef}>
+                    <label className="text-xs font-semibold text-slate-600 mb-1">Filtrar Turmas</label>
+                    <button
+                      onClick={() => setIsClassFilterOpen(!isClassFilterOpen)}
+                      className="border p-2 rounded text-sm bg-white shadow-sm min-w-[200px] text-left flex justify-between items-center"
+                    >
+                      <span className="truncate">
+                        {filteredClassIds === null
+                          ? 'Todas as Turmas'
+                          : filteredClassIds.length === 0
+                            ? 'Nenhuma Turma'
+                            : `${filteredClassIds.length} turmas selecionadas`}
+                      </span>
+                      <ChevronDown size={14} className="text-slate-400" />
+                    </button>
+
+                    {isClassFilterOpen && (
+                      <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto p-2">
+                        <div className="flex justify-between items-center mb-2 px-1">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Turmas</span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setFilteredClassIds([])}
+                              className="text-xs text-indigo-600 hover:underline"
+                            >
+                              Limpar
+                            </button>
+                            <button
+                              onClick={() => setFilteredClassIds(null)}
+                              className="text-xs text-indigo-600 hover:underline"
+                            >
+                              Todas
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          {data.classes.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map(cls => {
+                            const isChecked = filteredClassIds === null || filteredClassIds.includes(cls.id);
+                            return (
+                              <label key={cls.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 rounded cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    setFilteredClassIds(prev => {
+                                      if (prev === null) {
+                                        return data.classes.filter(c => c.id !== cls.id).map(c => c.id);
+                                      }
+                                      if (prev.includes(cls.id)) {
+                                        return prev.filter(id => id !== cls.id);
+                                      } else {
+                                        return [...prev, cls.id];
+                                      }
+                                    });
+                                  }}
+                                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <span className="text-sm text-slate-700">{cls.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Botão Global de Impressão */}
-                <div className="flex flex-col justify-end">
-                  <button
-                    onClick={() => window.print()}
-                    disabled={selectedEntities.length === 0}
-                    className="h-10 w-10 flex items-center justify-center bg-indigo-600 text-white rounded shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    title="Imprimir Grades"
-                  >
-                    <Printer size={20} />
-                  </button>
+                {/* Botões de Exportação (Consolidados) */}
+                <div className="flex flex-col justify-end gap-2">
+                  <ExportButtons
+                    viewMode={viewMode}
+                    selectedEntities={selectedEntities}
+                    data={data}
+                    displayPeriods={displayPeriods}
+                    filteredClassIds={filteredClassIds}
+                    calendarSettings={calendarSettings}
+                  />
                 </div>
               </div>
 
@@ -1095,6 +1190,7 @@ const App = () => {
                         calendarSettings={calendarSettings}
                         setCalendarSettings={setCalendarSettings}
                         filterShift={selectedShift}
+                        filteredClassIds={filteredClassIds} // PASSING THE FILTER (null or array)
                         showAgendaControls={false}
                       />
                     </div>
@@ -1102,7 +1198,7 @@ const App = () => {
                 </div>
               ) : (
                 <div className="text-center py-12 bg-slate-50 border border-slate-200 rounded-lg border-dashed">
-                  <p className="text-slate-500">Selecione pelo menos uma {viewMode === 'class' ? 'turma' : viewMode === 'teacher' ? 'professor' : 'matéria'} para visualizar.</p>
+                  <p className="text-slate-500">Selecione pelo menos uma {viewMode === 'class' ? 'turma' : viewMode === 'teacher' ? 'professor' : viewMode === 'day' ? 'dia' : 'matéria'} para visualizar.</p>
                 </div>
               )}
             </div>
