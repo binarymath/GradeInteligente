@@ -281,9 +281,14 @@ export async function exportExcel({ viewMode, selectedEntities, data, filteredCl
 
       // Header Row
       const headerRow = worksheet.insertRow(2, headers);
-      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Apply style only to actual header cells
+      for (let i = 1; i <= headers.length; i++) {
+        const cell = headerRow.getCell(i);
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      }
 
       worksheet.getColumn(1).width = 20;
       for (let i = 2; i <= headers.length; i++) worksheet.getColumn(i).width = 25;
