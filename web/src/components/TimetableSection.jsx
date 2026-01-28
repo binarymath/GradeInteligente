@@ -3,6 +3,7 @@ import { Calendar, Plus, Trash2 } from 'lucide-react';
 import { DAYS } from '../utils';
 import { useDisplayPeriods } from '../hooks/useDisplayPeriods';
 import { computeSlotShift } from '../utils/time';
+import ExportButtons from './ExportButtons';
 
 const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, setCalendarSettings, showAgendaControls = true, filterShift = 'Todos', filteredClassIds = null }) => {
   const displayPeriods = useDisplayPeriods({ data, viewMode, selectedEntity });
