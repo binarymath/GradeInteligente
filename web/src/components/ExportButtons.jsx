@@ -1,5 +1,5 @@
-import React from 'react';
-import { FileText, Download, Calendar, CalendarPlus, Printer } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { FileText, Download, Calendar, CalendarPlus, Printer, ChevronDown } from 'lucide-react';
 import { exportPDF, exportExcel, exportDOC } from '../services/exporters';
 import { exportICS, exportIncrementalICS } from '../services/icsExporter';
 
@@ -14,18 +14,59 @@ const ExportButtons = ({ viewMode, selectedEntities, data, displayPeriods, calen
   // For single-item exporters (legacy PDF/DOC support if not updated yet), take first
   const firstEntity = selectedEntities?.[0];
 
+  const [docDropdownOpen, setDocDropdownOpen] = useState(false);
+  const docDropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (docDropdownRef.current && !docDropdownRef.current.contains(event.target)) {
+        setDocDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const handleDocExport = (mode) => {
+    exportDOC({ viewMode, selectedEntities, data, displayPeriods, filteredClassIds, mode }); // mode: 'combined' | 'separate'
+    setDocDropdownOpen(false);
+  };
+
   const commonCls = 'p-2 rounded-md border text-xs font-medium flex items-center justify-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+
   return (
-    <div className="flex gap-2">
-      <button
-        type="button"
-        onClick={() => exportDOC({ viewMode, selectedEntities, data, displayPeriods, filteredClassIds })}
-        disabled={disabled}
-        title="Exportar Word (.doc)"
-        className={`${commonCls} bg-blue-800 border-blue-800 text-white hover:bg-blue-900`}
-      >
-        <FileText size={14} /> <span className="sr-only">Word</span>
-      </button>
+    <div className="flex gap-2 relative">
+      <div className="relative" ref={docDropdownRef}>
+        <button
+          type="button"
+          onClick={() => setDocDropdownOpen(!docDropdownOpen)}
+          disabled={disabled}
+          title="Exportar Word (.doc)"
+          className={`${commonCls} bg-blue-800 border-blue-800 text-white hover:bg-blue-900 pr-1`}
+        >
+          <FileText size={14} /> <span className="sr-only">Word</span>
+          <ChevronDown size={14} className={`ml-0.5 transition-transform ${docDropdownOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {docDropdownOpen && (
+          <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-md shadow-lg z-50 py-1">
+            <button
+              onClick={() => handleDocExport('combined')}
+              className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+            >
+              <FileText size={14} /> Arquivo Único
+            </button>
+            <button
+              onClick={() => handleDocExport('separate')}
+              className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+            >
+              <FileText size={14} /> Arquivos Individualizados (.zip)
+            </button>
+          </div>
+        )}
+      </div>
+
       <button
         type="button"
         onClick={() => window.print()}

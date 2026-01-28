@@ -378,12 +378,13 @@ export async function exportExcel({ viewMode, selectedEntities, data, filteredCl
 /**
  * Exporta a grade em formato Word (.doc) simulado via HTML.
  * @param {Object} params
- * @param {'class'|'teacher'} params.viewMode
- * @param {string} params.selectedEntity
+ * @param {'class'|'teacher'|'day'|'subject'} params.viewMode
+ * @param {string|string[]} params.selectedEntities
  * @param {Object} params.data Estado completo
  * @param {Array} params.displayPeriods Períodos filtrados
+ * @param {'combined'|'separate'} [params.mode='combined'] Modo de exportação
  */
-export async function exportDOC({ viewMode, selectedEntities, data, displayPeriods, filteredClassIds = null }) {
+export async function exportDOC({ viewMode, selectedEntities, data, displayPeriods, filteredClassIds = null, mode = 'combined' }) {
   // Ensure array
   const entities = Array.isArray(selectedEntities) ? selectedEntities : [selectedEntities];
   const uniqueEntities = [...new Set(entities.filter(Boolean))];
@@ -394,205 +395,230 @@ export async function exportDOC({ viewMode, selectedEntities, data, displayPerio
   }
 
   const dateStr = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
-  const fileName = uniqueEntities.length === 1 && viewMode !== 'day'
-    ? getFileName(viewMode, uniqueEntities[0], data).replace('.xlsx', '')
-    : `GradeInteligente_Multiplo_${dateStr}`;
   const titleText = `Grade Horária - ${new Date().toLocaleDateString('pt-BR')}`;
 
-  let html = `
-    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-    <head>
-      <meta charset="utf-8">
-      <title>${titleText}</title>
-      <!--[if gte mso 9]>
-      <xml>
-      <w:WordDocument>
-      <w:View>Print</w:View>
-      <w:Zoom>90</w:Zoom>
-      <w:DoNotOptimizeForBrowser/>
-      </w:WordDocument>
-      </xml>
-      <![endif]-->
-      <style>
-        @page {
-          size: 29.7cm 21cm;
-          margin: 0.5cm;
-          mso-page-orientation: landscape;
-        }
-        @page Section1 {
-          size: 29.7cm 21cm;
-          margin: 0.5cm;
-          mso-header-margin: 0.2in;
-          mso-footer-margin: 0.2in;
-          mso-paper-source: 0;
-        }
-        div.Section1 {
-          page: Section1;
-        }
-        body { 
-          font-family: Arial, sans-serif; 
-          font-size: 11px;
-        }
-        h1 { 
-          text-align: center; 
-          font-size: 16px;
-          margin-bottom: 5px;
-          margin-top: 0;
-        }
-        h2 {
-          text-align: center;
-          font-size: 14px;
-          margin-bottom: 10px;
-          color: #444;
-        }
-        table { 
-          width: 100%; 
-          border-collapse: collapse; 
-          table-layout: fixed;
-          margin-bottom: 20px;
-          page-break-inside: avoid;
-        }
-        th, td { 
-          border: 1px solid black; 
-          padding: 2px 2px; 
-          text-align: center; 
-          font-size: 10px;
-          vertical-align: middle;
-          word-wrap: break-word;
-        }
-        th { 
-          background-color: #f0f0f0; 
-          font-weight: bold; 
-          color: #333;
-          height: 25px;
-          line-height: normal;
-        }
-        .break { 
-          background-color: #e0e0e0; 
-          font-weight: bold; 
-          color: #555; 
-          letter-spacing: 1px;
-          font-size: 9px;
-          height: 15px;
-        }
-        .page-break {
-          page-break-before: always;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="Section1">
-  `;
+  // Helper function to generate HTML for a specific set of entities (single or all)
+  const generateHTML = (entitiesToRender, isCombined) => {
+    let html = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+        <meta charset="utf-8">
+        <title>${titleText}</title>
+        <!--[if gte mso 9]>
+        <xml>
+        <w:WordDocument>
+        <w:View>Print</w:View>
+        <w:Zoom>90</w:Zoom>
+        <w:DoNotOptimizeForBrowser/>
+        </w:WordDocument>
+        </xml>
+        <![endif]-->
+        <style>
+          @page {
+            size: 29.7cm 21cm;
+            margin: 0.5cm;
+            mso-page-orientation: landscape;
+          }
+          @page Section1 {
+            size: 29.7cm 21cm;
+            margin: 0.5cm;
+            mso-header-margin: 0.2in;
+            mso-footer-margin: 0.2in;
+            mso-paper-source: 0;
+          }
+          div.Section1 {
+            page: Section1;
+          }
+          body { 
+            font-family: Arial, sans-serif; 
+            font-size: 11px;
+          }
+          h1 { 
+            text-align: center; 
+            font-size: 16px;
+            margin-bottom: 5px;
+            margin-top: 0;
+          }
+          h2 {
+            text-align: center;
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #444;
+          }
+          table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            table-layout: fixed;
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+          }
+          th, td { 
+            border: 1px solid black; 
+            padding: 2px 2px; 
+            text-align: center; 
+            font-size: 10px;
+            vertical-align: middle;
+            word-wrap: break-word;
+          }
+          th { 
+            background-color: #f0f0f0; 
+            font-weight: bold; 
+            color: #333;
+            height: 25px;
+            line-height: normal;
+          }
+          .break { 
+            background-color: #e0e0e0; 
+            font-weight: bold; 
+            color: #555; 
+            letter-spacing: 1px;
+            font-size: 9px;
+            height: 15px;
+          }
+          .page-break {
+            page-break-before: always;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="Section1">
+    `;
 
-  // === GENERATE TABLES LOOP ===
-  uniqueEntities.forEach((entity, idx) => {
-    // Add page break for subsequent items
-    if (idx > 0) html += '<div class="page-break"></div>';
+    entitiesToRender.forEach((entity, idx) => {
+      // Add page break for subsequent items if combined
+      if (idx > 0 && isCombined) html += '<div class="page-break"></div>';
 
-    let sectionTitle = '';
-    if (viewMode === 'day') sectionTitle = entity; // entity is day name
-    else sectionTitle = getFileName(viewMode, entity, data).replace('GradeInteligente (', '').replace(')', '');
+      let sectionTitle = '';
+      if (viewMode === 'day') sectionTitle = entity; // entity is day name
+      else sectionTitle = getFileName(viewMode, entity, data).replace('GradeInteligente (', '').replace(')', '');
 
-    html += `<h1>${titleText}</h1>`;
-    html += `<h2>${sectionTitle}</h2>`;
+      html += `<h1>${titleText}</h1>`;
+      html += `<h2>${sectionTitle}</h2>`;
 
-    // Determine Columns
-    let headers = ['Horário'];
-    let classesToExport = []; // Only for Day View
+      // Determine Columns
+      let headers = ['Horário'];
+      let classesToExport = []; // Only for Day View
 
-    if (viewMode === 'day') {
-      classesToExport = filteredClassIds !== null
-        ? data.classes.filter(c => filteredClassIds.includes(c.id))
-        : data.classes;
-      // Sort alphanumeric
-      classesToExport.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      if (viewMode === 'day') {
+        classesToExport = filteredClassIds !== null
+          ? data.classes.filter(c => filteredClassIds.includes(c.id))
+          : data.classes;
+        // Sort alphanumeric
+        classesToExport.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
-      classesToExport.forEach(c => headers.push(c.name));
-    } else {
-      DAYS.forEach(d => headers.push(d));
-    }
-
-    html += `<table><thead><tr>`;
-    headers.forEach(h => html += `<th>${h}</th>`);
-    html += `</tr></thead><tbody>`;
-
-    // Data Rows
-    displayPeriods.forEach(slot => {
-      const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
-      html += `<tr><td>${slot.start} - ${slot.end}</td>`;
-
-      if (slot.type !== 'aula') {
-        const label = slot.type.toUpperCase();
-        html += `<td colspan="${headers.length - 1}" class="break">${label}</td>`;
+        classesToExport.forEach(c => headers.push(c.name));
       } else {
-        // Fill Columns
-        if (viewMode === 'day') {
-          classesToExport.forEach(cls => {
-            const dayName = entity || DAYS[0];
-            const timeKey = `${dayName}-${absoluteIndex}`;
-            const scheduleKey = `${cls.id}-${timeKey}`;
-            const entry = data.schedule[scheduleKey];
-
-            let cellContent = '';
-            if (entry) {
-              const subject = data.subjects.find(s => s.id === entry.subjectId);
-              const teacher = data.teachers.find(t => t.id === entry.teacherId);
-              if (subject) {
-                cellContent = `<b>${subject.name}</b><br><span style="font-size:10px; color:#555;">(${teacher?.name || ''})</span>`;
-              }
-            }
-            html += `<td>${cellContent}</td>`;
-          });
-        } else {
-          DAYS.forEach((day, dayIdx) => {
-            const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
-            let cellContent = '';
-
-            let entry = null;
-
-            if (viewMode === 'class') {
-              const scheduleKey = `${entity}-${timeKey}`;
-              entry = data.schedule[scheduleKey];
-            } else if (viewMode === 'teacher') {
-              entry = Object.values(data.schedule).find(v => v.teacherId === entity && v.timeKey === timeKey);
-            } else if (viewMode === 'subject') {
-              const entries = Object.values(data.schedule).filter(v => v.subjectId === entity && v.timeKey === timeKey);
-              if (entries.length) {
-                cellContent = entries.map(e => {
-                  const cls = data.classes.find(c => c.id === e.classId);
-                  const teacher = data.teachers.find(t => t.id === e.teacherId);
-                  return `<b>${cls?.name || '?'}</b><br><span style="font-size:10px; color:#555;">(${teacher?.name || '?'})</span>`;
-                }).join('<br><br>');
-              }
-            }
-
-            if (entry && !cellContent) {
-              if (viewMode === 'class') {
-                const subj = data.subjects.find(s => s.id === entry.subjectId);
-                const teacher = data.teachers.find(t => t.id === entry.teacherId);
-                if (subj) cellContent = `<b>${subj.name}</b><br><span style="font-size:10px; color:#555;">(${teacher?.name || ''})</span>`;
-              } else if (viewMode === 'teacher') {
-                const subj = data.subjects.find(s => s.id === entry.subjectId);
-                const cls = data.classes.find(c => c.id === entry.classId);
-                if (subj) cellContent = `<b>${subj.name}</b><br><span style="font-size:10px; color:#555;">(${cls?.name || ''})</span>`;
-              }
-            }
-            html += `<td>${cellContent}</td>`;
-          });
-        }
+        DAYS.forEach(d => headers.push(d));
       }
-      html += `</tr>`;
+
+      html += `<table><thead><tr>`;
+      headers.forEach(h => html += `<th>${h}</th>`);
+      html += `</tr></thead><tbody>`;
+
+      // Data Rows
+      displayPeriods.forEach(slot => {
+        const absoluteIndex = data.timeSlots.findIndex(s => s.id === slot.id);
+        html += `<tr><td>${slot.start} - ${slot.end}</td>`;
+
+        if (slot.type !== 'aula') {
+          const label = slot.type.toUpperCase();
+          html += `<td colspan="${headers.length - 1}" class="break">${label}</td>`;
+        } else {
+          // Fill Columns
+          if (viewMode === 'day') {
+            classesToExport.forEach(cls => {
+              const dayName = entity || DAYS[0];
+              const timeKey = `${dayName}-${absoluteIndex}`;
+              const scheduleKey = `${cls.id}-${timeKey}`;
+              const entry = data.schedule[scheduleKey];
+
+              let cellContent = '';
+              if (entry) {
+                const subject = data.subjects.find(s => s.id === entry.subjectId);
+                const teacher = data.teachers.find(t => t.id === entry.teacherId);
+                if (subject) {
+                  cellContent = `<b>${subject.name}</b><br><span style="font-size:10px; color:#555;">(${teacher?.name || ''})</span>`;
+                }
+              }
+              html += `<td>${cellContent}</td>`;
+            });
+          } else {
+            DAYS.forEach((day, dayIdx) => {
+              const timeKey = `${DAYS[dayIdx]}-${absoluteIndex}`;
+              let cellContent = '';
+              let entry = null;
+
+              if (viewMode === 'class') {
+                const scheduleKey = `${entity}-${timeKey}`;
+                entry = data.schedule[scheduleKey];
+              } else if (viewMode === 'teacher') {
+                entry = Object.values(data.schedule).find(v => v.teacherId === entity && v.timeKey === timeKey);
+              } else if (viewMode === 'subject') {
+                const entries = Object.values(data.schedule).filter(v => v.subjectId === entity && v.timeKey === timeKey);
+                if (entries.length) {
+                  cellContent = entries.map(e => {
+                    const cls = data.classes.find(c => c.id === e.classId);
+                    const teacher = data.teachers.find(t => t.id === e.teacherId);
+                    return `<b>${cls?.name || '?'}</b><br><span style="font-size:10px; color:#555;">(${teacher?.name || '?'})</span>`;
+                  }).join('<br><br>');
+                }
+              }
+
+              if (entry && !cellContent) {
+                if (viewMode === 'class') {
+                  const subj = data.subjects.find(s => s.id === entry.subjectId);
+                  const teacher = data.teachers.find(t => t.id === entry.teacherId);
+                  if (subj) cellContent = `<b>${subj.name}</b><br><span style="font-size:10px; color:#555;">(${teacher?.name || ''})</span>`;
+                } else if (viewMode === 'teacher') {
+                  const subj = data.subjects.find(s => s.id === entry.subjectId);
+                  const cls = data.classes.find(c => c.id === entry.classId);
+                  if (subj) cellContent = `<b>${subj.name}</b><br><span style="font-size:10px; color:#555;">(${cls?.name || ''})</span>`;
+                }
+              }
+              html += `<td>${cellContent}</td>`;
+            });
+          }
+        }
+        html += `</tr>`;
+      });
+      html += `</tbody></table>`;
     });
-    html += `</tbody></table>`;
-  });
 
-  html += `
-      <p style="text-align: center; font-size: 10px; margin-top: 20px; color: #777;">Gerado pelo Sistema de Grade Inteligente - ${new Date().toLocaleDateString('pt-BR')}</p>
-      </div>
-    </body>
-    </html>
-  `;
+    html += `
+        <p style="text-align: center; font-size: 10px; margin-top: 20px; color: #777;">Gerado pelo Sistema de Grade Inteligente - ${new Date().toLocaleDateString('pt-BR')}</p>
+        </div>
+      </body>
+      </html>
+    `;
+    return html;
+  };
 
-  const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
-  saveAs(blob, `${fileName}.doc`);
+  if (mode === 'separate' && uniqueEntities.length > 1) {
+    // Generate separate files and ZIP them
+    const JSZipModule = await import('jszip');
+    const JSZip = JSZipModule.default || JSZipModule;
+    const zip = new JSZip();
+
+    uniqueEntities.forEach(entity => {
+      const htmlContent = generateHTML([entity], false);
+      const docName = getFileName(viewMode, entity, data).replace('GradeInteligente (', '').replace(')', '');
+      const safeDocName = docName.replace(/[<>:"/\\|?*]/g, '_');
+      zip.file(`${safeDocName}.doc`, htmlContent);
+    });
+
+    const content = await zip.generateAsync({ type: 'blob' });
+    const zipName = `Grades_${viewMode}_${dateStr}.zip`;
+    saveAs(content, zipName);
+  } else {
+    // Standard Combined Export (or single entity)
+    const html = generateHTML(uniqueEntities, true);
+
+    // Naming logic
+    const fileName = uniqueEntities.length === 1 && viewMode !== 'day'
+      ? getFileName(viewMode, uniqueEntities[0], data).replace('.xlsx', '')
+      : `GradeInteligente_Multiplo_${dateStr}`;
+
+    const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
+    saveAs(blob, `${fileName}.doc`);
+  }
 }
