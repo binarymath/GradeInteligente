@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar, Plus, Trash2, Download, Calculator, FileText, BookOpen, Clock } from 'lucide-react';
+import { Calendar, Plus, Trash2, Download, Calculator, FileText, BookOpen, Clock, Pencil, X } from 'lucide-react';
 import { uid, DAYS } from '../utils';
-// Removidos imports pesados para lazy import dentro da função de exportação.
 
 // Generates ICS for a specific class (turma) using global events
 const generateICSForClass = (data, calendarSettings, classId) => {
@@ -306,6 +305,7 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
   const [eventTitle, setEventTitle] = useState('');
   const [eventStart, setEventStart] = useState('');
   const [eventEnd, setEventEnd] = useState('');
+  const [editingEventId, setEditingEventId] = useState(null);
 
   const syncSchoolYear = () => {
     setCalendarSettings(prev => ({ ...prev, schoolYearStart: schoolStart, schoolYearEnd: schoolEnd }));
@@ -314,21 +314,45 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
   const addEvent = () => {
     if (!eventStart) { alert('Data inicial obrigatória.'); return; }
     const finalEnd = eventEnd || eventStart;
-    const newEvt = {
-      id: Date.now().toString(),
-      type: 'Evento',
-      title: eventTitle.trim() || 'Evento',
-      start: eventStart,
-      end: finalEnd
-    };
-    setCalendarSettings(prev => ({ ...prev, events: [...(prev.events || []), newEvt] }));
+
+    if (editingEventId) {
+      setCalendarSettings(prev => ({
+        ...prev,
+        events: prev.events.map(e => e.id === editingEventId ? { ...e, title: eventTitle, start: eventStart, end: finalEnd } : e)
+      }));
+      setEditingEventId(null);
+    } else {
+      const newEvt = {
+        id: Date.now().toString(),
+        type: 'Evento',
+        title: eventTitle.trim() || 'Evento',
+        start: eventStart,
+        end: finalEnd
+      };
+      setCalendarSettings(prev => ({ ...prev, events: [...(prev.events || []), newEvt] }));
+    }
     setEventTitle('');
     setEventStart('');
     setEventEnd('');
   };
 
+  const startEditing = (event) => {
+    setEventTitle(event.title);
+    setEventStart(event.start);
+    setEventEnd(event.end);
+    setEditingEventId(event.id);
+  };
+
+  const cancelEditing = () => {
+    setEventTitle('');
+    setEventStart('');
+    setEventEnd('');
+    setEditingEventId(null);
+  };
+
   const removeEvent = (id) => {
-    setCalendarSettings(prev => ({ ...prev, events: prev.events.filter(e => e.id === id) }));
+    if (editingEventId === id) cancelEditing();
+    setCalendarSettings(prev => ({ ...prev, events: prev.events.filter(e => e.id !== id) }));
   };
 
   return (
@@ -425,7 +449,15 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={addEvent} className="flex items-center gap-1 bg-indigo-600 text-white px-3 py-2 rounded text-sm font-medium hover:bg-indigo-700 shadow-sm"><Plus size={16} /> Adicionar Evento</button>
+              <button onClick={addEvent} className={`flex items-center gap-1 ${editingEventId ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white px-3 py-2 rounded text-sm font-medium shadow-sm`}>
+                {editingEventId ? <Pencil size={16} /> : <Plus size={16} />}
+                {editingEventId ? ' Atualizar Evento' : ' Adicionar Evento'}
+              </button>
+              {editingEventId && (
+                <button onClick={cancelEditing} className="flex items-center gap-1 bg-slate-300 text-slate-700 px-3 py-2 rounded text-sm font-medium hover:bg-slate-400 shadow-sm">
+                  <X size={16} /> Cancelar
+                </button>
+              )}
               <p className="text-[11px] text-slate-500">Para feriado de um dia, deixe Início = Fim.</p>
             </div>
             {calendarSettings.events && calendarSettings.events.length > 0 && (
@@ -438,7 +470,10 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
                         <span className="font-semibold text-slate-700">{ev.title}</span>
                         <span className="text-slate-500">{ev.start}{ev.end !== ev.start ? ` → ${ev.end}` : ''}</span>
                       </div>
-                      <button onClick={() => removeEvent(ev.id)} className="text-red-600 hover:text-red-700 p-1" title="Remover"><Trash2 size={14} /></button>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => startEditing(ev)} className="text-blue-600 hover:text-blue-700 p-1" title="Editar"><Pencil size={14} /></button>
+                        <button onClick={() => removeEvent(ev.id)} className="text-red-600 hover:text-red-700 p-1" title="Remover"><Trash2 size={14} /></button>
+                      </div>
                     </li>
                   ))}
                 </ul>
