@@ -730,7 +730,13 @@ const App = () => {
 
   const generateSchedule = useCallback(() => {
     setIsVerified(true); // Ao gerar, marca como verificado
-    generateScheduleAsync(data, setData, setGenerationLog, setGenerating);
+
+    // Clear schedule immediately for visual feedback and consistency
+    setData(prev => ({ ...prev, schedule: {}, scheduleConflicts: [] }));
+
+    // Pass clean data to the generator to ensure no ghost conflicts
+    const cleanData = { ...data, schedule: {}, scheduleConflicts: [] };
+    generateScheduleAsync(cleanData, setData, setGenerationLog, setGenerating);
   }, [data]);
 
   const handleSmartRepair = useCallback(() =>
@@ -937,6 +943,8 @@ const App = () => {
                         let bgColor = '';
                         let fontWeight = '';
 
+                        if (!logLine || typeof logLine !== 'string') return null;
+
                         if (logLine.includes('✅')) {
                           textColor = 'text-emerald-300';
                           fontWeight = 'font-semibold';
@@ -977,7 +985,7 @@ const App = () => {
               <div className="flex flex-wrap gap-6 mb-4">
                 <div className="flex flex-col">
                   <label className="text-xs font-semibold text-slate-600 mb-1">Visualizar Grade</label>
-                  <select value={viewMode} onChange={e => { setViewMode(e.target.value); setSelectedEntity(''); }} className="border p-2 rounded text-sm bg-white shadow-sm">
+                  <select value={viewMode} onChange={e => { setViewMode(e.target.value); setSelectedEntities([]); }} className="border p-2 rounded text-sm bg-white shadow-sm">
                     <option value="class">Turmas</option>
                     <option value="teacher">Professores</option>
                     <option value="subject">Matérias</option>

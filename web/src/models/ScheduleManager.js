@@ -61,7 +61,7 @@ class ScheduleManager {
     if (Object.keys(this.schedule).length === 0) {
       this._resetState();
     }
-    
+
     this.logMessage("Iniciando geração de grade...");
 
     // 1. Ordenação: Define a ordem crítica de alocação.
@@ -188,7 +188,7 @@ class ScheduleManager {
     // 2. Turno da Turma - verifica activeSlotsByDay primeiro, depois activeSlots (legado)
     const cls = this.data.classes.find(c => c.id === activity.classId);
     const slotId = this.timeSlots[slotIdx]?.id || String(slotIdx);
-    
+
     if (cls) {
       // Prioriza activeSlotsByDay se existir
       if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
@@ -214,7 +214,19 @@ class ScheduleManager {
    * @param {Object} activity - A atividade a ser agendada.
    */
   _allocateActivity(activity) {
-    let remaining = activity.quantity;
+    // Calcule quantos já foram alocados (Ex: por SynchronousScheduler ou Import)
+    const alreadyBookedCount = this.bookedEntries.filter(e =>
+      e.classId === activity.classId &&
+      e.subjectId === activity.subjectId
+    ).length;
+
+    let remaining = Math.max(0, activity.quantity - alreadyBookedCount);
+
+    if (remaining === 0) {
+      // Já está tudo alocado (Provavelmente tudo síncrono)
+      // this.logMessage(`  ℹ️ Atividade ${activity.subjectId} da turma ${activity.classId} já está 100% alocada (${alreadyBookedCount}/${activity.quantity}).`);
+      return;
+    }
     const activityName = this.data.subjects.find(s => s.id === activity.subjectId)?.name || activity.subjectId;
     const className = this.data.classes.find(c => c.id === activity.classId)?.name || activity.classId;
 
@@ -378,7 +390,7 @@ class ScheduleManager {
     const slotId = this.timeSlots[slotIdx]?.id || String(slotIdx);
     if (cls) {
       let isSlotPermitted = false;
-      
+
       if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
         const activeSlotsForDay = cls.activeSlotsByDay[dayIdx];
         if (activeSlotsForDay && Array.isArray(activeSlotsForDay) && activeSlotsForDay.includes(slotId)) {
@@ -395,7 +407,7 @@ class ScheduleManager {
           isSlotPermitted = true;
         }
       }
-      
+
       if (!isSlotPermitted) return false; // NUNCA alocar em slot não permitido
     }
 
@@ -462,7 +474,7 @@ class ScheduleManager {
     if (slotIdx1 < 0 || slotIdx1 >= this.timeSlots.length || slotIdx2 < 0 || slotIdx2 >= this.timeSlots.length) {
       return false;
     }
-    
+
     return Math.abs(slotIdx1 - slotIdx2) === 1 &&
       this.timeSlots[slotIdx1]?.type === 'aula' &&
       this.timeSlots[slotIdx2]?.type === 'aula';
@@ -531,12 +543,28 @@ class ScheduleManager {
     const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
     const scheduleKey = `${activity.classId}-${timeKey}`;
 
+    // PROTEÇÃO CONTRA SOBRESCRITA (HARD LOCK)
+    const existing = this.schedule[scheduleKey];
+    if (existing && (existing.isFixed || existing.locked || existing.isSynchronous)) {
+      // Se for a mesma atividade, ok (atualização/idempotência)
+      if (existing.subjectId === activity.subjectId && existing.teacherId === activity.teacherId) {
+        // OK, prossiga
+      } else {
+        // console.warn(`⛔ Bloqueada tentativa de sobrescrever aula síncrona em ${timeKey}`);
+        return;
+      }
+    }
+
     this.schedule[scheduleKey] = {
       subjectId: activity.subjectId,
       teacherId: activity.teacherId,
       classId: activity.classId,
       timeKey,
-      isDoubleLesson: forceSingle ? false : (isDoubleSecondPart ? false : activity.doubleLesson) // Apenas a 1ª da dupla leva a flag true
+      isDoubleLesson: forceSingle ? false : (isDoubleSecondPart ? false : activity.doubleLesson), // Apenas a 1ª da dupla leva a flag true
+      isSynchronous: activity.isSynchronous || false,
+      isGranularSync: activity.isGranularSync || false,
+      isFixed: activity.isFixed || false,
+      locked: activity.locked || false,
     };
 
 
@@ -1137,6 +1165,15 @@ class ScheduleManager {
 
     if (!entry) return;
 
+    // PROTEÇÃO SÍNCRONA (HARD LOCK)
+    // Se a aula for marcada como fixa/síncrona, IMPEDE a remoção.
+    // Isso garante que o Smart Repair nunca mova essas aulas.
+    if (entry.isSynchronous || entry.isFixed || entry.locked) {
+      // Opcional: Logar tentativa falha?
+      // console.warn(`Tentativa de remover aula intocável bloqueada: ${entry.subjectId}`);
+      return;
+    }
+
     delete this.schedule[scheduleKey];
     delete this.teacherSchedule[entry.teacherId][timeKey];
     delete this.classSchedule[classId][timeKey];
@@ -1161,14 +1198,14 @@ class ScheduleManager {
       // Validação de segurança
       if (!entry || typeof entry !== 'object') continue;
       if (!entry.timeKey || typeof entry.timeKey !== 'string') continue;
-      
+
       // Extrai dayIdx e slotIdx da key "classId-DayName-SlotIdx" ? 
       // Não, a key é "classId-timeKey", onde timeKey é "DayName-SlotIdx"
       // entry tem: { subjectId, teacherId, classId, timeKey, isDoubleLesson }
 
       const parts = entry.timeKey.split('-');
       if (parts.length < 2) continue;
-      
+
       const [dayName, slotIdxStr] = parts;
       const dayIdx = DAYS.indexOf(dayName);
       const slotIdx = parseInt(slotIdxStr, 10);

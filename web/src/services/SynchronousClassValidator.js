@@ -18,32 +18,61 @@ class SynchronousClassValidator {
   _buildSyncGroups() {
     const groups = new Map();
 
-    for (const activity of this.data.activities || []) {
-      if (!activity.synchronizedClasses || activity.synchronizedClasses.length === 0) continue;
+    // 1. LEGACY: REMOVIDO
+    // O sistema agora suporta apenas configurações granulares (v2.0)
+    // para garantir consistência e evitar conflitos de lógica.
 
-      const groupKey = activity.synchronizedClasses.sort().join('|');
-      
-      if (!groups.has(groupKey)) {
-        groups.set(groupKey, {
-          classes: activity.synchronizedClasses,
-          subjectId: activity.subjectId,
-          teacherId: activity.teacherId,
-          preferredSlots: activity.preferredTimeSlots || [],
+    // 2. NOVO (v2.0): Via subject.synchronousConfigs (Granular)
+    for (const subject of this.data.subjects || []) {
+      if (!subject.isSynchronous || !subject.synchronousConfigs) continue;
+
+      for (const config of subject.synchronousConfigs) {
+        if (!config.isActive) continue;
+        if (!config.classes || config.classes.length === 0) continue;
+
+        // Group Key única para configurações granulares
+        const groupKey = `granular-${subject.id}-${config.id || Math.random().toString(36).substr(2, 5)}`;
+
+        const groupData = {
+          id: groupKey,
+          classes: config.classes,
+          subjectId: subject.id,
+          teacherId: null, // Granular aceita QUALQUER professor (wildcard)
+          preferredSlots: config.timeSlots || [],
           preferredDayIdx: null,
-          preferredSlotIdx: null
-        });
+          preferredSlotIdx: null,
+          isGranular: true
+        };
 
-        // Parse do primeiro slot preferido
-        if (activity.preferredTimeSlots && activity.preferredTimeSlots.length > 0) {
-          const match = activity.preferredTimeSlots[0].match(/(.+?)-slot(\d+)/);
-          if (match) {
-            const dayIdx = DAYS.indexOf(match[1]);
-            if (dayIdx >= 0) {
-              groups.get(groupKey).preferredDayIdx = dayIdx;
-              groups.get(groupKey).preferredSlotIdx = parseInt(match[2]);
+        // Parse do slot (Granular format: Day-Index or Legacy)
+        if (config.timeSlots && config.timeSlots.length > 0) {
+          const slotStr = config.timeSlots[0];
+          let dayName = null;
+          let slotIdx = null;
+
+          if (slotStr.includes('-slot')) {
+            const match = slotStr.match(/(.+?)-slot(\d+)/);
+            if (match) { dayName = match[1]; slotIdx = parseInt(match[2]); }
+          } else {
+            const parts = slotStr.split('-');
+            if (parts.length >= 2) {
+              dayName = parts[0];
+              slotIdx = parseInt(parts[1]);
+            }
+          }
+
+          if (dayName) {
+            const dayIdx = DAYS.indexOf(dayName);
+            // Aceita slotIdx 0 (segunda fix check)
+            if (dayIdx >= 0 && slotIdx != null && !isNaN(slotIdx)) {
+              groupData.preferredDayIdx = dayIdx;
+              groupData.preferredSlotIdx = slotIdx;
             }
           }
         }
+
+        groups.set(groupKey, groupData);
+        console.log(`✅ [Validator] Config Granular Detectada: ${groupKey}, Slot: ${groupData.preferredSlots[0]}`);
       }
     }
 
@@ -56,6 +85,7 @@ class SynchronousClassValidator {
   isSynchronized(classId, subjectId, teacherId) {
     for (const group of this.syncGroups.values()) {
       if (
+        group.classes &&
         group.classes.includes(classId) &&
         group.subjectId === subjectId &&
         group.teacherId === teacherId
@@ -72,9 +102,11 @@ class SynchronousClassValidator {
   getSyncGroup(classId, subjectId, teacherId) {
     for (const group of this.syncGroups.values()) {
       if (
+        group.classes &&
         group.classes.includes(classId) &&
         group.subjectId === subjectId &&
-        group.teacherId === teacherId
+        // Se for granular (teacherId null), aceita qualquer professor. Se não, exige match.
+        (group.teacherId === null || group.teacherId === teacherId)
       ) {
         return group;
       }
@@ -88,10 +120,10 @@ class SynchronousClassValidator {
    */
   canMove(classId, subjectId, teacherId) {
     const group = this.getSyncGroup(classId, subjectId, teacherId);
-    
+
     // Se não é síncrona, pode mover
     if (!group) return true;
-    
+
     // Se é síncrona, NÃO pode mover individualmente
     return false;
   }
@@ -105,12 +137,12 @@ class SynchronousClassValidator {
 
     // Coleta posições de todas as turmas do grupo
     const positions = new Map();
-    
+
     for (const classInGroup of group.classes) {
       const entries = manager.bookedEntries.filter(e =>
         e.classId === classInGroup &&
         e.subjectId === subjectId &&
-        e.teacherId === teacherId
+        (group.teacherId === null || e.teacherId === teacherId) // Wildcard support
       );
 
       if (entries.length > 0) {
@@ -138,14 +170,14 @@ class SynchronousClassValidator {
   areInReservedSlot(manager, classId, subjectId, teacherId) {
     const group = this.getSyncGroup(classId, subjectId, teacherId);
     if (!group) return true; // Não é síncrona
-    if (!group.preferredDayIdx) return true; // Sem horário reservado
+    if (group.preferredDayIdx == null || group.preferredSlotIdx == null) return true; // Sem horário reservado
 
     // Coleta posições de todas as turmas
     for (const classInGroup of group.classes) {
       const entries = manager.bookedEntries.filter(e =>
         e.classId === classInGroup &&
         e.subjectId === subjectId &&
-        e.teacherId === teacherId
+        (group.teacherId === null || e.teacherId === teacherId) // Wildcard support
       );
 
       for (const entry of entries) {
@@ -175,7 +207,7 @@ class SynchronousClassValidator {
       const otherEntries = manager.bookedEntries.filter(e =>
         e.classId === otherClass &&
         e.subjectId === subjectId &&
-        e.teacherId === teacherId
+        (group.teacherId === null || e.teacherId === teacherId) // Wildcard support
       );
 
       for (const entry of otherEntries) {
@@ -216,7 +248,7 @@ class SynchronousClassValidator {
       if (
         group.classes.includes(entry.classId) &&
         entry.subjectId === subjectId &&
-        entry.teacherId === teacherId
+        (group.teacherId === null || entry.teacherId === teacherId) // Wildcard support
       ) {
         allocatedClasses.add(entry.classId);
       }
@@ -239,7 +271,7 @@ class SynchronousClassValidator {
     const group = this.getSyncGroup(classId, subjectId, teacherId);
     if (!group) return false; // Não é síncrona
 
-    if (!group.preferredDayIdx) {
+    if (group.preferredDayIdx == null || group.preferredSlotIdx == null) {
       log.push('⚠️ Sem horário reservado para aulas síncronas');
       return false;
     }
@@ -250,7 +282,7 @@ class SynchronousClassValidator {
       const classEntries = manager.bookedEntries.filter(e =>
         e.classId === cls &&
         e.subjectId === subjectId &&
-        e.teacherId === teacherId
+        (group.teacherId === null || e.teacherId === teacherId) // Wildcard support
       );
       entries.push(...classEntries);
     }
@@ -262,17 +294,29 @@ class SynchronousClassValidator {
     // Aloca todas no slot reservado
     let allocated = 0;
     for (const cls of group.classes) {
-      if (manager._isAvailable(teacherId, cls, subjectId, group.preferredDayIdx, group.preferredSlotIdx)) {
-        const activity = this.data.activities.find(a =>
-          a.classId === cls &&
-          a.subjectId === subjectId &&
-          a.teacherId === teacherId &&
-          a.synchronizedClasses
-        );
+      // Encontra a atividade correta para esta turma e matéria
+      const activity = this.data.activities.find(a =>
+        a.classId === cls &&
+        a.subjectId === subjectId &&
+        // Se teacherId for fixo (Legacy), exige match. Se for null (Granular), aceita qualquer um.
+        (group.teacherId === null || a.teacherId === teacherId) &&
+        // Se for Legacy, exige a flag. Se for Granular, ignora.
+        (group.isGranular ? true : a.synchronizedClasses)
+      );
 
-        if (activity) {
+      if (activity) {
+        // Usa o professor REAL da atividade, não o do grupo (que pode ser null)
+        const realTeacherId = activity.teacherId;
+
+        if (manager._isAvailable(realTeacherId, cls, subjectId, group.preferredDayIdx, group.preferredSlotIdx)) {
           manager._book(activity, group.preferredDayIdx, group.preferredSlotIdx, false, true);
           allocated++;
+        } else {
+          // Tenta 'Force Book' removendo quem estiver lá?
+          // Por enquanto apenas loga falha, mas idealmente deveria limpar o slot target antes de loopar.
+          // Já fizemos unbook das AULAS DO GRUPO. Mas se tiver OUTRA aula lá (conflito exógeno), falha.
+          // Vamos tentar limpar o slot target se estiver ocupado por OUTRA coisa?
+          // Risco alto. Deixar falhar e logar é mais seguro por enquanto.
         }
       }
     }
@@ -282,7 +326,7 @@ class SynchronousClassValidator {
       log.push(`✅ ${group.classes.length} aulas síncronas corrigidas para ${dayName}-slot${group.preferredSlotIdx}`);
       return true;
     } else {
-      log.push(`❌ Apenas ${allocated}/${group.classes.length} aulas síncronas foram alocadas`);
+      log.push(`❌ Apenas ${allocated}/${group.classes.length} aulas síncronas foram realocadas durante correção.`);
       return false;
     }
   }
@@ -303,7 +347,7 @@ class SynchronousClassValidator {
       groups: Array.from(this.syncGroups.entries()).map(([key, group]) => ({
         classes: group.classes,
         subject: this.data.subjects.find(s => s.id === group.subjectId)?.name,
-        teacher: this.data.teachers.find(t => t.id === group.teacherId)?.name,
+        teacher: group.teacherId === 'T-PLACEHOLDER' ? '⚠️ Placeholder' : (this.data.teachers.find(t => t.id === group.teacherId)?.name),
         reservedSlot: group.preferredSlots[0] || 'Nenhum'
       }))
     };

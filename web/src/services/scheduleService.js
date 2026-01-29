@@ -138,12 +138,31 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
 
     const scheduleWithSync = syncResult.schedule || {};
 
+    // IMPLEMENTAÇÃO DO ISOLAMENTO DE AULAS SÍNCRONAS
+    const allocatedSyncIds = syncResult.allocatedActivityIds || [];
+
+    if (allocatedSyncIds.length > 0) {
+      setGenerationLog(prev => [...prev, `🔒 Isolando ${allocatedSyncIds.length} atividades síncronas do algoritmo principal.`]);
+    }
+
+    // Cria uma versão filtrada das atividades para o ScheduleManager padrão
+    // Isso impede que o ScheduleManager tente alocar o que JÁ foi alocado síncronamente.
+    // O Schedule manager ainda receberá o 'data' completo, mas vamos passar uma lista de activities explicita no construtor se necessário,
+    // ou alterar o objeto data clonado.
+
+    // Melhor abordagem: Criar um 'dataForGeneration' com activities filtradas
+    const dataForGeneration = {
+      ...data,
+      activities: data.activities.filter(a => !allocatedSyncIds.includes(a.id))
+    };
+
     // FASE 1: Gerar múltiplas variações
     if (!shouldUseExisting) {
-      setGenerationLog([`🔄 Executando ${MAX_LOCAL_ATTEMPTS} iterações para encontrar a melhor grade base...`]);
+      setGenerationLog(prev => [...prev, `🔄 Executando ${MAX_LOCAL_ATTEMPTS} iterações para encontrar a melhor grade base...`]);
 
       for (let i = 0; i < MAX_LOCAL_ATTEMPTS; i++) {
-        const tempManager = new ScheduleManager(data, currentLimits, [], true);
+        // Usa o data filtrado
+        const tempManager = new ScheduleManager(dataForGeneration, currentLimits, [], true);
 
         if (Object.keys(scheduleWithSync).length > 0) {
           tempManager.importExistingSchedule(scheduleWithSync);
@@ -161,7 +180,7 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
           bestManager = tempManager;
 
           if (pending === 0) {
-            const finalManager = new ScheduleManager(data, currentLimits, [], false);
+            const finalManager = new ScheduleManager(dataForGeneration, currentLimits, [], false);
 
             if (Object.keys(scheduleWithSync).length > 0) {
               finalManager.importExistingSchedule(scheduleWithSync);
@@ -176,7 +195,7 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
       }
 
       if (minPending > 0) {
-        manager = new ScheduleManager(data, currentLimits, [], false);
+        manager = new ScheduleManager(dataForGeneration, currentLimits, [], false);
         result = manager.generate();
         manager.logMessage(`🏆 Melhor resultado selecionado: ${minPending} pendências após ${MAX_LOCAL_ATTEMPTS} iterações.`);
       } else {

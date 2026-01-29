@@ -1,325 +1,257 @@
-/**
- * SynchronousScheduler - Gerencia alocação de matérias síncronas
- * 
- * NOVO (v2.0): Suporta aulas síncronas com configurações granulares
- * - Matérias com synchronousConfigs: Usa nova lógica (Fase 1)
- * - Matérias sem synchronousConfigs: Usa lógica legada (Fase 2)
- * 
- * Ex Legado: OE Matemática → todas as turmas ao mesmo tempo
- * Ex Novo: OE Matemática → Config 1 (6º anos) + Config 2 (9º anos)
- */
-
 import { DAYS } from '../utils';
+import SynchronousClassValidator from './SynchronousClassValidator';
 
 class SynchronousScheduler {
   constructor(data, schedule) {
     this.data = data;
-    this.schedule = schedule;
+    this.schedule = schedule || {}; // Pode iniciar vazio
     this.log = [];
-    this.processedActivities = new Set(); // Rastreia atividades já alocadas por configs
+    this.processedActivities = new Set();
+    this.validator = new SynchronousClassValidator(data);
   }
 
   /**
-   * Processa todas as aulas síncronas (APENAS configurações granulares v2.0)
-   * Retorna: { success: boolean, schedule: object, log: string[] }
+   * Processa TODOS os grupos síncronos (Legacy + Granular)
+   * Fonte da verdade: SynchronousClassValidator
    */
   processAllGroups() {
-    // Fase Única: Processa aulas com configurações granulares (NOVO v2.0)
-    this.processAllConfigurations();
+    const groups = this.validator.getAllSyncGroups();
 
-    const hasErrors = this.log.filter(l => l.includes('❌')).length > 0;
+    if (groups.length === 0) {
+      this.log.push('ℹ️ Nenhum grupo síncrono identificado.');
+      return { success: true, schedule: this.schedule, log: this.log, allocatedActivityIds: [] };
+    }
+
+    this.log.push(`🎯 PROCESSANDO ${groups.length} GRUPOS SÍNCRONOS (UNIFICADO)`);
+
+    for (const group of groups) {
+      this.processGroup(group);
+    }
+
+    const hasErrors = this.log.filter(l => l.includes('❌') || l.includes('falhou')).length > 0;
 
     return {
       success: !hasErrors,
       schedule: this.schedule,
-      log: this.log
+      log: this.log,
+      allocatedActivityIds: Array.from(this.processedActivities)
     };
   }
 
-  /**
-   * FASE 1: Processa aulas síncronas com configurações granulares (NOVO)
-   */
-  processAllConfigurations() {
-    const subjectsWithConfigs = this.data.subjects.filter(
-      s => s.isSynchronous && s.synchronousConfigs && s.synchronousConfigs.length > 0
-    );
+  processGroup(group) {
+    this.log.push(`\n   👥 Grupo Síncrono: ${group.id}`);
 
-    if (subjectsWithConfigs.length === 0) {
-      console.log('⚠️ Nenhuma matéria síncrona com configs granulares encontrada');
+    // 1. Identificar Slot Preferido (Hard Constraint)
+    // O Validator já normalizou isso em preferredDayIdx/preferredSlotIdx ou preferredSlots[]
+
+    let targetSlots = [];
+
+    // Normalização robusta de slots
+    if (group.preferredDayIdx != null && group.preferredSlotIdx != null) {
+      // Legacy or Single Slot
+      targetSlots.push(`${DAYS[group.preferredDayIdx]}-${group.preferredSlotIdx}`);
+    } else if (group.preferredSlots && group.preferredSlots.length > 0) {
+      // Granular / Multiple Slots
+      targetSlots = group.preferredSlots.map(s => {
+        // Limpar formato 'Day-slotN' para 'Day-N'
+        if (s.includes('-slot')) {
+          const m = s.match(/(.+?)-slot(\d+)/);
+          return m ? `${m[1]}-${m[2]}` : s;
+        }
+        return s;
+      });
+    }
+
+    if (targetSlots.length === 0) {
+      this.log.push(`      ⚠️ Ignorado: Sem horários definidos.`);
       return;
     }
 
-    console.log(`📚 Processando ${subjectsWithConfigs.length} matéria(s) com configs:`, subjectsWithConfigs.map(s => ({ name: s.name, configs: s.synchronousConfigs?.length })));
+    this.log.push(`      📅 Horários Alvo: ${targetSlots.join(', ')}`);
 
-    this.log.push(`\n🎯 FASE 1: Processando ${subjectsWithConfigs.length} matéria(s) síncrona(s) com configurações granulares...`);
+    // 2. Para cada slot alvo, alocar as atividades correspondentes
+    for (const slotKey of targetSlots) {
+      this.allocateGroupInSlot(group, slotKey);
+    }
+  }
 
-    for (const subject of subjectsWithConfigs) {
-      try {
-        this.log.push(`\n   📚 ${subject.name}`);
+  allocateGroupInSlot(group, slotKey) {
+    const [dayName, slotIdxStr] = slotKey.split('-');
+    const slotIdx = parseInt(slotIdxStr);
+    const dayIdx = DAYS.indexOf(dayName);
 
-        const activeConfigs = (subject.synchronousConfigs || []).filter(c => c.isActive);
+    if (dayIdx === -1 || isNaN(slotIdx)) {
+      this.log.push(`      ❌ Erro de formato de slot: ${slotKey}`);
+      return;
+    }
 
-        if (activeConfigs.length === 0) {
-          this.log.push(`      ⚠️ Nenhuma configuração ativa`);
-          continue;
+    this.log.push(`         -> Tentando alocar em ${slotKey}...`);
+
+    // IMPLEMENTAÇÃO "FORCE RESERVATION":
+    // O usuário mandou, a gente obedece. 
+    // Se não der para alocar a atividade real (conflito, falta de aula),
+    // alocamos um PLACEHOLDER para bloquear o horário e impedir que outra matéria entre.
+
+    let successCount = 0;
+
+    for (const classId of group.classes) {
+      let activity = this.findBestActivityForGroup(group, classId);
+      let isPlaceholder = false;
+      let conflictReason = null;
+
+      if (!activity) {
+        conflictReason = 'Sem atividade disponível';
+        isPlaceholder = true;
+      } else {
+        const reason = this.checkAvailability(classId, activity, dayIdx, slotIdx, group);
+        if (reason !== 'OK') {
+          conflictReason = reason;
+          isPlaceholder = true;
         }
+      }
 
-        this.log.push(`      📋 ${activeConfigs.length} configuração(ões) ativa(s):`);
-
-        for (const config of activeConfigs) {
-          this.processConfiguration(subject, config);
-        }
-      } catch (error) {
-        this.log.push(`      ❌ Erro: ${error.message}`);
+      if (isPlaceholder) {
+        this.log.push(`            ⚠️ FORCE BOOK: Turma ${classId} bloqueada com Placeholder (${conflictReason})`);
+        // Cria uma atividade 'fake' para reservar o slot
+        // IMPORTANTE: Passamos o ID da atividade (se existir) para marcá-la como processada
+        // e evitar que o algoritmo principal tente alocá-la novamente (duplicidade).
+        this.bookPlaceholder(classId, group.subjectId, dayIdx, slotIdx, conflictReason, activity ? activity.id : null);
+      } else {
+        // Alocação Real
+        this.bookActivity(activity, dayIdx, slotIdx);
+        successCount++;
       }
     }
-  }
 
-  /**
-   * Processa uma única configuração de aula síncrona
-   */
-  processConfiguration(subject, config) {
-    this.log.push(`\n         🔧 Configuração: ${config.name}`);
-    const classNames = config.classes.map(id => {
-      const cls = this.data.classes.find(c => c.id === id);
-      return cls?.name || id;
-    }).join(', ');
-    this.log.push(`            Turmas: ${classNames}`);
-    this.log.push(`            Dias/Horários: ${config.days.join(', ')} - ${config.timeSlots.length} slot(s)`);
-
-    // Filtra atividades apenas das turmas especificadas
-    const configActivities = this.data.activities.filter(activity => {
-      const sameSubject = activity.subjectId === subject.id;
-      const classInConfig = config.classes.includes(activity.classId);
-      const notYetProcessed = !this.processedActivities.has(`${activity.classId}-${activity.subjectId}`);
-      return sameSubject && classInConfig && notYetProcessed;
-    });
-
-    if (configActivities.length === 0) {
-      this.log.push(`            ⚠️ Nenhuma atividade encontrada para estas turmas`);
-      return;
-    }
-
-    this.log.push(`            📌 ${configActivities.length} atividade(s) para alocar`);
-
-    // Tenta encontrar slot nos horários específicos
-    const bestSlot = this.findBestSlotInConfig(configActivities, config);
-
-    if (!bestSlot) {
-      this.log.push(`            ❌ Falha: Nenhum horário disponível`);
-      return;
-    }
-
-    // Aloca no slot encontrado
-    const allocated = this.allocateConfigActivities(configActivities, bestSlot);
-
-    if (!allocated) {
-      this.log.push(`            ❌ Falha: Conflito de professor detectado`);
-      return;
-    }
-
-    const slotLabel = this.getSlotLabel(bestSlot);
-    this.log.push(`            ✅ Alocado: ${slotLabel}`);
-
-    // Marca como processadas
-    for (const activity of configActivities) {
-      this.processedActivities.add(`${activity.classId}-${activity.subjectId}`);
+    if (successCount === group.classes.length) {
+      this.log.push(`            ✅ Sucesso Total: Todas as turmas alocadas com atividades reais.`);
+    } else {
+      this.log.push(`            ⚠️ Parcial: ${successCount} reais, ${group.classes.length - successCount} placeholders.`);
     }
   }
 
   /**
-   * Encontra melhor slot dentro das restrições de uma configuração
+   * Encontra a melhor atividade para preencher o slot.
+   * Considera Wildcard e Saldo de Aulas.
    */
-  findBestSlotInConfig(activities, config) {
-    // Valida se config tem slots específicos
-    if (!config.timeSlots || config.timeSlots.length === 0) {
-      return null;
-    }
+  findBestActivityForGroup(group, classId) {
+    // 1. Tentar encontrar atividade exata que ainda não foi totalmente processada
+    // PROBLEMA: processedActivities é boolean (set de IDs). 
+    // Mas uma atividade com quantity=2 deve poder ser usada 2 vezes.
+    // Vamos calcular o 'saldo' real consultando o schedule atual.
 
-    // Tenta cada slot especificado na config
-    for (const slotKey of config.timeSlots) {
-      if (this.isSlotAvailableForAllActivities(activities, slotKey)) {
-        return slotKey;
+    // Candidatos: atividades da turma/matéria
+    const candidates = this.data.activities.filter(a =>
+      a.classId === classId &&
+      a.subjectId === group.subjectId &&
+      (group.teacherId === null || a.teacherId === group.teacherId)
+    );
+
+    for (const activity of candidates) {
+      // Contar quantas vezes já aparece no schedule
+      let currentUses = 0;
+      for (const key in this.schedule) {
+        const entry = this.schedule[key];
+        // Precisamos inferir se é ESTA atividade. 
+        // ScheduleEntry tem: subjectId, teacherId, classId.
+        // Se a atividade for 'genérica' (mesmo prof/matéria/turma), qualquer uma serve.
+        if (entry.subjectId === activity.subjectId &&
+          entry.classId === activity.classId &&
+          entry.teacherId === activity.teacherId) {
+          currentUses++;
+        }
+      }
+
+      // Se quantity permite mais usos, retorna ela
+      if (currentUses < activity.quantity) {
+        return activity;
       }
     }
 
     return null;
   }
 
-  /**
-   * Aloca todas as atividades de uma configuração em um slot específico
-   */
-  allocateConfigActivities(activities, timeSlotKey) {
-    const [day, slotIndexStr] = timeSlotKey.split('-');
-    const slotIndex = parseInt(slotIndexStr);
+  checkAvailability(classId, activity, dayIdx, slotIdx, group) {
+    const scheduleKey = `${classId}-${DAYS[dayIdx]}-${slotIdx}`;
+    const existing = this.schedule[scheduleKey];
 
-    // VALIDAÇÃO: Verifica se algum professor já está alocado neste horário
-    const teachersInSlot = new Map(); // teacherId -> classId
-
-    // Primeiro, verifica o schedule existente
-    for (const [schedKey, entry] of Object.entries(this.schedule)) {
-      if (entry.timeKey === timeSlotKey && entry.teacherId) {
-        if (!teachersInSlot.has(entry.teacherId)) {
-          teachersInSlot.set(entry.teacherId, []);
-        }
-        teachersInSlot.get(entry.teacherId).push(entry.classId);
+    // 1. Slot Ocupado?
+    if (existing) {
+      if (existing.isSynchronous) {
+        if (existing.subjectId === activity.subjectId) return 'OK'; // O próprio
+        return `Slot ocupado por outra síncrona (${existing.subjectId})`;
       }
+      // Se for normal, podemos chutar. OK.
     }
 
-    // Verifica se alguma atividade tem professor já ocupado
-    for (const activity of activities) {
-      if (activity.teacherId && teachersInSlot.has(activity.teacherId)) {
-        const existingClasses = teachersInSlot.get(activity.teacherId);
-        const teacher = this.data.teachers?.find(t => t.id === activity.teacherId);
-        const teacherName = teacher?.name || activity.teacherId;
+    // 2. Conflito Físico de Professor (Professor em DOIS lugares ao mesmo tempo)
+    // Verificar se o professor já está em outra turma NESTE slot.
+    // Cuidado: Ao verificar o grupo, não podemos conflitar com nós mesmos (outras aulas do mesmo grupo que estamos planejando).
+    // Mas como a alocação é atômica e ainda não escrevemos, só verificamos o schedule ATUAL (que não tem nada do grupo ainda).
+    if (activity.teacherId) {
+      for (const key in this.schedule) {
+        const entry = this.schedule[key];
+        if (entry.timeKey === `${DAYS[dayIdx]}-${slotIdx}` &&
+          entry.teacherId === activity.teacherId &&
+          !group.classes.includes(entry.classId)) { // Ignora se for do mesmo grupo (mas isso não devia acontecer pois grupo ainda não foi escrito)
 
-        this.log.push(`            ⚠️ CONFLITO DETECTADO: Professor ${teacherName} já está`);
-        this.log.push(`               ocupado neste horário em outra(s) turma(s)`);
-        return false; // Não aloca se há conflito
-      }
-
-      // Adiciona ao mapa para verificar conflitos internos
-      if (!teachersInSlot.has(activity.teacherId)) {
-        teachersInSlot.set(activity.teacherId, []);
-      }
-      teachersInSlot.get(activity.teacherId).push(activity.classId);
-    }
-
-    // Se passou na validação, aloca
-    for (const activity of activities) {
-      const key = `${activity.classId}-${day}-${slotIndex}`;
-      this.schedule[key] = {
-        subjectId: activity.subjectId,
-        teacherId: activity.teacherId,
-        classId: activity.classId,
-        timeKey: timeSlotKey,
-        isSynchronous: true,
-        isGranularSync: true // Marca como sincronizada granularmente (v2.0)
-      };
-    }
-
-    return true;
-  }
-
-
-
-  /**
-   * Verifica se um slot está disponível para TODAS as atividades
-   */
-  isSlotAvailableForAllActivities(activities, timeSlotKey) {
-    for (const activity of activities) {
-      if (!this.isSlotAvailableForActivity(activity, timeSlotKey)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /**
-   * Verifica se um slot está disponível para UMA atividade
-   */
-  isSlotAvailableForActivity(activity, timeSlotKey) {
-    const [day, slotIndexStr] = timeSlotKey.split('-');
-    const slotIndex = parseInt(slotIndexStr);
-
-    // 1. Verifica se está nos activeSlots da turma
-    const classData = this.data.classes.find(c => c.id === activity.classId);
-    if (!classData) return false;
-
-    const timeSlot = this.getTimeSlotByIndex(slotIndex);
-    if (!timeSlot || timeSlot.type !== 'aula') return false;
-
-    // Check activeSlotsByDay (priority)
-    if (classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
-      const activeForDay = classData.activeSlotsByDay[parseInt(day)]; // day is string/index? check getSlotLabel
-      // getSlotLabel uses "Segunda" etc? No, getAllLessonSlots uses DAYS[dayIdx]. So 'day' is "Segunda", "Terça"...
-      // Wait, DAYS is imported. I need the index of 'day'.
-      const dayIdx = DAYS.indexOf(day);
-      if (dayIdx >= 0) {
-        const slotsForDay = classData.activeSlotsByDay[dayIdx];
-        if (!slotsForDay || !slotsForDay.includes(timeSlot.id)) {
-          return false;
-        }
-      }
-    } else if (classData.activeSlots && !classData.activeSlots.includes(timeSlot.id)) {
-      // Fallback to legacy global activeSlots
-      return false;
-    }
-
-    // 2. Verifica se turma já tem algo alocado neste horário
-    const key = `${activity.classId}-${day}-${slotIndex}`;
-    if (this.schedule[key]) return false;
-
-    // 3. Verifica se professor está disponível
-    const teacherId = activity.teacherId;
-    if (!teacherId) return false;
-
-    const teacher = this.data.teachers.find(t => t.id === teacherId);
-    if (!teacher) return false;
-
-    // Verifica conflito de professor neste horário
-    for (const [scheduleKey, entry] of Object.entries(this.schedule)) {
-      if (entry.teacherId === teacherId) {
-        const [, entryDay, entrySlotStr] = scheduleKey.split('-');
-        const entrySlotIndex = parseInt(entrySlotStr);
-
-        if (entryDay === day && entrySlotIndex === slotIndex) {
-          return false;
+          return `Prof. ${activity.teacherId} já alocado na turma ${entry.classId}`;
         }
       }
     }
 
-    return true;
+    return 'OK';
   }
 
-  /**
-   * Retorna todos os slots de aula (tipo 'aula')
-   */
-  getAllLessonSlots() {
-    const slots = [];
+  bookActivity(activity, dayIdx, slotIdx) {
+    const scheduleKey = `${activity.classId}-${DAYS[dayIdx]}-${slotIdx}`;
 
-    for (let dayIdx = 0; dayIdx < DAYS.length; dayIdx++) {
-      const day = DAYS[dayIdx];
-
-      for (let slotIdx = 0; slotIdx < this.data.timeSlots.length; slotIdx++) {
-        const timeSlot = this.data.timeSlots[slotIdx];
-
-        if (timeSlot.type === 'aula') {
-          slots.push(`${day}-${slotIdx}`);
-        }
-      }
+    // KICK SE NECESSÁRIO
+    if (this.schedule[scheduleKey]) {
+      // Já verificamos que não é síncrona na fase checkAvailability
+      delete this.schedule[scheduleKey];
     }
 
-    return slots;
+    this.schedule[scheduleKey] = {
+      subjectId: activity.subjectId,
+      teacherId: activity.teacherId,
+      classId: activity.classId,
+      timeKey: `${DAYS[dayIdx]}-${slotIdx}`,
+      isSynchronous: true,
+      isGranularSync: true,
+      isFixed: true,
+      locked: true
+    };
+
+    // Rastreamento para filtro posterior
+    this.processedActivities.add(activity.id);
   }
 
-  /**
-   * Retorna timeSlot pelo índice
-   */
-  getTimeSlotByIndex(index) {
-    return this.data.timeSlots[index];
-  }
+  bookPlaceholder(classId, subjectId, dayIdx, slotIdx, reason, activityId = null) {
+    const scheduleKey = `${classId}-${DAYS[dayIdx]}-${slotIdx}`;
 
-  /**
-   * Retorna label legível de um slot
-   */
-  getSlotLabel(timeSlotKey) {
-    const [day, slotIndexStr] = timeSlotKey.split('-');
-    const slotIndex = parseInt(slotIndexStr);
-    const timeSlot = this.getTimeSlotByIndex(slotIndex);
-
-    if (timeSlot) {
-      return `${day} ${timeSlot.start}-${timeSlot.end}`;
+    // KICK SE NECESSÁRIO (Sempre ganha de não-síncronas)
+    if (this.schedule[scheduleKey]) {
+      delete this.schedule[scheduleKey];
     }
 
-    return timeSlotKey;
-  }
+    this.schedule[scheduleKey] = {
+      subjectId: subjectId,
+      teacherId: 'T-PLACEHOLDER', // ID Especial
+      classId: classId,
+      timeKey: `${DAYS[dayIdx]}-${slotIdx}`,
+      isSynchronous: true,
+      isGranularSync: true,
+      isFixed: true,
+      locked: true,
+      isPlaceholder: true,
+      placeholderReason: reason
+    };
 
-  /**
-   * Retorna o log de processamento
-   */
-  getLog() {
-    return this.log;
+    // Marca atividade como "usada" para não sobrar para o agendador principal
+    if (activityId) {
+      this.processedActivities.add(activityId);
+    }
   }
 }
 
