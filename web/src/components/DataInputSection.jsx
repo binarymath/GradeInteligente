@@ -1,12 +1,12 @@
 import React, { useMemo, useState, useRef } from 'react';
-import { Plus, Check, X, Trash2, Clock, BookOpen, Star, Save, Coffee, Utensils, Sun, Sunset, Moon, Layers, Users, Edit2, Settings, HelpCircle } from 'lucide-react';
+import { Plus, Check, X, Trash2, Clock, BookOpen, Star, Save, Coffee, Utensils, Sun, Sunset, Moon, Layers, Users, Edit2, Settings, HelpCircle, Download, FileText } from 'lucide-react';
 import { uid, DAYS, COLORS, getAllSlots } from '../utils';
 import { computeSlotShift } from '../utils/time';
 import SynchronousConfigService from '../services/SynchronousConfigService';
 import ClassForm from './ClassForm';
 import SubjectSyncManager from './SubjectSyncManager';
 
-const DataInputSection = ({ data, setData, subView, setSubView }) => {
+const DataInputSection = ({ data, setData, subView, setSubView, calendarSettings }) => {
   const classFormRef = useRef(null);
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
   const [newTeacherName, setNewTeacherName] = useState('');
@@ -20,6 +20,7 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
   const [editingSubjectName, setEditingSubjectName] = useState('');
   const [editingSubjectShifts, setEditingSubjectShifts] = useState([]);
   const [editingSubjectIsSynchronous, setEditingSubjectIsSynchronous] = useState(false);
+  const [exportSubject, setExportSubject] = useState(null);
 
   // State to toggle the new Sync Manager visibility per subject
   const [openSyncManagerSubjectId, setOpenSyncManagerSubjectId] = useState(null);
@@ -478,6 +479,13 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
                             <button onClick={() => startEditSubject(subject)} className="text-slate-400 hover:text-blue-600 transition-colors" title="Editar Nome/Turnos"><Edit2 size={14} /></button>
                             <div className="flex items-center gap-2 whitespace-nowrap">
                               <button
+                                onClick={() => setExportSubject(subject)}
+                                className="px-2 py-0.5 rounded transition-colors text-xs font-medium flex items-center gap-1 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-100"
+                                title="Exportar Relatório"
+                              >
+                                <Download size={12} />
+                              </button>
+                              <button
                                 onClick={() => setOpenSyncManagerSubjectId(openSyncManagerSubjectId === subject.id ? null : subject.id)}
                                 className={`px-2 py-0.5 rounded transition-colors text-xs font-medium flex items-center gap-1 border ${openSyncManagerSubjectId === subject.id || subject.isSynchronous ? 'bg-blue-50 text-blue-700 border-blue-200' : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50 border-transparent hover:border-blue-100'}`}
                                 title="Gerenciar Configurações Síncronas"
@@ -705,6 +713,227 @@ const DataInputSection = ({ data, setData, subView, setSubView }) => {
             ))}
           </div>
         )}
+      </div>
+
+      {exportSubject && (
+        <SubjectExportModal
+          subject={exportSubject}
+          data={data}
+          onClose={() => setExportSubject(null)}
+          calendarSettings={calendarSettings}
+        />
+      )}
+    </div>
+  );
+};
+
+const SubjectExportModal = ({ subject, data, onClose, calendarSettings }) => {
+  // If calendarSettings is missing, provide fallback
+  const settings = calendarSettings || { schoolYearStart: new Date().getFullYear() + '-01-01', schoolYearEnd: new Date().getFullYear() + '-12-31', events: [] };
+
+  const [start, setStart] = useState(settings.schoolYearStart || '');
+  const [end, setEnd] = useState(settings.schoolYearEnd || '');
+  const [selectedClasses, setSelectedClasses] = useState([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown on click outside
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const parseDate = (str) => {
+    if (!str) return null;
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const schoolStart = useMemo(() => parseDate(settings.schoolYearStart), [settings.schoolYearStart]);
+  const schoolEnd = useMemo(() => parseDate(settings.schoolYearEnd), [settings.schoolYearEnd]);
+  const events = useMemo(() => (settings.events || []).map(e => ({ start: parseDate(e.start), end: parseDate(e.end || e.start) })), [settings.events]);
+
+  const isExcluded = (date) => {
+    return events.some(({ start, end }) => start && end && date >= start && date <= end);
+  };
+
+  const clampRange = (s, e) => {
+    let rs = s ? new Date(s) : schoolStart;
+    let re = e ? new Date(e) : schoolEnd;
+    if (rs && schoolStart && rs < schoolStart) rs = new Date(schoolStart);
+    if (re && schoolEnd && re > schoolEnd) re = new Date(schoolEnd);
+    return [rs, re];
+  };
+
+  const getFirstWeekdayOnOrAfter = (date, targetWeekday) => {
+    const d = new Date(date);
+    const diff = (targetWeekday - d.getDay() + 7) % 7;
+    d.setDate(d.getDate() + diff);
+    return d;
+  };
+
+  const toggleClassSelection = (classId) => {
+    setSelectedClasses(prev => {
+      if (prev.includes(classId)) {
+        return prev.filter(id => id !== classId);
+      } else {
+        return [...prev, classId];
+      }
+    });
+  };
+
+  const getDropdownLabel = () => {
+    if (selectedClasses.length === 0) return 'Todas as Turmas';
+    if (selectedClasses.length === data.classes.length) return 'Todas as Turmas';
+    if (selectedClasses.length === 1) return data.classes.find(c => c.id === selectedClasses[0])?.name;
+    return `${selectedClasses.length} turmas selecionadas`;
+  };
+
+  const countData = useMemo(() => {
+    if (!schoolStart || !schoolEnd) return { total: 0, byClass: {} };
+    const [rs, re] = clampRange(parseDate(start), parseDate(end));
+
+    // Structure: classId -> { lessons: number, dates: Set }
+    const byClass = {};
+    let total = 0;
+
+    Object.entries(data.schedule || {}).forEach(([key, slot]) => {
+      // Check subject
+      if (slot.subjectId !== subject.id) return;
+
+      const parts = key.split('-');
+      const dayIdx = DAYS.indexOf(parts[1]);
+      const slotIdx = parseInt(parts[2]);
+      if (dayIdx === -1) return;
+      const timeSlot = data.timeSlots[slotIdx];
+      if (!timeSlot || timeSlot.type !== 'aula') return;
+
+      // Filter classes
+      if (selectedClasses.length > 0 && !selectedClasses.includes(slot.classId)) return;
+
+      const jsWeekday = (dayIdx + 1) % 7;
+      const first = getFirstWeekdayOnOrAfter(rs, jsWeekday);
+
+      for (let cursor = new Date(first); cursor <= re; cursor.setDate(cursor.getDate() + 7)) {
+        if (cursor < rs) continue;
+        if (isExcluded(cursor)) continue;
+
+        if (!byClass[slot.classId]) byClass[slot.classId] = { lessons: 0, dates: new Set() };
+        byClass[slot.classId].lessons += 1;
+        byClass[slot.classId].dates.add(fmt(cursor));
+        total += 1;
+      }
+    });
+
+    return { total, byClass };
+  }, [data.schedule, data.timeSlots, subject.id, start, end, schoolStart, schoolEnd, selectedClasses, isExcluded]);
+
+  const exportExcel = () => {
+    const BOM = "\uFEFF";
+    let csvContent = BOM + `Relatório de Aulas - ${subject.name}\n`;
+    csvContent += `Período,${start || fmt(schoolStart)} a ${end || fmt(schoolEnd)}\n\n`;
+    csvContent += "Turma,Aulas\n";
+
+    // List all selected classes (or all if empty)
+    const classesToExport = selectedClasses.length > 0
+      ? data.classes.filter(c => selectedClasses.includes(c.id))
+      : data.classes;
+
+    classesToExport.sort((a, b) => a.name.localeCompare(b.name)).forEach(cls => {
+      const count = countData.byClass[cls.id]?.lessons || 0;
+      csvContent += `${cls.name},${count}\n`;
+    });
+
+    csvContent += `TOTAL,${countData.total}\n`;
+
+    const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    const safeName = subject.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    link.setAttribute("download", `aulas_${safeName}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-fadeIn">
+        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+          <h3 className="font-bold text-slate-700 flex items-center gap-2">
+            <Download size={18} className="text-emerald-600" />
+            Exportar: {subject.name}
+          </h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+        </div>
+        <div className="p-4 flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-slate-600 mb-1">Início</label>
+              <input type="date" value={start} onChange={e => setStart(e.target.value)} className="border rounded px-2 py-1.5 text-sm" />
+            </div>
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-slate-600 mb-1">Fim</label>
+              <input type="date" value={end} onChange={e => setEnd(e.target.value)} className="border rounded px-2 py-1.5 text-sm" />
+            </div>
+          </div>
+
+          <div className="flex flex-col relative" ref={dropdownRef}>
+            <label className="text-xs font-semibold text-slate-600 mb-1">Filtrar Turmas</label>
+            <button
+              type="button"
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className="border rounded px-2 py-1.5 text-sm bg-slate-50 flex justify-between items-center"
+            >
+              <span className="truncate">{getDropdownLabel()}</span>
+              <span className="text-xs opacity-50">▼</span>
+            </button>
+            {isDropdownOpen && (
+              <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-300 rounded shadow-lg z-50 max-h-48 overflow-y-auto">
+                <div
+                  className="px-3 py-2 border-b border-slate-100 hover:bg-slate-50 cursor-pointer flex items-center gap-2"
+                  onClick={() => { setSelectedClasses([]); setIsDropdownOpen(false); }}
+                >
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center ${selectedClasses.length === 0 ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
+                    {selectedClasses.length === 0 && <span className="text-white text-[10px]">✓</span>}
+                  </div>
+                  <span className="text-sm font-semibold text-blue-700">Todas as Turmas</span>
+                </div>
+                {data.classes.map(cls => (
+                  <div
+                    key={cls.id}
+                    className="px-3 py-2 hover:bg-slate-50 cursor-pointer flex items-center gap-2"
+                    onClick={() => toggleClassSelection(cls.id)}
+                  >
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center ${selectedClasses.includes(cls.id) ? 'bg-emerald-600 border-emerald-600' : 'border-slate-300'}`}>
+                      {selectedClasses.includes(cls.id) && <span className="text-white text-[10px]">✓</span>}
+                    </div>
+                    <span className="text-sm text-slate-700">{cls.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-slate-50 p-3 rounded border border-slate-200 text-center">
+            <span className="text-xs text-slate-500 block">Total Estimado no Período</span>
+            <span className="text-2xl font-bold text-slate-800">{countData.total}</span>
+            <span className="text-xs text-slate-400 block">aulas</span>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded">Cancelar</button>
+            <button onClick={exportExcel} className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 rounded flex items-center gap-2">
+              <Download size={16} /> Baixar Excel
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

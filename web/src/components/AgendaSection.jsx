@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar, Plus, Trash2, Download, Calculator, FileText, BookOpen, Clock, Pencil, X } from 'lucide-react';
+import { Plus, Check, X, Trash2, Clock, BookOpen, Star, Save, Coffee, Utensils, Sun, Sunset, Moon, Layers, Users, Edit2, Settings, HelpCircle, Download, FileText, Calculator, Calendar, Printer, Pencil } from 'lucide-react';
 import { uid, DAYS } from '../utils';
 import { generateICSForClass, generateICSForTeacher } from '../utils/icsUtils';
 
@@ -543,8 +543,22 @@ const SpecificDayEvents = ({ data, calendarSettings, setCalendarSettings }) => {
 const LessonCalculator = ({ data, calendarSettings }) => {
   const [start, setStart] = useState(calendarSettings.schoolYearStart || '');
   const [end, setEnd] = useState(calendarSettings.schoolYearEnd || '');
-  const [selectedClass, setSelectedClass] = useState('all');
+  const [selectedClasses, setSelectedClasses] = useState([]);
   const [expandedSubjects, setExpandedSubjects] = useState(new Set());
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = React.useRef(null);
+  const subjectsList = useMemo(() => data.subjects || [], [data.subjects]);
+
+  // Click outside to close dropdown
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const parseDate = (str) => {
     if (!str) return null;
@@ -552,6 +566,12 @@ const LessonCalculator = ({ data, calendarSettings }) => {
     return new Date(y, m - 1, d);
   };
   const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const formatBr = (d) => {
+    if (!d) return '';
+    const date = typeof d === 'string' ? parseDate(d) : d;
+    if (!date) return '';
+    return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+  };
 
   const schoolStart = useMemo(() => parseDate(calendarSettings.schoolYearStart), [calendarSettings.schoolYearStart]);
   const schoolEnd = useMemo(() => parseDate(calendarSettings.schoolYearEnd), [calendarSettings.schoolYearEnd]);
@@ -577,11 +597,11 @@ const LessonCalculator = ({ data, calendarSettings }) => {
   };
 
   const countBySubject = useMemo(() => {
-    if (!schoolStart || !schoolEnd) return { map: new Map(), total: 0, details: new Map() };
+    if (!schoolStart || !schoolEnd) return { map: new Map(), total: 0, details: new Map(), byClass: new Map() };
     const [rs, re] = clampRange(parseDate(start), parseDate(end));
     const counts = new Map();
-    // details: subjectId -> Map(dayIdx -> { dates: Set(YYYY-MM-DD), lessons: number })
     const details = new Map();
+    const byClass = new Map(); // SubjectId -> Map<ClassId, Count>
     let total = 0;
 
     Object.entries(data.schedule || {}).forEach(([key, slot]) => {
@@ -592,8 +612,8 @@ const LessonCalculator = ({ data, calendarSettings }) => {
       const timeSlot = data.timeSlots[slotIdx];
       if (!timeSlot || timeSlot.type !== 'aula') return;
 
-      // Filtrar por turma se selecionada
-      if (selectedClass !== 'all' && slot.classId !== selectedClass) return;
+      // Filter by selected classes
+      if (selectedClasses.length > 0 && !selectedClasses.includes(slot.classId)) return;
 
       const subjectId = slot.subjectId;
       if (!subjectId) return;
@@ -605,94 +625,251 @@ const LessonCalculator = ({ data, calendarSettings }) => {
         if (cursor < rs) continue;
         if (isExcluded(cursor)) continue;
 
-        // total e total por matéria
         counts.set(subjectId, (counts.get(subjectId) || 0) + 1);
         total += 1;
 
-        // detalhes por dia da semana
+        // Track by class
+        if (!byClass.has(subjectId)) byClass.set(subjectId, new Map());
+        const classMap = byClass.get(subjectId);
+        classMap.set(slot.classId, (classMap.get(slot.classId) || 0) + 1);
+
         if (!details.has(subjectId)) details.set(subjectId, new Map());
         const subjectMap = details.get(subjectId);
-        if (!subjectMap.has(dayIdx)) subjectMap.set(dayIdx, { dates: new Set(), lessons: 0 });
+        if (!subjectMap.has(dayIdx)) subjectMap.set(dayIdx, { dates: new Set(), lessons: 0, byClass: new Map() });
         const info = subjectMap.get(dayIdx);
         info.lessons += 1;
         info.dates.add(fmt(cursor));
+
+        // Breakdown by class within the day
+        if (!info.byClass.has(slot.classId)) info.byClass.set(slot.classId, { lessons: 0 });
+        info.byClass.get(slot.classId).lessons += 1;
       }
     });
 
-    return { map: counts, total, details };
-  }, [data.schedule, data.timeSlots, start, end, events, schoolStart, schoolEnd, selectedClass]);
+    return { map: counts, total, details, byClass };
+  }, [data.schedule, data.timeSlots, start, end, events, schoolStart, schoolEnd, selectedClasses]);
 
-  // Year and 4 bimesters (split into 4 equal ranges)
-  const bimesterRanges = useMemo(() => {
-    if (!schoolStart || !schoolEnd) return [];
-    const ranges = [];
-    const totalDays = Math.floor((schoolEnd - schoolStart) / (1000 * 60 * 60 * 24)) + 1;
-    const chunk = Math.floor(totalDays / 4);
-    let curStart = new Date(schoolStart);
-    for (let i = 0; i < 4; i++) {
-      const curEnd = new Date(i === 3 ? schoolEnd : new Date(curStart.getTime() + (chunk - 1) * 86400000));
-      ranges.push([new Date(curStart), curEnd]);
-      curStart = new Date(curEnd.getTime() + 86400000);
-    }
-    return ranges;
-  }, [schoolStart, schoolEnd]);
-
-  const subjectsList = useMemo(() => data.subjects || [], [data.subjects]);
-
-  const handleQuickRange = (idx) => {
-    if (idx === 'year') {
-      setStart(fmt(schoolStart));
-      setEnd(fmt(schoolEnd));
-    } else {
-      const [s, e] = bimesterRanges[idx];
-      setStart(fmt(s));
-      setEnd(fmt(e));
-    }
+  const toggleClassSelection = (classId) => {
+    setSelectedClasses(prev => {
+      if (prev.includes(classId)) {
+        return prev.filter(id => id !== classId);
+      } else {
+        return [...prev, classId];
+      }
+    });
   };
 
-  const exportPDF = async () => {
+  const getDropdownLabel = () => {
+    if (selectedClasses.length === 0) return 'Todas as Turmas';
+    if (selectedClasses.length === data.classes.length) return 'Todas as Turmas';
+    if (selectedClasses.length === 1) return data.classes.find(c => c.id === selectedClasses[0])?.name;
+    return `${selectedClasses.length} turmas selecionadas`;
+  };
+
+  const exportExcel = () => {
+    let classLabel = 'Todas_Turmas';
+
+    // Determine which classes to include in columns
+    // If selectedClasses is empty, it means ALL classes in the system (or at least all that have data? No, let's use all classes for consistency)
+    // Actually, if we use all classes, the table might be huge.
+    // Better: Use selected classes if any, otherwise All classes.
+    const classesToExport = selectedClasses.length > 0
+      ? data.classes.filter(c => selectedClasses.includes(c.id))
+      : data.classes;
+
+    classesToExport.sort((a, b) => a.name.localeCompare(b.name));
+
+    if (selectedClasses.length > 0) {
+      if (selectedClasses.length === 1) {
+        classLabel = classesToExport[0].name;
+      } else {
+        classLabel = 'Varias_Turmas';
+      }
+    }
+
+    const BOM = "\uFEFF";
+    let csvContent = BOM + "Relatório de Contagem de Aulas\n";
+    csvContent += `Período,${start ? formatBr(start) : formatBr(schoolStart)} a ${end ? formatBr(end) : formatBr(schoolEnd)}\n\n`;
+
+    // Header Row: Matéria, Turma A, Turma B, ..., TOTAL
+    const headerClasses = classesToExport.map(c => c.name).join(',');
+    csvContent += `Matéria,${headerClasses},TOTAL\n`;
+
+    subjectsList.forEach(s => {
+      const totalCount = countBySubject.map.get(s.id) || 0;
+      // Get count for each class
+      const classCols = classesToExport.map(c => {
+        return countBySubject.byClass.get(s.id)?.get(c.id) || 0;
+      }).join(',');
+
+      csvContent += `${s.name},${classCols},${totalCount}\n`;
+    });
+
+    csvContent += `TOTAL GERAL,,,${countBySubject.total}\n`; // Crude total line, putting total at end
+
+    const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    // Sanitize filename
+    const safeLabel = classLabel.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    link.setAttribute("download", `contagem_aulas_${safeLabel}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportPDF = async (specificSubject = null) => {
     const { default: jsPDF } = await import('jspdf');
     const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
-    const classLabel = selectedClass === 'all' ? 'Todas as Turmas' : (data.classes.find(c => c.id === selectedClass)?.name || 'Turma');
-    const periodStr = `${start || fmt(schoolStart)} a ${end || fmt(schoolEnd)}`;
-    doc.setFontSize(14);
-    doc.text('Contagem de Aulas por Matéria', 14, 16);
-    doc.setFontSize(10);
-    doc.text(`Turma: ${classLabel}`, 14, 22);
-    doc.text(`Período: ${periodStr}`, 14, 27);
 
-    const rows = subjectsList.map(s => [s.name, countBySubject.map.get(s.id) || 0]);
+    // Determine which classes to include
+    const classesToExport = selectedClasses.length > 0
+      ? data.classes.filter(c => selectedClasses.includes(c.id))
+      : data.classes;
+
+    classesToExport.sort((a, b) => a.name.localeCompare(b.name));
+
+    let classLabel = 'Todas as Turmas';
+    if (selectedClasses.length > 0) {
+      if (selectedClasses.length === 1) {
+        classLabel = classesToExport[0].name;
+      } else {
+        classLabel = 'Várias Turmas';
+      }
+    }
+
+    const periodStr = `${start ? formatBr(start) : formatBr(schoolStart)} a ${end ? formatBr(end) : formatBr(schoolEnd)}`;
+
+    // Header
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    // Blue header background rect
+    doc.setFillColor(37, 99, 235);
+    doc.rect(0, 0, 210, 15, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.text(specificSubject ? `Relatório Detalhado: ${specificSubject.name}` : 'Contagem de Aulas por Matéria', 14, 10);
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.text(`Turma(s): ${classLabel}`, 14, 25);
+
+    // List classes if multiple selected (summary in header)
+    let yPos = 25;
+    if (classesToExport.length > 1 && classesToExport.length <= 10) {
+      const names = classesToExport.map(c => c.name).join(', ');
+      doc.setFontSize(8);
+      const splitNames = doc.splitTextToSize(`(${names})`, 180);
+      doc.text(splitNames, 14, 29);
+      yPos = 29 + (splitNames.length * 3);
+    } else if (classesToExport.length > 10) {
+      doc.setFontSize(8);
+      doc.text(`(${classesToExport.length} turmas selecionadas)`, 14, 29);
+      yPos = 32;
+    } else {
+      yPos = 29;
+    }
+
+    doc.setFontSize(10);
+    doc.text(`Período: ${periodStr}`, 14, yPos);
+    yPos += 8;
+
+    // --- SPECIFIC SUBJECT REPORT (Detailed List Layout) ---
+    if (specificSubject) {
+      const s = specificSubject;
+
+      // 1. Resumo por Turma Table
+      let startY = yPos + 5;
+      doc.setFontSize(12);
+      doc.setTextColor(30, 64, 175); // Dark blue title
+      doc.text('Resumo por Turma', 14, startY);
+
+      const summaryBody = [];
+      classesToExport.forEach(c => {
+        const cCount = countBySubject.byClass.get(s.id)?.get(c.id) || 0;
+        if (cCount > 0) {
+          summaryBody.push([c.name, cCount]);
+        }
+      });
+
+      autoTable(doc, {
+        head: [['Turma', 'Aulas']],
+        body: summaryBody,
+        startY: startY + 2,
+        theme: 'striped',
+        headStyles: { fillColor: [59, 130, 246] }, // Blue-500
+        styles: { fontSize: 10, cellPadding: 3 },
+        columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: 50, halign: 'right' } }
+      });
+
+      startY = doc.lastAutoTable.finalY + 10;
+
+      // 2. Detalhes por Dia Table
+      doc.setFontSize(12);
+      doc.setTextColor(30, 64, 175);
+      doc.text('Detalhes por Dia', 14, startY);
+
+      const detailsBody = [];
+      if (countBySubject.details.get(s.id)) {
+        Array.from(countBySubject.details.get(s.id).entries()).forEach(([dayIdx, info]) => {
+          const daysQty = info.dates ? info.dates.size : 0;
+          const lessonsQty = info.lessons || 0;
+
+          // Row for Day Header
+          detailsBody.push([{ content: `${DAYS[dayIdx]} (${daysQty} dias) - Total: ${lessonsQty} aulas`, colSpan: 2, styles: { fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [15, 23, 42] } }]);
+
+          // Rows for Classes
+          if (info.byClass && info.byClass.size > 0 && selectedClasses.length !== 1) {
+            Array.from(info.byClass.entries()).forEach(([clsId, clsInfo]) => {
+              const cls = data.classes.find(c => c.id === clsId);
+              if (cls) {
+                detailsBody.push([`   ${cls.name}`, clsInfo.lessons]);
+              }
+            });
+          } else {
+            // Single class or no breakdown, usually doesn't happen if properly filtered, but fallback
+            detailsBody.push(['   Total', lessonsQty]);
+          }
+        });
+      }
+
+      autoTable(doc, {
+        body: detailsBody,
+        startY: startY + 2,
+        theme: 'plain',
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 0: { cellWidth: 120 }, 1: { cellWidth: 30, halign: 'right' } }
+      });
+
+      doc.save(`Relatorio_Detalhado_${s.name.replace(/[^a-z0-9]/gi, '_')}.pdf`);
+      return;
+    }
+
+    // --- GENERAL REPORT (Table Layout) ---
+    // Prepare Table Columns: Matéria | Class A | Class B | ... | Total
+
+    const head = ['Matéria', ...classesToExport.map(c => c.name), 'Total'];
+
+    const rows = subjectsList.map(s => {
+      const total = countBySubject.map.get(s.id) || 0;
+      const classCounts = classesToExport.map(c => countBySubject.byClass.get(s.id)?.get(c.id) || 0);
+      return [s.name, ...classCounts, total];
+    });
+
     autoTable(doc, {
-      head: [['Matéria', 'Aulas no Período']],
+      head: [head],
       body: rows,
-      startY: 32,
-      styles: { fontSize: 10 }
+      startY: yPos,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [37, 99, 235] }, // Blue color (blue-600)
     });
 
     const finalY = doc.lastAutoTable.finalY || 32;
     doc.setFontSize(10);
-    doc.text(`Total de aulas: ${countBySubject.total}`, 14, finalY + 8);
+    doc.text(`Total Geral de aulas: ${countBySubject.total}`, 14, finalY + 10);
 
-    doc.save(`Contagem_Aulas_${classLabel.replace(/\s+/g, '_')}.pdf`);
-  };
-
-  const exportExcel = () => {
-    let csvContent = "data:text/csv;charset=utf-8,Matéria,Aulas\n";
-    subjectsList.forEach(s => {
-      const count = countBySubject.map.get(s.id) || 0;
-      csvContent += `${s.name},${count}\n`;
-    });
-    csvContent += `TOTAL,${countBySubject.total}\n`;
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    const classLabel = selectedClass === 'all' ? 'Todas_Turmas' : (data.classes.find(c => c.id === selectedClass)?.name || 'Turma');
-    link.setAttribute("download", `Contagem_Aulas_${classLabel.replace(/\s+/g, '_')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const fileNameLabel = classLabel.replace(/\s+/g, '_');
+    doc.save(`Contagem_Aulas_${fileNameLabel}.pdf`);
   };
 
   const toggleSubject = (subjectId) => {
@@ -707,33 +884,58 @@ const LessonCalculator = ({ data, calendarSettings }) => {
     });
   };
 
-  // Cores por dia da semana sem usar verde/roxo/rosa
   const colorByDay = (idx) => {
     switch (idx) {
-      case 0: return 'bg-blue-100 text-blue-700';      // Segunda
-      case 1: return 'bg-sky-100 text-sky-700';        // Terça
-      case 2: return 'bg-amber-100 text-amber-700';    // Quarta
-      case 3: return 'bg-orange-100 text-orange-700';  // Quinta
-      case 4: return 'bg-cyan-100 text-cyan-700';      // Sexta
+      case 0: return 'bg-blue-100 text-blue-700';
+      case 1: return 'bg-sky-100 text-sky-700';
+      case 2: return 'bg-amber-100 text-amber-700';
+      case 3: return 'bg-orange-100 text-orange-700';
+      case 4: return 'bg-cyan-100 text-cyan-700';
       default: return 'bg-slate-100 text-slate-700';
     }
   };
-
-
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
       <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calculator className="w-5 h-5 text-blue-600" /> Calculadora de Aulas</h4>
       <p className="text-[11px] text-slate-500">Selecione o período (bimestre) e a turma para contar aulas por matéria, já considerando eventos de exclusão.</p>
       <div className="grid md:grid-cols-3 gap-3">
-        <div className="flex flex-col">
-          <label className="text-xs font-semibold text-slate-600 mb-1">Turma</label>
-          <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="border rounded px-2 py-1.5 text-sm bg-slate-50 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500">
-            <option value="all">Todas as Turmas</option>
-            {data.classes.map(cls => (
-              <option key={cls.id} value={cls.id}>{cls.name}</option>
-            ))}
-          </select>
+        <div className="flex flex-col relative" ref={dropdownRef}>
+          <label className="text-xs font-semibold text-slate-600 mb-1">Turma(s)</label>
+          <button
+            type="button"
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="border rounded px-2 py-1.5 text-sm bg-slate-50 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500 text-left flex justify-between items-center"
+          >
+            <span className="truncate">{getDropdownLabel()}</span>
+            <span className="text-xs opacity-50">▼</span>
+          </button>
+
+          {isDropdownOpen && (
+            <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-300 rounded shadow-lg z-50 max-h-60 overflow-y-auto">
+              <div
+                className="px-3 py-2 border-b border-slate-100 hover:bg-slate-50 cursor-pointer flex items-center gap-2"
+                onClick={() => { setSelectedClasses([]); setIsDropdownOpen(false); }}
+              >
+                <div className={`w-4 h-4 rounded border flex items-center justify-center ${selectedClasses.length === 0 ? 'bg-blue-600 border-blue-600' : 'border-slate-300'}`}>
+                  {selectedClasses.length === 0 && <span className="text-white text-[10px]">✓</span>}
+                </div>
+                <span className="text-sm font-semibold text-blue-700">Todas as Turmas</span>
+              </div>
+              {data.classes.sort((a, b) => a.name.localeCompare(b.name)).map(cls => (
+                <div
+                  key={cls.id}
+                  className="px-3 py-2 hover:bg-slate-50 cursor-pointer flex items-center gap-2"
+                  onClick={() => toggleClassSelection(cls.id)}
+                >
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center ${selectedClasses.includes(cls.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>
+                    {selectedClasses.includes(cls.id) && <span className="text-white text-[10px]">✓</span>}
+                  </div>
+                  <span className="text-sm text-slate-700">{cls.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex flex-col">
           <label className="text-xs font-semibold text-slate-600 mb-1">Início do Período</label>
@@ -754,7 +956,8 @@ const LessonCalculator = ({ data, calendarSettings }) => {
           <div className="text-xs text-slate-500">Exportação</div>
           <div className="flex gap-2">
             <button onClick={exportExcel} className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-emerald-700" title="Baixar planilha CSV"><FileText size={14} /> Excel</button>
-            <button onClick={exportPDF} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><FileText size={14} /> PDF ({selectedClass === 'all' ? 'todas as turmas' : data.classes.find(c => c.id === selectedClass)?.name || 'turma'})</button>
+
+            <button onClick={() => exportPDF()} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><FileText size={14} /> PDF ({selectedClasses.length === 0 ? 'todas as turmas' : getDropdownLabel()})</button>
           </div>
         </div>
       </div>
@@ -770,9 +973,9 @@ const LessonCalculator = ({ data, calendarSettings }) => {
           </thead>
           <tbody>
             {subjectsList.map(s => {
+              const totalCount = countBySubject.map.get(s.id) || 0;
               const isExpanded = expandedSubjects.has(s.id);
               const subjectDetails = countBySubject.details.get(s.id);
-              const totalCount = countBySubject.map.get(s.id) || 0;
 
               return (
                 <React.Fragment key={s.id}>
@@ -782,30 +985,77 @@ const LessonCalculator = ({ data, calendarSettings }) => {
                         <span className="text-xs">{isExpanded ? '▼' : '▶'}</span>
                       )}
                     </td>
-                    <td className="border p-2 font-medium">{s.name}</td>
-                    <td className="border p-2 text-right font-semibold">{totalCount}</td>
+                    <td className="border p-2 font-medium text-slate-700">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); exportPDF(s); }}
+                          className="text-slate-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition-colors"
+                          title="Imprimir relatório desta matéria"
+                        >
+                          <Printer size={14} />
+                        </button>
+                        {s.name}
+                      </div>
+                    </td>
+                    <td className="border p-2 text-right font-bold text-slate-800">{totalCount}</td>
                   </tr>
-                  {isExpanded && subjectDetails && (
+                  {isExpanded && totalCount > 0 && (
                     <tr>
-                      <td colSpan="3" className="border-0 bg-slate-50">
-                        <div className="px-6 py-3">
-                          <div className="border border-slate-200 rounded-md bg-white p-3 shadow-sm text-[12px]">
-                            <div className="text-[12px] text-slate-500 mb-2">Distribuição por dia da semana</div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                              {Array.from(subjectDetails.entries()).map(([dayIdx, info]) => {
-                                const daysQty = info.dates?.size || 0;
-                                const lessonsQty = info.lessons || 0;
-                                return (
-                                  <div key={dayIdx} className="flex items-center justify-between px-3 py-2 rounded bg-slate-50 border border-slate-200">
+                      <td colSpan={3} className="border p-0">
+                        <div className="bg-slate-50 p-3 md:p-4 text-xs animate-fadeIn">
+                          {/* Class Breakdown Summary */}
+                          {selectedClasses.length !== 1 && (
+                            <div className="mb-3 pb-3 border-b border-slate-200">
+                              <h5 className="font-bold text-slate-600 mb-2">Resumo por Turma:</h5>
+                              <div className="flex flex-wrap gap-2">
+                                {data.classes
+                                  .filter(c => selectedClasses.length === 0 || selectedClasses.includes(c.id))
+                                  .map(c => {
+                                    const cCount = countBySubject.byClass.get(s.id)?.get(c.id) || 0;
+                                    if (cCount === 0) return null;
+                                    return (
+                                      <span key={c.id} className="bg-white border border-slate-200 px-2 py-1 rounded text-slate-600">
+                                        <strong className="text-slate-800">{c.name}:</strong> {cCount} aulas
+                                      </span>
+                                    );
+                                  })
+                                }
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex flex-col gap-2">
+                            <div className="text-[12px] text-slate-500 mb-1 font-semibold">Detalhes por Dia e Turma:</div>
+                            {subjectDetails && Array.from(subjectDetails.entries()).map(([dayIdx, info]) => {
+                              const daysQty = info.dates ? info.dates.size : 0;
+                              const lessonsQty = info.lessons || 0;
+                              return (
+                                <div key={dayIdx} className="flex flex-col gap-1 px-3 py-2 rounded bg-slate-50 border border-slate-200">
+                                  <div className="flex items-center justify-between">
                                     <span className="text-[12px] font-medium text-slate-700">{DAYS[dayIdx]}</span>
                                     <div className="flex items-center gap-2">
                                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] ${colorByDay(dayIdx)}`}><Calendar size={12} /> {daysQty} {daysQty === 1 ? 'dia' : 'dias'}</span>
-                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] ${colorByDay(dayIdx)}`}><BookOpen size={12} /> {lessonsQty} {lessonsQty === 1 ? 'aula' : 'aulas'}</span>
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] ${colorByDay(dayIdx)}`}><BookOpen size={12} /> {lessonsQty} {lessonsQty === 1 ? 'aula' : 'aulas'} (Total)</span>
                                     </div>
                                   </div>
-                                );
-                              })}
-                            </div>
+                                  {/* Breakdown by class for this day */}
+                                  {info.byClass && info.byClass.size > 0 && selectedClasses.length !== 1 && (
+                                    <div className="pl-4 mt-1 border-l-2 border-slate-200 space-y-1">
+                                      {Array.from(info.byClass.entries()).map(([clsId, clsInfo]) => {
+                                        const cls = data.classes.find(c => c.id === clsId);
+                                        if (!cls) return null;
+                                        return (
+                                          <div key={clsId} className="flex justify-between items-center text-[11px] text-slate-500">
+                                            <span>{cls.name}</span>
+                                            <span className="font-medium bg-white px-1.5 rounded">{clsInfo.lessons} {clsInfo.lessons === 1 ? 'aula' : 'aulas'}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       </td>
@@ -815,9 +1065,9 @@ const LessonCalculator = ({ data, calendarSettings }) => {
               );
             })}
           </tbody>
-        </table>
-      </div>
-    </div>
+        </table >
+      </div >
+    </div >
   );
 };
 

@@ -879,7 +879,7 @@ const App = () => {
         <div className="flex-1 p-2 lg:p-4 overflow-y-auto">
           {view === 'about' && <AboutSection />}
           {view === 'data' && subView === 'timeSettings' && <TimeSettingsSection data={data} setData={setData} />}
-          {view === 'data' && subView !== 'timeSettings' && <DataInputSection data={data} setData={setData} subView={subView} setSubView={setSubView} />}
+          {view === 'data' && subView !== 'timeSettings' && <DataInputSection data={data} setData={setData} subView={subView} setSubView={setSubView} calendarSettings={calendarSettings} />}
           {view === 'activities' && <ActivitiesSection data={data} setData={setData} />}
           {view === 'manualEdit' && <ManualEditSection data={data} setData={setData} />}
           {view === 'generate' && (
