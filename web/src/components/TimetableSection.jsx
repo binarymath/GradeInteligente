@@ -4,6 +4,8 @@ import { DAYS } from '../utils';
 import { useDisplayPeriods } from '../hooks/useDisplayPeriods';
 import { computeSlotShift } from '../utils/time';
 import ExportButtons from './ExportButtons';
+import { generateICSForClass, generateICSForTeacher } from '../utils/icsUtils';
+import { getEntityColorStyle } from '../utils/colors';
 
 const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, setCalendarSettings, showAgendaControls = true, filterShift = 'Todos', filteredClassIds = null }) => {
   const displayPeriods = useDisplayPeriods({ data, viewMode, selectedEntity });
@@ -441,9 +443,9 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
                               const subj = data.subjects.find(s => s.id === entry.subjectId);
                               const teacher = data.teachers.find(t => t.id === entry.teacherId);
                               cellContent = (
-                                <div className="text-xs">
-                                  <div className="font-bold text-slate-700">{subj?.name}</div>
-                                  <div className="text-slate-500">{teacher?.name}</div>
+                                <div className="text-xs p-1 rounded" style={getEntityColorStyle(subj?.id, subj?.name)}>
+                                  <div className="font-bold">{subj?.name}</div>
+                                  <div className="opacity-75">{teacher?.name}</div>
                                 </div>
                               );
                             }
@@ -462,9 +464,9 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
                               const subj = data.subjects.find(s => s.id === entry.subjectId);
                               const teacher = data.teachers.find(t => t.id === entry.teacherId);
                               cellContent = (
-                                <div className="text-xs">
-                                  <div className="font-bold text-slate-700">{subj?.name}</div>
-                                  <div className="text-slate-500">{teacher?.name}</div>
+                                <div className="text-xs p-1 rounded" style={getEntityColorStyle(subj?.id, subj?.name)}>
+                                  <div className="font-bold">{subj?.name}</div>
+                                  <div className="opacity-75">{teacher?.name}</div>
                                 </div>
                               );
                             }
@@ -475,9 +477,9 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
                               const subj = data.subjects.find(s => s.id === item.subjectId);
                               const cls = data.classes.find(c => c.id === item.classId);
                               cellContent = (
-                                <div className="text-xs">
-                                  <div className="font-bold text-slate-700">{subj?.name}</div>
-                                  <div className="text-slate-500">{cls?.name}</div>
+                                <div className="text-xs p-1 rounded" style={getEntityColorStyle(subj?.id, subj?.name)}>
+                                  <div className="font-bold">{subj?.name}</div>
+                                  <div className="opacity-75">{cls?.name}</div>
                                 </div>
                               );
                             }

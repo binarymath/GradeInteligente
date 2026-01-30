@@ -209,26 +209,55 @@ const App = () => {
     saveCalendar();
   }, [calendarSettings]);
 
-  const handleExportState = useCallback(() => exportBackup(data), [data]);
+  const handleExportState = useCallback(() => {
+    // Exporta versão 2 com dados e configurações de calendário
+    const backup = {
+      version: 2,
+      data: data,
+      calendarSettings: calendarSettings,
+      exportedAt: new Date().toISOString()
+    };
+    exportBackup(backup);
+  }, [data, calendarSettings]);
 
   const handleImportState = useCallback((e) => {
     setGenerationLog([]); // Limpar log ao iniciar restauração
-    importBackup(e.target.files[0], (rawParsed) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    importBackup(file, (rawParsed) => {
+      // Verifica se é o formato novo (v2) ou legado (v1 direct data)
+      let importedData = rawParsed;
+      let importedCalendar = null;
+
+      if (rawParsed.version === 2 && rawParsed.data) {
+        importedData = rawParsed.data;
+        importedCalendar = rawParsed.calendarSettings;
+      }
+
       // 1. Migrar para garantir formato atual (v1 data -> v2 structures)
-      let newData = migrateData(rawParsed);
+      let newData = migrateData(importedData);
 
       if (newData) {
         // 2. Limpar (apenas se tiver dados mínimos válidos, senão cleanSchedule protege)
         if (newData.schedule) {
           const cleaned = cleanSchedule(newData);
-          // Se cleanSchedule retornar algo vazio quando HAVIA dados, é sinal de perigo. 
-          // Mas como adicionamos validação no cleanSchedule para retornar o original se faltar deps, é seguro.
           newData.schedule = cleaned;
         }
         setData(newData);
       }
+
+      // 3. Restaurar configurações de calendário se existirem
+      if (importedCalendar) {
+        setCalendarSettings(prev => ({ ...prev, ...importedCalendar }));
+      }
     });
     setIsVerified(false); // Ao restaurar, volta para modo "Verificar"
+
+    // Reset input value to allow re-importing same file if needed
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   }, []);
 
   const verifySchedule = useCallback(() => {
