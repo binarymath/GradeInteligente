@@ -5,7 +5,11 @@
  */
 
 export const migrateData = (data) => {
-  if (!data || typeof data !== 'object') return null;
+
+  if (!data || typeof data !== 'object') {
+    console.warn('⚠️ [Migration] Dados vazios ou inválidos recebidos');
+    return null;
+  }
 
   // Garante que os campos essenciais existem
   const migrated = {
@@ -19,20 +23,37 @@ export const migrateData = (data) => {
     ...data
   };
 
+
   // Migrate subjects: remove legacy synchronousGroup and preferredTimeSlots
   if (migrated.subjects && Array.isArray(migrated.subjects)) {
-    migrated.subjects = migrated.subjects.map(subject => {
+    migrated.subjects = migrated.subjects.map((subject, index) => {
+
       const cleaned = { ...subject };
-      
-      // Remove legacy synchronous fields
-      delete cleaned.synchronousGroup;
-      delete cleaned.preferredTimeSlots;
-      
-      // Ensure synchronousConfigs exists for synchronous subjects
-      if (cleaned.isSynchronous && !cleaned.synchronousConfigs) {
-        cleaned.synchronousConfigs = [];
+
+      // ✅ PRESERVAR isSynchronous se existir
+      if (subject.isSynchronous !== undefined) {
+        cleaned.isSynchronous = subject.isSynchronous;
       }
-      
+
+      // ✅ PRESERVAR synchronousConfigs se existir
+      if (subject.synchronousConfigs && Array.isArray(subject.synchronousConfigs)) {
+        cleaned.synchronousConfigs = subject.synchronousConfigs;
+      } else if (cleaned.isSynchronous) {
+        // Se é síncrona mas não tem configs, cria array vazio
+        cleaned.synchronousConfigs = [];
+      } else {
+      }
+
+      // Remove legacy synchronous fields (mas preserva os novos acima)
+      if (cleaned.synchronousGroup) {
+        delete cleaned.synchronousGroup;
+      }
+      if (cleaned.preferredTimeSlots) {
+        delete cleaned.preferredTimeSlots;
+      }
+
+
+
       return cleaned;
     });
   }
@@ -52,15 +73,19 @@ export const migrateData = (data) => {
   if (migrated.classes && Array.isArray(migrated.classes)) {
     migrated.classes = migrated.classes.map(cls => {
       const cleaned = { ...cls };
-      
+
       // Se tem activeSlotsByDay com dados, limpar activeSlots legado
       if (cleaned.activeSlotsByDay && Object.keys(cleaned.activeSlotsByDay).length > 0) {
         delete cleaned.activeSlots;
       }
-      
+
       return cleaned;
     });
   }
+
+  const totalSyncSubjects = migrated.subjects?.filter(s => s.isSynchronous)?.length || 0;
+  const totalSyncWithConfigs = migrated.subjects?.filter(s => s.isSynchronous && s.synchronousConfigs?.length > 0)?.length || 0;
+
 
   return migrated;
 };

@@ -13,15 +13,24 @@ export function exportBackup(data) {
   document.body.removeChild(link);
 }
 
-/** Lê arquivo de backup e atualiza estado via setData. */
-export function importBackup(file, setData, onError) {
+/** 
+ * Lê arquivo de backup e retorna os dados parseados via callback
+ * ✅ CORRIGIDO: Não sobrescreve mais os dados diretamente
+ * O App.jsx agora é responsável por migrar e limpar os dados
+ */
+export function importBackup(file, callback, onError) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = (event) => {
     try {
       const parsed = JSON.parse(event.target.result);
-      setData(parsed);
-      alert('Backup restaurado com sucesso!');
+      
+      // ✅ Passa os dados parseados para o callback
+      // O App.jsx vai fazer a migração e limpeza
+      if (callback) {
+        callback(parsed);
+        alert('Backup restaurado com sucesso!');
+      }
     } catch (err) {
       alert('Erro ao ler arquivo de backup.');
       if (onError) onError(err);
@@ -29,3 +38,4 @@ export function importBackup(file, setData, onError) {
   };
   reader.readAsText(file);
 }
+

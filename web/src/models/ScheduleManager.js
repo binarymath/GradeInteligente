@@ -605,6 +605,24 @@ class ScheduleManager {
       for (let i = 0; i < this.lessonIndices.length - 1; i++) {
         const slot1 = this.lessonIndices[i];
         const slot2 = this.lessonIndices[i + 1];
+        
+        // Verifica se algum dos slots está protegido (aulas síncronas)
+        const timeKey1 = `${DAYS[dayIdx]}-${slot1}`;
+        const timeKey2 = `${DAYS[dayIdx]}-${slot2}`;
+        const protectedKey1 = `${activity.classId}-${timeKey1}`;
+        const protectedKey2 = `${activity.classId}-${timeKey2}`;
+        
+        // Pula se qualquer slot está protegido
+        if (this.protectedSlots?.has(protectedKey1) || this.protectedSlots?.has(protectedKey2)) {
+          continue;
+        }
+        
+        // Verifica se já existe alocação protegida nesse slot
+        const existing1 = this.schedule[`${activity.classId}-${timeKey1}`];
+        const existing2 = this.schedule[`${activity.classId}-${timeKey2}`];
+        if ((existing1 && existing1.isSynchronous) || (existing2 && existing2.isSynchronous)) {
+          continue;
+        }
 
         // Verifica se são vizinhos E se ambos estão livres
         if (this._areConsecutive(slot1, slot2) &&
@@ -645,6 +663,21 @@ class ScheduleManager {
 
     for (let dayIdx = 0; dayIdx < DAYS.length; dayIdx++) {
       for (const slotIdx of this.lessonIndices) {
+        // Verifica se o slot está protegido (aulas síncronas)
+        const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
+        const protectedKey = `${activity.classId}-${timeKey}`;
+
+        // Pula se slot está protegido
+        if (this.protectedSlots?.has(protectedKey)) {
+          continue;
+        }
+
+        // Verifica se já existe alocação protegida nesse slot
+        const existing = this.schedule[`${activity.classId}-${timeKey}`];
+        if (existing && existing.isSynchronous) {
+          continue;
+        }
+
         if (this._isAvailable(activity.teacherId, activity.classId, activity.subjectId, dayIdx, slotIdx)) {
           const score = this._getPreferenceScore(activity.teacherId, activity.subjectId, dayIdx, slotIdx);
           candidates.push({ dayIdx, slotIdx, score });
@@ -1192,6 +1225,11 @@ class ScheduleManager {
   importExistingSchedule(existingSchedule) {
     this._resetState();
     this.schedule = { ...existingSchedule };
+    
+    // Criar conjunto de slots protegidos (aulas síncronas que não podem ser removidas)
+    if (!this.protectedSlots) {
+      this.protectedSlots = new Set();
+    }
 
     // Reconstrói índices baseados na grade importada
     for (const [key, entry] of Object.entries(this.schedule)) {
@@ -1232,11 +1270,19 @@ class ScheduleManager {
         dayIdx,
         slotIdx,
         start: slot ? slot.start : '00:00',
-        end: slot ? slot.end : '00:00'
+        end: slot ? slot.end : '00:00',
+        isSynchronous: entry.isSynchronous || false,
+        isProtected: entry.isSynchronous || false
       });
+
+      // Marcar slot como protegido se for síncrono
+      if (entry.isSynchronous) {
+        this.protectedSlots.add(`${entry.classId}-${entry.timeKey}`);
+        console.log(`🔒 Slot protegido: ${entry.classId} em ${entry.timeKey} (síncrono)`);
+      }
     }
 
-    this.logMessage(`Grade importada com sucesso. ${this.bookedEntries.length} aulas já alocadas.`);
+  this.logMessage(`Grade importada com sucesso. ${this.bookedEntries.length} aulas já alocadas (${this.protectedSlots.size} protegidas).`);
   }
 
   /**

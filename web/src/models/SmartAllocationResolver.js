@@ -7,17 +7,18 @@ import { LIMITS } from '../constants/schedule';
  * Identifica slots livres, remove validações redundantes, força alocação.
  */
 class SmartAllocationResolver {
-  constructor(data, existingSchedule, limits = {}) {
+  constructor(data, existingSchedule, limits = {}, syncValidator = null) {
     this.data = data;
     this.limits = { ...LIMITS, ...limits };
     this.schedule = { ...existingSchedule };
-    
+    this.syncValidator = syncValidator;
+
     this.teacherSchedule = {};
     this.classSchedule = {};
     this.bookedEntries = [];
     this.timeSlots = data.timeSlots;
     this.lessonIndices = this.timeSlots.map((_, i) => i).filter(i => this.timeSlots[i].type === 'aula');
-    
+
     this.maxTimeMs = 30000; // 30 segundos máximo
     this.startTime = Date.now();
     this.attemptCount = 0;
@@ -41,10 +42,10 @@ class SmartAllocationResolver {
     this.debugInfo = {};
 
     if (!pendingActivities || pendingActivities.length === 0) {
-      return { 
-        schedule: this.schedule, 
-        bookedEntries: this.bookedEntries, 
-        resolved: true, 
+      return {
+        schedule: this.schedule,
+        bookedEntries: this.bookedEntries,
+        resolved: true,
         attemptCount: 0,
         debugInfo: {}
       };
@@ -57,26 +58,62 @@ class SmartAllocationResolver {
     // Passo 1: Coleta dados de ocupação
     this._analyzeOccupancy();
 
+    // ⭐ Passo 1.5: Aloca aulas síncronas obrigatórias PRIMEIRO
+    if (this.syncValidator) {
+      this._allocateMandatorySyncClasses();
+    }
+
     // Passo 2: Ordena atividades por dificuldade (menos falta = mais fácil = primeiro)
     const sorted = this._sortByMissingCount(pendingActivities);
     const sortedUniqueSubjects = new Set(sorted.map(a => `${a.classId}-${a.subjectId}`));
     this.log.push(`⏳ Processando ${sorted.length} aula(s) em ${sortedUniqueSubjects.size} matéria(s) por dificuldade`);
 
-    // Passo 3: Tenta alocar greedy first
+    // ⭐ Filtrar atividades síncronas com slot obrigatório (já tratadas na Fase 0)
+    const nonMandatorySyncActivities = sorted.filter(activity => {
+      if (!this.syncValidator) return true;
+
+      const mandatorySlot = this.syncValidator.getMandatorySlot(
+        activity.classId,
+        activity.subjectId,
+        activity.teacherId
+      );
+
+      // Se NÃO tem slot obrigatório, pode ser processada pelo greedy
+      return !mandatorySlot;
+    });
+
+    if (nonMandatorySyncActivities.length < sorted.length) {
+      const filteredCount = sorted.length - nonMandatorySyncActivities.length;
+    }
+
+    // Passo 3: Tenta alocar greedy first (apenas não-síncronas ou síncronas sem slot obrigatório)
     this.log.push(`✅ Fase greedy:`);
-    const greedy = this._greedyAllocate(sorted);
-    
+    const greedy = this._greedyAllocate(nonMandatorySyncActivities);
+
     // Passo 4: Se ainda houver pendências, usa backtracking inteligente
     const pendingAfterGreedy = this._getPendingActivities(pendingActivities);
-    
-    if (pendingAfterGreedy.length > 0) {
-      const pendingSubjects = new Set(pendingAfterGreedy.map(a => `${a.classId}-${a.subjectId}`));
-      this.log.push(`🔄 Fase backtracking: Resolvendo ${pendingAfterGreedy.length} aula(s) em ${pendingSubjects.size} matéria(s)...`);
-      
+
+    // Filtrar atividades síncronas obrigatórias do backtracking também
+    const pendingNonMandatory = pendingAfterGreedy.filter(activity => {
+      if (!this.syncValidator) return true;
+
+      const mandatorySlot = this.syncValidator.getMandatorySlot(
+        activity.classId,
+        activity.subjectId,
+        activity.teacherId
+      );
+
+      return !mandatorySlot;
+    });
+
+    if (pendingNonMandatory.length > 0) {
+      const pendingSubjects = new Set(pendingNonMandatory.map(a => `${a.classId}-${a.subjectId}`));
+      this.log.push(`🔄 Fase backtracking: Resolvendo ${pendingNonMandatory.length} aula(s) em ${pendingSubjects.size} matéria(s)...`);
+
       // Reseta contador para esta fase
       const backtrackStartAttempts = this.attemptCount;
-      this._intelligentBacktrack(pendingAfterGreedy);
-      
+      this._intelligentBacktrack(pendingNonMandatory);
+
       const backtrackAttempts = this.attemptCount - backtrackStartAttempts;
       if (backtrackAttempts === 0) {
         this.log.push(`   ⚠️ Backtracking não iniciou - todas as atividades sem slots disponíveis`);
@@ -95,7 +132,7 @@ class SmartAllocationResolver {
       const finalSubjects = new Set(finalPending.map(a => `${a.classId}-${a.subjectId}`));
       this.log.push(`⚠️ Solução parcial: ${finalPending.length} aula(s) em ${finalSubjects.size} matéria(s) ainda pendente(s)`);
       this.log.push(`   └─ ${this.attemptCount} tentativas em ${elapsed}s`);
-      
+
       // Diagnóstico detalhado das atividades impossíveis (mostra até 15)
       if (finalPending.length > 0 && finalPending.length <= 15) {
         this.log.push(`📋 Diagnóstico detalhado:`);
@@ -227,19 +264,19 @@ class SmartAllocationResolver {
         e.classId === act.classId && e.subjectId === act.subjectId
       ).length;
       const missing = act.quantity - bookedCount;
-      
+
       const key = `${act.classId}-${act.subjectId}`;
       this.debugInfo[key] = { missing, quantity: act.quantity, booked: bookedCount };
-      
+
       return { ...act, missing };
     });
 
     // Remove duplicatas e ordena por missing crescente
     const unique = [];
     const seen = new Set();
-    
+
     withMissing.sort((a, b) => a.missing - b.missing);
-    
+
     for (const act of withMissing) {
       const key = `${act.classId}-${act.subjectId}`;
       if (!seen.has(key)) {
@@ -249,6 +286,142 @@ class SmartAllocationResolver {
     }
 
     return unique;
+  }
+
+  /**
+   * ⭐ FASE 0: Aloca TODAS as aulas síncronas com horário obrigatório PRIMEIRO
+   * @private
+   */
+  _allocateMandatorySyncClasses() {
+    if (!this.syncValidator) {
+      return;
+    }
+
+    this.log.push('🔒 Fase 0: Alocando aulas síncronas obrigatórias...');
+
+    let allocated = 0;
+    let conflicts = 0;
+    let cleared = 0;
+
+    // ⭐ PRÉ-PROCESSAMENTO: Identificar TODOS os slots obrigatórios e turmas
+    const mandatorySlots = new Map(); // key: "dayIdx-slotIdx", value: Set de classIds
+
+    for (const group of this.syncValidator.syncGroups.values()) {
+      if (group.preferredDayIdx != null && group.preferredSlotIdx != null) {
+        const slotKey = `${group.preferredDayIdx}-${group.preferredSlotIdx}`;
+        if (!mandatorySlots.has(slotKey)) {
+          mandatorySlots.set(slotKey, new Set());
+        }
+        for (const classId of group.classes) {
+          mandatorySlots.get(slotKey).add(classId);
+        }
+      }
+    }
+
+
+    // ⭐ LIMPAR SLOTS OBRIGATÓRIOS: Remove qualquer coisa que esteja lá
+    for (const [slotKey, classIds] of mandatorySlots.entries()) {
+      const [dayIdx, slotIdx] = slotKey.split('-').map(Number);
+      const dayName = DAYS[dayIdx];
+
+      // ⚠️ ESTRATÉGIA AGRESSIVA: Remover TUDO da turma neste slot
+      for (const classId of classIds) {
+        // Encontra QUALQUER entrada desta turma neste dia-slot
+        const entriesToRemove = this.bookedEntries.filter(e =>
+          e.classId === classId &&
+          e.dayIdx === dayIdx &&
+          e.slotIdx === slotIdx
+        );
+
+
+        for (const entry of entriesToRemove) {
+          this._deallocateSlot(entry, entry.dayIdx, entry.slotIdx);
+          cleared++;
+        }
+      }
+
+      // Remove conflitos de professor
+      const professorsNeeded = new Set();
+      for (const classId of classIds) {
+        const activity = this.data.activities?.find(a =>
+          a.classId === classId &&
+          a.subjectId &&
+          this.data.subjects?.find(s => s.id === a.subjectId && s.isSynchronous)
+        );
+        if (activity?.teacherId) {
+          professorsNeeded.add(activity.teacherId);
+        }
+      }
+
+      // Limpar TODAS as aulas dos professores necessários no slot obrigatório
+      for (const teacherId of professorsNeeded) {
+        const teacherEntries = this.bookedEntries.filter(e =>
+          e.teacherId === teacherId &&
+          e.dayIdx === dayIdx &&
+          e.slotIdx === slotIdx
+        );
+
+
+        for (const entry of teacherEntries) {
+          this._deallocateSlot(entry, entry.dayIdx, entry.slotIdx);
+          cleared++;
+        }
+
+        // Garantir que teacherSchedule está limpo para este slot
+        const timeKey = `${dayName}-${slotIdx}`;
+        if (this.teacherSchedule[teacherId]) {
+          delete this.teacherSchedule[teacherId][timeKey];
+        }
+      }
+    }
+
+
+    if (cleared > 0) {
+      this.log.push(`🧹 Limpas ${cleared} aula(s) para liberar slots obrigatórios`);
+    }
+
+    // ⭐ ALOCAR APENAS OS SLOTS OBRIGATÓRIOS (não iterar por todos)
+    for (const [slotKey] of mandatorySlots.entries()) {
+      const [dayIdx, slotIdx] = slotKey.split('-').map(Number);
+      const dayName = DAYS[dayIdx];
+      const timeKey = `${dayName}-${slotIdx}`;
+
+      // Obtém todas as atividades que DEVEM ir neste slot
+      const syncActivities = this.syncValidator.getActivitiesByMandatorySlot(dayIdx, slotIdx);
+
+      if (syncActivities.length === 0) {
+        this.log.push(`   ⚠️ ${dayName} slot ${slotIdx}: Nenhuma atividade encontrada (verifique atribuições)`);
+        continue;
+      }
+
+      this.log.push(`   📍 ${dayName} slot ${slotIdx}: ${syncActivities.length} aula(s) síncrona(s)`);
+
+      // DEBUG: Verificar estado dos professores ANTES de alocar
+      for (const { activity } of syncActivities) {
+        const isOccupied = this.teacherSchedule[activity.teacherId]?.[timeKey];
+      }
+
+      // Aloca cada uma
+      for (const { activity, group } of syncActivities) {
+        try {
+          // Verifica se pode alocar neste slot
+          // IMPORTANTE: Passamos um flag indicando que é Fase 0 para ignorar validação de sincronização
+          if (this._canAllocateSimple(activity, dayIdx, slotIdx, true)) {
+            this._allocateSlot(activity, dayIdx, slotIdx, false);
+            allocated++;
+            this.log.push(`      ✅ ${activity.classId} - ${group.subjectId}`);
+          } else {
+            conflicts++;
+            this.log.push(`      ⚠️ ${activity.classId} - Conflito`);
+          }
+        } catch (e) {
+          conflicts++;
+          this.log.push(`      ❌ ${activity.classId} - ${e.message}`);
+        }
+      }
+    }
+
+    this.log.push(`✅ Fase 0: ${allocated} alocadas, ${conflicts} conflitos`);
   }
 
   /**
@@ -276,7 +449,7 @@ class SmartAllocationResolver {
             this._allocateSlot(activity, dayIdx, slotIdx, false);
             allocated++;
             count++;
-            
+
             if (allocated >= toAllocate) break;
           }
         }
@@ -320,19 +493,19 @@ class SmartAllocationResolver {
     if (impossible.length > 0) {
       // Incrementa attemptCount para indicar que tentou
       this.attemptCount = 1;
-      
+
       // Conta aulas e matérias únicas impossíveis
       const impossibleSubjects = new Set(impossible.map(c => `${c.activity.classId}-${c.activity.subjectId}`));
-      
+
       const details = impossible.map(combo => {
         const subj = this.data.subjects?.find(s => s.id === combo.activity.subjectId);
         const cls = this.data.classes?.find(c => c.id === combo.activity.classId);
         const teacher = this.data.teachers?.find(t => t.id === combo.activity.teacherId);
-        
+
         const subjName = subj?.name || combo.activity.subjectId;
         const clsName = cls?.name || combo.activity.classId;
         const teachName = teacher?.name || combo.activity.teacherId;
-        
+
         return `${subjName} (${clsName}) - Prof. ${teachName}`;
       }).join(', ');
 
@@ -340,22 +513,22 @@ class SmartAllocationResolver {
       this.log.push(`   ${details}`);
       this.log.push(`   Motivos possíveis: professor ocupado em todos horários válidos,`);
       this.log.push(`   turma tem intervalo em todos os slots, ou conflito de turnos`);
-      
+
       // Se TODAS as atividades são impossíveis, retorna
       if (impossible.length === combinations.length) {
         return;
       }
-      
+
       // Senão, remove as impossíveis e tenta com as restantes
       const possibleCombinations = combinations.filter(c => c.slots.length > 0);
       if (possibleCombinations.length > 0) {
         this.log.push(`   ℹ️ Tentando resolver as ${possibleCombinations.length} aula(s) restantes com slots disponíveis...`);
-        
+
         const totalSlots = possibleCombinations.reduce((sum, c) => sum + c.slots.length, 0);
         this.log.push(`   📊 Total de slots disponíveis: ${totalSlots} para ${possibleCombinations.length} aula(s)`);
-        
+
         const success = this._backtrackCombinations(possibleCombinations, 0);
-        
+
         if (success) {
           const elapsed = Math.max(1, Math.round((Date.now() - this.startTime) / 1000));
           this.log.push(`   ✅ Backtracking resolveu parcialmente! (${this.attemptCount} tentativas em ${elapsed}s)`);
@@ -364,7 +537,7 @@ class SmartAllocationResolver {
           this.log.push(`   ⚠️ Backtracking não conseguiu resolver as restantes (${this.attemptCount} tentativas em ${elapsed}s)`);
         }
       }
-      
+
       return;
     }
 
@@ -380,7 +553,7 @@ class SmartAllocationResolver {
 
     // Tenta combinações com backtracking
     const success = this._backtrackCombinations(combinations, 0);
-    
+
     if (success) {
       const elapsed = Math.max(1, Math.round((Date.now() - this.startTime) / 1000));
       this.log.push(`   ✅ Backtracking resolveu todas as pendências! (${this.attemptCount} tentativas em ${elapsed}s)`);
@@ -425,14 +598,48 @@ class SmartAllocationResolver {
 
   /**
    * Verifica se pode alocar aula simples (validações rigorosas)
+   * @param {boolean} isPhase0MandatorySync - Se true, ignora validação de sincronização (Fase 0)
    * @private
    */
-  _canAllocateSimple(activity, dayIdx, slotIdx) {
+  _canAllocateSimple(activity, dayIdx, slotIdx, isPhase0MandatorySync = false) {
     const day = DAYS[dayIdx];
     const timeKey = `${day}-${slotIdx}`;
     const slot = this.timeSlots[slotIdx];
 
-    if (!slot) return false;
+    if (!slot) {
+      return false;
+    }
+
+    // ⭐ VALIDAÇÃO #1: Validar aula síncrona obrigatória
+    if (this.syncValidator) {
+      const mandatorySlot = this.syncValidator.getMandatorySlot(
+        activity.classId,
+        activity.subjectId,
+        activity.teacherId
+      );
+
+      if (mandatorySlot) {
+
+        if (dayIdx !== mandatorySlot.dayIdx || slotIdx !== mandatorySlot.slotIdx) {
+          return false;
+        }
+      }
+    }
+
+    // ⭐ VALIDAÇÃO #2: Verificar sincronização
+    // EXCEÇÃO: Durante Fase 0, ignoramos esta validação porque estamos construindo o grupo pela primeira vez
+    if (this.syncValidator && !isPhase0MandatorySync) {
+      if (this.syncValidator.wouldBreakSynchronization(
+        this.bookedEntries,
+        activity.classId,
+        activity.subjectId,
+        activity.teacherId,
+        dayIdx,
+        slotIdx
+      )) {
+        return false;
+      }
+    }
 
     // 1. VERIFICAR SE SLOT ESTÁ EM activeSlots/activeSlotsByDay DA TURMA
     const classData = this.data.classes?.find(c => c.id === activity.classId);
@@ -441,27 +648,31 @@ class SmartAllocationResolver {
     }
 
     const slotId = this.timeSlots[slotIdx]?.id || String(slotIdx);
-    
-    // ============================================================
-    // VALIDAÇÃO DE SLOTS: ORDEM RIGOROSA
-    // 1. Se tem activeSlotsByDay com dados, USAR POR DIA
-    // 2. Se tem activeSlots, usar como fallback (mas activeSlotsByDay tem prioridade)
-    // 3. Se nenhum dos dois, apenas slots do tipo 'aula'
-    // ============================================================
-    
+
+    if (isPhase0MandatorySync && slotIdx === 0) {
+    }
+
     // Prioridade 1: activeSlotsByDay (novo - por dia)
     if (classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
-      // Usa activeSlotsByDay: verifica se o slot está ativo especificamente para este dia
       const activeSlotsForDay = classData.activeSlotsByDay[dayIdx];
+      if (isPhase0MandatorySync && slotIdx === 0) {
+      }
       if (!activeSlotsForDay || !Array.isArray(activeSlotsForDay) || !activeSlotsForDay.includes(slotId)) {
-        return false; // Slot não está ativo neste dia específico - NUNCA alocar aqui
+        if (isPhase0MandatorySync) {
+        } else {
+          if (slotIdx === 0) {
+          }
+          return false;
+        }
       }
     }
-    // Prioridade 2: activeSlots (legado) - APENAS se activeSlotsByDay está VAZIO
+    // Prioridade 2: activeSlots (legado)
     else if (classData.activeSlots && Array.isArray(classData.activeSlots) && classData.activeSlots.length > 0) {
-      // Fallback: usa activeSlots (todos os dias)
       if (!classData.activeSlots.includes(slotId)) {
-        return false; // Slot não está nos activeSlots - NUNCA alocar aqui
+        if (isPhase0MandatorySync) {
+        } else {
+          return false;
+        }
       }
     }
     // Prioridade 3: Sem restrição - apenas slots de aula
@@ -476,8 +687,10 @@ class SmartAllocationResolver {
       return false;
     }
 
-    // 3. PROFESSOR OCUPADO? - VERIFICAÇÃO RIGOROSA (nem 10 minutos!)
+    // 3. PROFESSOR OCUPADO?
     if (this._isTeacherConflict(activity.teacherId, slot)) {
+      if (isPhase0MandatorySync && slotIdx === 0) {
+      }
       return false;
     }
 
@@ -485,10 +698,13 @@ class SmartAllocationResolver {
     const activityTurno = activity.shift || 'Todos';
     if (activityTurno !== 'Todos') {
       const classTurno = classData.shift || 'Todos';
-      
+
       if (classTurno !== 'Todos' && classTurno !== activityTurno) {
         return false;
       }
+    }
+
+    if (isPhase0MandatorySync && slotIdx === 0) {
     }
 
     return true;
@@ -552,7 +768,7 @@ class SmartAllocationResolver {
     }
 
     const { activity, slots } = combinations[index];
-    
+
     // Se não há slots disponíveis para esta atividade, falha imediatamente
     if (slots.length === 0) {
       return false;
@@ -650,9 +866,9 @@ class SmartAllocationResolver {
     }
 
     this.bookedEntries = this.bookedEntries.filter(e =>
-      !(e.teacherId === activity.teacherId && 
-        e.classId === activity.classId && 
-        e.dayIdx === dayIdx && 
+      !(e.teacherId === activity.teacherId &&
+        e.classId === activity.classId &&
+        e.dayIdx === dayIdx &&
         e.slotIdx === slotIdx)
     );
   }
@@ -757,7 +973,7 @@ class SmartAllocationResolver {
       if (blockedByTeacherUnavailable > 0) details.push(`${blockedByTeacherUnavailable} prof. indisponível`);
       if (blockedByTeacher > 0) details.push(`${blockedByTeacher} prof. em outra turma`);
       if (blockedByShift > 0) details.push(`${blockedByShift} conflito de turno`);
-      
+
       reasons.push(`${label}: IMPOSSÍVEL - ${details.join(', ')} (${totalChecked} slots testados)`);
     } else {
       reasons.push(`${label}: ${validSlotsFound} slot(s) livre(s) encontrado(s) - mas backtracking falhou em encaixar`);
@@ -780,7 +996,7 @@ class SmartAllocationResolver {
     // Se a turma tem activeSlots/activeSlotsByDay muito restritos, sugerir liberar 1 slot
     let activeCount = 0;
     const totalLessonSlots = this.lessonIndices.length * DAYS.length;
-    
+
     if (classData?.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
       // Conta slots ativos por dia
       for (const dayIdx of Object.keys(classData.activeSlotsByDay)) {
@@ -789,7 +1005,7 @@ class SmartAllocationResolver {
     } else if (classData?.activeSlots && classData.activeSlots.length > 0) {
       activeCount = classData.activeSlots.length;
     }
-    
+
     if (activeCount > 0 && activeCount < totalLessonSlots / 2) {
       return `Revisar horários ativos da turma ${classData?.name}: liberar 1 horário marcado como intervalo pode acomodar ${label}.`;
     }

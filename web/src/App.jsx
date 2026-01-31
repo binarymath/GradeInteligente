@@ -895,9 +895,9 @@ const App = () => {
                           disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
                           className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           aria-busy={repairing}
-                          title="Analisar grade atual sem regenerar"
+                          title="Analisar e ajustar grade atual sem regenerar"
                         >
-                          {repairing ? 'Analisando...' : 'Analisar'}
+                          {repairing ? 'Analisando e Ajustando...' : 'Analisar e Ajustar'}
                         </button>
                       )}
                       <button
@@ -924,9 +924,9 @@ const App = () => {
                           disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
                           className="bg-emerald-600 text-white px-3 py-1.5 text-xs rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           aria-busy={repairing}
-                          title="Analisar grade atual sem regenerar"
+                          title="Analisar e ajustar grade atual sem regenerar"
                         >
-                          {repairing ? 'Analisando...' : 'Analisar'}
+                          {repairing ? 'Analisando e Ajustando...' : 'Analisar e Ajustar'}
                         </button>
                       )}
                       <button

@@ -33,7 +33,8 @@ import {
   tryRepairSingle,
   tryRepairDouble,
   relocateBlockingEntry,
-  relocateBlockingEntryDeep
+  relocateBlockingEntryDeep,
+  tryRepairSingleDeep
 } from './smartRepairService';
 import {
   analyzeExistingSchedule,
@@ -99,7 +100,7 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
     }
 
     // FASE 0: Processar aulas síncronas antes de gerar o resto
-    const MAX_LOCAL_ATTEMPTS = 500;
+    const MAX_LOCAL_ATTEMPTS = 250;
     let manager = new ScheduleManager(data, currentLimits);
     let result = null;
     let minPending = Infinity;
@@ -138,6 +139,19 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
 
     const scheduleWithSync = syncResult.schedule || {};
 
+    // Merge: em modo de correção, preservar grade existente SEM sobrescrever síncronas
+    const mergeSchedulesWithSync = (syncSchedule, existingSchedule) => {
+      const merged = { ...(existingSchedule || {}) };
+      for (const [key, entry] of Object.entries(syncSchedule || {})) {
+        merged[key] = entry;
+      }
+      return merged;
+    };
+
+    const baseSchedule = shouldUseExisting
+      ? mergeSchedulesWithSync(scheduleWithSync, data.schedule)
+      : scheduleWithSync;
+
     // IMPLEMENTAÇÃO DO ISOLAMENTO DE AULAS SÍNCRONAS
     const allocatedSyncIds = syncResult.allocatedActivityIds || [];
 
@@ -164,8 +178,8 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
         // Usa o data filtrado
         const tempManager = new ScheduleManager(dataForGeneration, currentLimits, [], true);
 
-        if (Object.keys(scheduleWithSync).length > 0) {
-          tempManager.importExistingSchedule(scheduleWithSync);
+        if (Object.keys(baseSchedule).length > 0) {
+          tempManager.importExistingSchedule(baseSchedule);
         }
 
         const tempResult = tempManager.generate();
@@ -182,8 +196,8 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
           if (pending === 0) {
             const finalManager = new ScheduleManager(dataForGeneration, currentLimits, [], false);
 
-            if (Object.keys(scheduleWithSync).length > 0) {
-              finalManager.importExistingSchedule(scheduleWithSync);
+            if (Object.keys(baseSchedule).length > 0) {
+              finalManager.importExistingSchedule(baseSchedule);
             }
 
             result = finalManager.generate();
@@ -210,7 +224,12 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
       manager = bestManager || manager;
     } else {
       // Fallback: gerar grade básica
-      manager = new ScheduleManager(data, currentLimits, [], false);
+      manager = new ScheduleManager(dataForGeneration, currentLimits, [], false);
+
+      if (Object.keys(baseSchedule).length > 0) {
+        manager.importExistingSchedule(baseSchedule);
+      }
+
       result = manager.generate();
     }
 
@@ -234,7 +253,6 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
 
     // SECURITY CHECK: nunca deixar schedule ser undefined/null
     const safeSchedule = (result && result.schedule) ? result.schedule : (manager ? manager.schedule : {});
-    console.log('Salvando schedule:', Object.keys(safeSchedule || {}).length, 'slots');
 
     setData(prev => ({ ...prev, schedule: safeSchedule || {} }));
 
@@ -244,8 +262,23 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
     let pendingActivities = Math.max(0, totalExpectedActivities - totalAllocatedFinal);
     const overInfo = computeOverAllocations(data, manager.bookedEntries);
 
+    // ⭐ Criar validador de aulas síncronas para passar ao resolver
+    // O construtor do SynchronousClassValidator já cria activities automaticamente se necessário
+    const activityCountBefore = data.activities?.length || 0;
+    const syncValidator = new SynchronousClassValidator(data);
+    const activityCountAfter = data.activities?.length || 0;
+
+    // Notificar se activities foram criadas automaticamente
+    if (activityCountAfter > activityCountBefore) {
+      const createdCount = activityCountAfter - activityCountBefore;
+      setGenerationLog(prev => [...prev,
+      `🔧 ${createdCount} atribuição(ões) criada(s) automaticamente para turmas síncronas`,
+        ''
+      ]);
+    }
+
+    let incompleteActivities = [];
     if (pendingActivities > 0) {
-      const incompleteActivities = [];
       data.activities.forEach(act => {
         const bookedCount = manager.bookedEntries.filter(e =>
           e.classId === act.classId && e.subjectId === act.subjectId
@@ -259,13 +292,72 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
         }
       });
 
-      const resolver = new SmartAllocationResolver(data, manager.schedule, currentLimits);
+      const resolver = new SmartAllocationResolver(data, manager.schedule, currentLimits, syncValidator);
       const resolverResult = resolver.resolve(incompleteActivities);
 
       if (resolverResult.resolved) {
         manager.schedule = resolverResult.schedule;
         manager.bookedEntries = resolverResult.bookedEntries;
         totalAllocatedFinal = resolverResult.bookedEntries.length;
+        pendingActivities = 0;
+        setGenerationLog(prev => [...prev, ...resolverResult.log]);
+      } else {
+        setGenerationLog(prev => [...prev, ...resolverResult.log]);
+
+        // Atualiza estado mesmo parcial
+        manager.schedule = resolverResult.schedule;
+        manager.bookedEntries = resolverResult.bookedEntries;
+        totalAllocatedFinal = manager.bookedEntries.length;
+        pendingActivities = incompleteActivities.length - (resolverResult.resolved ? incompleteActivities.length : 0); // Aproximado
+      }
+    }
+
+    // ⭐ FASE FINAL: FORÇAR AULAS SÍNCRONAS (Hard Constraint)
+    // Assegura que nada moveu as síncronas do lugar, ou se moveu, coloca de volta à força.
+    // O usuário solicitou: "Primeiro distribua as aulas e por ultimo aloque a aula sincrona removendo a aula que esta lá"
+    if (syncValidator) {
+      setGenerationLog(prev => [...prev, '', '🔒 Verificando integridade das aulas síncronas...']);
+      const logs = [];
+      const groups = syncValidator.getAllSyncGroups();
+      let fixedCount = 0;
+
+      for (const group of groups) {
+        if (group.preferredDayIdx != null && group.preferredSlotIdx != null) {
+          // Tenta corrigir/forçar posição
+          // Passa uma turma representativa pois o validador lida com o grupo
+          const firstClass = group.classes[0];
+          const fixed = syncValidator.fixSyncGroupPosition(
+            manager,
+            firstClass,
+            group.subjectId,
+            group.teacherId,
+            logs
+          );
+          if (fixed) fixedCount++;
+        }
+      }
+
+      setGenerationLog(prev => [...prev, ...logs]);
+      if (fixedCount > 0) {
+        setGenerationLog(prev => [...prev, `✅ ${fixedCount} grupos síncronos verificados/corrigidos.`]);
+      }
+    }
+
+    const refreshed = computeOverAllocations(data, manager.bookedEntries);
+    overInfo.subjectExcess = refreshed.subjectExcess;
+    overInfo.teacherExcess = refreshed.teacherExcess;
+    overInfo.totalExcess = refreshed.totalExcess;
+
+
+    // FASE 4: Quebra de duplas
+    if (pendingActivities > 0 && incompleteActivities.length > 0) {
+      const doubleBreaker = new DoubleBreakResolver(data, manager.schedule, currentLimits);
+      const breakResult = doubleBreaker.resolve(incompleteActivities);
+
+      if (breakResult.brokenDoubles.length > 0) {
+        manager.schedule = breakResult.schedule;
+        manager.bookedEntries = breakResult.bookedEntries;
+        totalAllocatedFinal = breakResult.bookedEntries.length;
         pendingActivities = Math.max(0, totalExpectedActivities - totalAllocatedFinal);
 
         const refreshed = computeOverAllocations(data, manager.bookedEntries);
@@ -273,26 +365,7 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
         overInfo.teacherExcess = refreshed.teacherExcess;
         overInfo.totalExcess = refreshed.totalExcess;
       }
-
-      // FASE 4: Quebra de duplas
-      if (pendingActivities > 0 && incompleteActivities.length > 0) {
-        const doubleBreaker = new DoubleBreakResolver(data, manager.schedule, currentLimits);
-        const breakResult = doubleBreaker.resolve(incompleteActivities);
-
-        if (breakResult.brokenDoubles.length > 0) {
-          manager.schedule = breakResult.schedule;
-          manager.bookedEntries = breakResult.bookedEntries;
-          totalAllocatedFinal = breakResult.bookedEntries.length;
-          pendingActivities = Math.max(0, totalExpectedActivities - totalAllocatedFinal);
-
-          const refreshed = computeOverAllocations(data, manager.bookedEntries);
-          overInfo.subjectExcess = refreshed.subjectExcess;
-          overInfo.teacherExcess = refreshed.teacherExcess;
-          overInfo.totalExcess = refreshed.totalExcess;
-        }
-      }
     }
-
     // Gerar log final
     const finalLog = generateFinalLog(data, manager, overInfo, generationStartTime);
 
@@ -361,6 +434,11 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
       // NOVO: Forçar remoção se o slot não for do tipo 'aula' (ex: intervalo)
       if (slot.type !== 'aula') {
         allowed = false;
+      }
+
+      // EXCEÇÃO: Se for aula síncrona ou fixa, ignorar validação de slot (Constraints Bypassed)
+      if (entry.isSynchronous || entry.isGranularSync || entry.locked || entry.isFixed) {
+        allowed = true;
       }
 
       if (!allowed) {
@@ -541,20 +619,29 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
 
     const overInfo = computeOverAllocations(data, manager.bookedEntries);
     if (overInfo.totalExcess > 0) {
-      log.push(`🧹 Removendo ${overInfo.totalExcess} aula(s) excedente(s) para liberar espaço...`);
-      removeExcessAllocations(manager, overInfo, data, log, syncValidator);
+      // log.push(`🧹 Removendo ${overInfo.totalExcess} aula(s) excedente(s) para liberar espaço...`);
+      // removeExcessAllocations(manager, overInfo, data, log, syncValidator);
+      log.push(`⚠️ Ignorando ${overInfo.totalExcess} excessos para preservar alocações forçadas.`);
     }
 
     let recovered = 0;
     const MAX_ATTEMPTS_PER_ACTIVITY = 3;
+    const MAX_BATCH_SIZE = 5;
+
+    log.push(`🎯 Estratégia: Resolver apenas ${MAX_BATCH_SIZE} pendências por vez (Iterativo)...`);
 
     for (const pending of pendingList) {
+      if (recovered >= MAX_BATCH_SIZE) {
+        log.push(`⏸️ Pausando reparo após resolver ${recovered} pendências (Lote concluído).`);
+        break;
+      }
+
       let remaining = Number(pending.quantity) || 0;
       const label = describeActivity(pending, data);
       log.push(`➡️ Ajustando ${label} (${remaining} pendente(s))`);
 
       let attempts = 0;
-      while (remaining > 0 && attempts < MAX_ATTEMPTS_PER_ACTIVITY) {
+      while (remaining > 0 && attempts < MAX_ATTEMPTS_PER_ACTIVITY && recovered < MAX_BATCH_SIZE) {
         attempts++;
         let fixed = 0;
 
@@ -572,7 +659,10 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
         }
 
         if (fixed === 0) {
-          fixed = tryRepairSingle(pending, manager, data, log, false, syncValidator);
+          fixed = tryRepairSingleDeep(pending, manager, data, log, syncValidator, 3); // Deep swap depth 3
+          if (fixed === 0) {
+            fixed = tryRepairSingle(pending, manager, data, log, false, syncValidator);
+          }
         }
 
         if (fixed === 0) {
@@ -597,10 +687,9 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
 
     if (remainingAfter <= 0) {
       log.push('✅ Parabéns pelo trabalho sua grade foi construida com sucesso.');
-      console.log('Smart Repair Success: 0 pendencies remaining.');
     } else {
       log.push(`⏳ Pendências remanescentes: ${remainingAfter}`);
-      console.log(`Smart Repair Incomplete: ${remainingAfter} remaining.`);
+      log.push(`💡 Clique em "Ajustar" novamente para resolver mais um lote de 5.`);
     }
 
     setData(prev => ({ ...prev, schedule: manager.schedule }));
