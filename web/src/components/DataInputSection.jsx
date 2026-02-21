@@ -175,6 +175,18 @@ const DataInputSection = ({ data, setData, subView, setSubView, calendarSettings
   };
 
   const handleSaveClass = () => {
+    // 🔴 VALIDAÇÃO: Verificar se há horários selecionados
+    const hasActiveSlots = Object.keys(activeSlotsByDay).length > 0 && 
+                           Object.values(activeSlotsByDay).some(arr => arr && arr.length > 0);
+    
+    // 🔴 FIX 2.0: Rejeitar se tem activeSlotsByDay vazio E selectedClassSlots vazio
+    const hasSelectedClassSlots = selectedClassSlots && selectedClassSlots.length > 0;
+    
+    if (!hasActiveSlots && !hasSelectedClassSlots) {
+      window.alert('⚠️ Erro: A turma deve ter pelo menos um horário ativo selecionado!\n\nPor favor, indique na seção "Horários Ativos por Dia da Semana" quais horários esta turma tem aulas.');
+      return;
+    }
+
     if (editingClassId) {
       // Modo edição: salva uma única turma
       if (!newClassName.trim()) return;
@@ -182,15 +194,16 @@ const DataInputSection = ({ data, setData, subView, setSubView, calendarSettings
         id: editingClassId,
         name: newClassName,
         shift: newClassShift,
-        activeSlotsByDay: activeSlotsByDay,
+        activeSlotsByDay: hasActiveSlots ? activeSlotsByDay : {},
         // 🔴 IMPORTANTE: Se tem activeSlotsByDay (novo), limpar activeSlots (legado) para evitar conflito
-        activeSlots: Object.keys(activeSlotsByDay).length > 0 ? [] : selectedClassSlots
+        // Sempre prefer activeSlotsByDay, mas mantém activeSlots para compat retroativa
+        activeSlots: hasActiveSlots ? [] : (hasSelectedClassSlots ? selectedClassSlots : [])
       };
       setData(prev => ({
         ...prev,
         classes: prev.classes.map(c => c.id === editingClassId ? { ...c, ...classData } : c)
       }));
-      window.alert('Alterações salvas com sucesso.');
+      window.alert('✅ Alterações salvas com sucesso.');
     } else {
       // Modo criação: cria múltiplas turmas com os mesmos horários
       const validNames = classNames.filter(name => name.trim() !== '');
@@ -200,15 +213,17 @@ const DataInputSection = ({ data, setData, subView, setSubView, calendarSettings
         id: uid(),
         name: name.trim(),
         shift: newClassShift,
-        activeSlotsByDay: activeSlotsByDay,
+        activeSlotsByDay: hasActiveSlots ? activeSlotsByDay : {},
         // 🔴 IMPORTANTE: Se tem activeSlotsByDay (novo), limpar activeSlots (legado) para evitar conflito
-        activeSlots: Object.keys(activeSlotsByDay).length > 0 ? [] : selectedClassSlots
+        activeSlots: hasActiveSlots ? [] : (hasSelectedClassSlots ? selectedClassSlots : [])
       }));
 
       setData(prev => ({
         ...prev,
         classes: [...prev.classes, ...newClasses]
       }));
+
+      window.alert(`✅ ${validNames.length} turma(s) criada(s) com sucesso!`);
 
       // Só fecha o formulário quando criar novas turmas
       resetClassForm();

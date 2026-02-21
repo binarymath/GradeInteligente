@@ -19,10 +19,11 @@ class SmartAllocationResolver {
     this.timeSlots = data.timeSlots;
     this.lessonIndices = this.timeSlots.map((_, i) => i).filter(i => this.timeSlots[i].type === 'aula');
 
-    this.maxTimeMs = 30000; // 30 segundos máximo
+    // ⭐ ESTRATÉGIA 1: Aumentar limites para zerar pendências
+    this.maxTimeMs = 180000; // 180 segundos (3 minutos) - 6x mais tempo
     this.startTime = Date.now();
     this.attemptCount = 0;
-    this.maxAttempts = 100000; // Aumentado para 100k tentativas
+    this.maxAttempts = 1000000; // 1 MILHÃO de tentativas - 10x mais
     this.log = [];
     this.debugInfo = {};
   }

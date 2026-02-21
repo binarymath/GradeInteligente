@@ -485,3 +485,132 @@ export function tryRepairSingleDeep(activity, manager, data, log, syncValidator,
   }
   return 0;
 }
+
+/**
+ * ⭐ ESTRATÉGIA 3: Remoção AGRESSIVA de excessos para liberar espaço
+ * Remove aulas excedentes de forma estratégica (menos importantes primeiro)
+ * 
+ * Prioridade de remoção:
+ * 1. Aulas de turmas que TAMBÉM têm pendências (libera espaço para "competidores")
+ * 2. Aulas não-síncronas (síncronas são críticas)
+ * 3. Aulas de professores "ocupados" (reduz conflitos)
+ */
+export function aggressiveExcessRemoval(manager, data, overInfo, syncValidator, log = []) {
+  if (!overInfo.totalExcess || overInfo.totalExcess <= 0) {
+    return 0; // Nada a remover
+  }
+
+  const toRemove = [];
+  const entries = manager.bookedEntries;
+
+  // Mapear quais turma-matéria têm excessos
+  const excessBySubject = new Map();
+
+  if (Array.isArray(overInfo.subjectExcess)) {
+    overInfo.subjectExcess.forEach(item => {
+      const key = `${item.classId}-${item.subjectId}`;
+      excessBySubject.set(key, (excessBySubject.get(key) || 0) + (item.excess || 0));
+    });
+  } else if (overInfo.subjectExcess && typeof overInfo.subjectExcess === 'object') {
+    Object.entries(overInfo.subjectExcess).forEach(([key, value]) => {
+      excessBySubject.set(key, Number(value) || 0);
+    });
+  }
+
+  // Encontrar todas as entradas excedentes
+  for (const entry of entries) {
+    if (!entry.classId || !entry.subjectId) continue;
+    if (entry.isSynchronous || entry.isGranularSync || entry.isFixed) continue; // ⚠️ Não remover síncronas
+
+    const key = `${entry.classId}-${entry.subjectId}`;
+    const excessAmount = excessBySubject.get(key) || 0;
+
+    if (excessAmount > 0) {
+      toRemove.push({
+        entry,
+        excessAmount,
+        // Score para priorização (menor = remove primeiro)
+        removalScore: calculateRemovalScore(entry, manager, data, syncValidator)
+      });
+    }
+  }
+
+  // Ordenar por removalScore (remove más candidatas primeiro)
+  toRemove.sort((a, b) => a.removalScore - b.removalScore);
+
+  // Remover até cobrir o excesso total
+  let removed = 0;
+  let actuallyRemoved = [];
+
+  for (const { entry } of toRemove) {
+    if (removed >= overInfo.totalExcess) break;
+
+    // Tenta remover
+    const wasBooked = manager.bookedEntries.some(e =>
+      e.classId === entry.classId &&
+      e.dayIdx === entry.dayIdx &&
+      e.slotIdx === entry.slotIdx
+    );
+
+    if (wasBooked) {
+      manager._unbook(entry.classId, entry.dayIdx, entry.slotIdx);
+      actuallyRemoved.push(entry);
+      removed++;
+    }
+  }
+
+  if (actuallyRemoved.length > 0) {
+    const classNames = new Set(actuallyRemoved.map(e => {
+      const cls = data.classes?.find(c => c.id === e.classId);
+      return cls?.name || e.classId;
+    }));
+
+    log.push(`🧹 Removidas ${actuallyRemoved.length} aula(s) excedente(s) para liberar espaço`);
+    log.push(`   Turmas afetadas: ${Array.from(classNames).slice(0, 3).join(', ')}${classNames.size > 3 ? '...' : ''}`);
+  }
+
+  return actuallyRemoved.length;
+}
+
+/**
+ * Calcula score de "preferência de remoção" para uma entrada
+ * Menor score = remove com MAIS prioridade
+ * 
+ * Fatores:
+ * - Aulas não-síncronas têm lower score (mais provavelmente removidas)
+ * - Aulas de professores "sobrecarregados" têm lower score
+ * - Aulas de turmas sem pendências têm lower score (não prejudica)
+ */
+function calculateRemovalScore(entry, manager, data, syncValidator) {
+  let score = 100; // Default neutro
+
+  // Fator 1: Se é síncrona, aumenta score (nunca remover)
+  if (entry.isSynchronous || entry.isGranularSync || entry.isFixed) {
+    return 9999; // Máximo, nunca remover
+  }
+
+  // Fator 2: Professores com pouco trabalho = score menor (remove mais facilmente)
+  if (entry.teacherId) {
+    const teacherLoad = manager.bookedEntries.filter(e => e.teacherId === entry.teacherId).length;
+    score -= Math.max(0, 50 - teacherLoad); // Quanto menos trabalho, menor score
+  }
+
+  // Fator 3: Turmas com muitos horários = score menor (tem alternativas)
+  if (entry.classId) {
+    const classData = data.classes?.find(c => c.id === entry.classId);
+    let availableSlots = 0;
+    if (classData?.activeSlotsByDay) {
+      availableSlots = Object.values(classData.activeSlotsByDay).reduce((sum, arr) => sum + (arr?.length || 0), 0);
+    } else if (classData?.activeSlots) {
+      availableSlots = classData.activeSlots.length;
+    }
+    score -= Math.max(0, availableSlots - 10); // Turmas com muitos slots = mais fácil remover
+  }
+
+  // Fator 4: Aulas duplas são menos valiosas (dois slots = uma aula, remover libera 1 slot)
+  if (entry.doubleLesson) {
+    score -= 20; // Mais fácil remover
+  }
+
+  return Math.max(0, score);
+}

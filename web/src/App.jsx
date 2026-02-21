@@ -64,6 +64,7 @@ const App = () => {
   const [generating, setGenerating] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [isVerified, setIsVerified] = useState(false); // Controla se já verificou a grade
+  const [hasVerifiedOnce, setHasVerifiedOnce] = useState(false);
   const [generationLog, setGenerationLog] = useState([]);
   const [viewMode, setViewMode] = useState(initialNav.viewMode);
   const [selectedEntities, setSelectedEntities] = useState(Array.isArray(initialNav.selectedEntity) ? initialNav.selectedEntity : (initialNav.selectedEntity ? [initialNav.selectedEntity] : []));
@@ -99,6 +100,7 @@ const App = () => {
   });
 
   const [showLog, setShowLog] = useState(true);
+
 
   const fileInputRef = useRef(null);
   const logContainerRef = useRef(null);
@@ -198,6 +200,25 @@ const App = () => {
     savePersisted();
   }, [data]);
 
+  // 🔴 FIX: Reset isVerified quando dados de config mudam (não quando schedule muda)
+  useEffect(() => {
+    // Se usuário alterou turmas, professores, matérias ou atividades, a grade atual pode estar inválida
+    // Logo, precisa verificar novamente antes de regenerar
+    setIsVerified(false);
+  }, [
+    data.classes?.length,
+    data.teachers?.length,
+    data.subjects?.length,
+    data.activities?.length,
+    data.timeSlots?.length
+  ]);
+
+  // 🔴 FIX 2.0: Reset isVerified quando schedule é modificada manualmente
+  useEffect(() => {
+    // Se usuário editou manualmente a grade em "Edição Manual", a verificação anterior fica inválida
+    setIsVerified(false);
+  }, [Object.keys(data.schedule || {}).length]); // Monitora mudanças na quantidade de aulas
+
   useEffect(() => {
     const saveCalendar = async () => {
       try {
@@ -273,7 +294,33 @@ const App = () => {
       const log = ['🔍 Verificando grade restaurada...'];
 
       if (!data.schedule || Object.keys(data.schedule).length === 0) {
-        log.push('⚠️ Nenhuma grade encontrada.');
+        // 🔴 FIX: Verificar se realmente não há grade OU se há turmas sem horários
+        const classesWithoutSlots = (data.classes || []).filter(cls => {
+          const hasActiveSlotsByDay = cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0;
+          const hasActiveSlots = cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0;
+          return !hasActiveSlotsByDay && !hasActiveSlots;
+        });
+
+        if (classesWithoutSlots.length > 0) {
+          log.push('');
+          log.push('🚨 PROBLEMA IDENTIFICADO:');
+          log.push('As seguinte turma(s) NÃO possuem horários cadastrados:');
+          classesWithoutSlots.forEach(cls => {
+            log.push(`   • ${cls.name || cls.id}`);
+          });
+          log.push('');
+          log.push('Para gerar a grade, você precisa:');
+          log.push('1. Ir em "Dados" → "Turmas"');
+          log.push('2. Editar cada turma acima e selecionar os horários permitidos');
+          log.push('3. Salvar e tentar gerar novamente');
+        } else {
+          log.push('⚠️ Nenhuma grade encontrada.');
+          log.push('');
+          log.push('Para gerar sua primeira grade:');
+          log.push('1. Clique em "Gerar Agora"');
+          log.push('2. Aguarde o processamento (2-3 minutos)');
+          log.push('3. A grade será gerada automaticamente');
+        }
         setGenerationLog(log);
         setGenerating(false);
         return;
@@ -332,6 +379,40 @@ const App = () => {
         if (invalidSlots.length > 10) {
           log.push(`   ... mais ${invalidSlots.length - 10} ocorrência(s).`);
         }
+      }
+
+      // 🔴 FIX: Detectar aulas alocadas em turmas SEM horários definidos
+      const classesWithAulesButNoSlots = [];
+      const classesWithAules = new Set();
+      
+      for (const [key, entry] of Object.entries(data.schedule)) {
+        classesWithAules.add(entry.classId);
+      }
+      
+      for (const classId of classesWithAules) {
+        const classData = classMap.get(classId);
+        if (!classData) continue;
+        
+        const hasActiveSlotsByDay = classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0;
+        const hasActiveSlots = classData.activeSlots && Array.isArray(classData.activeSlots) && classData.activeSlots.length > 0;
+        
+        // Se turma não tem horários definidos mas tem aulas, é um problema!
+        if (!hasActiveSlotsByDay && !hasActiveSlots) {
+          classesWithAulesButNoSlots.push(classData.name || classId);
+        }
+      }
+      
+      if (classesWithAulesButNoSlots.length > 0) {
+        log.push('');
+        log.push('🚨 ERRO CRÍTICO: Aulas alocadas em turmas SEM horários definidos!');
+        log.push('As seguintes turmas têm aulas, mas não têm horários ativos:');
+        classesWithAulesButNoSlots.forEach(name => log.push(`   • ${name}`));
+        log.push('');
+        log.push('⚠️ Essas aulas são INVÁLIDAS e não devem estar na grade.');
+        log.push('🔧 Solução:');
+        log.push('   1. Edite cada turma em "Dados" → "Turmas"');
+        log.push('   2. Marque os horários permitidos para cada turma');
+        log.push('   3. Regenere a grade com "Gerar Novamente"');
       }
 
       // === SEGUNDA CAMADA: VERIFICAÇÃO DE CONFLITO POR NOME DE PROFESSOR ===
@@ -753,6 +834,7 @@ const App = () => {
 
       setGenerationLog(log);
       setIsVerified(true); // Marca como verificado
+      setHasVerifiedOnce(true);
       setGenerating(false);
     }, 100);
   }, [data]);
@@ -773,6 +855,12 @@ const App = () => {
     [data]
   );
 
+  const hasSchedule = Object.keys(data.schedule || {}).length > 0;
+  const canGenerateNow = isVerified || !hasSchedule;
+  const primaryAction = canGenerateNow ? generateSchedule : verifySchedule;
+  const primaryButtonLabel = generating
+    ? (canGenerateNow ? 'Gerando...' : 'Verificando...')
+    : (isVerified ? 'Gerar Novamente' : (hasSchedule ? 'Verificar' : 'Gerar Agora'));
 
   const isElectron = typeof window !== 'undefined' && window.grade;
 
@@ -889,7 +977,7 @@ const App = () => {
                 <div className="flex items-center gap-2">
                   {generationLog.length === 0 && (
                     <>
-                      {isVerified && (
+                      {hasVerifiedOnce && hasSchedule && (
                         <button
                           onClick={handleSmartRepair}
                           disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
@@ -901,14 +989,12 @@ const App = () => {
                         </button>
                       )}
                       <button
-                        onClick={isVerified ? generateSchedule : verifySchedule}
+                        onClick={primaryAction}
                         disabled={generating || repairing}
                         className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         aria-busy={generating}
                       >
-                        {generating ? (isVerified ? 'Gerando...' : 'Verificando...') :
-                          (isVerified ? 'Gerar Novamente' :
-                            (Object.keys(data.schedule || {}).length > 0 ? 'Verificar' : 'Gerar Agora'))}
+                        {primaryButtonLabel}
                       </button>
                     </>
                   )}
@@ -918,7 +1004,7 @@ const App = () => {
                 <div className="flex flex-col">
                   <div className="flex justify-between items-center mb-2">
                     <div className="flex items-center gap-2">
-                      {isVerified && (
+                      {hasVerifiedOnce && hasSchedule && (
                         <button
                           onClick={handleSmartRepair}
                           disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
@@ -930,14 +1016,12 @@ const App = () => {
                         </button>
                       )}
                       <button
-                        onClick={isVerified ? generateSchedule : verifySchedule}
+                        onClick={primaryAction}
                         disabled={generating || repairing}
                         className="bg-indigo-600 text-white px-3 py-1.5 text-xs rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         aria-busy={generating}
                       >
-                        {generating ? (isVerified ? 'Gerando...' : 'Verificando...') :
-                          (isVerified ? 'Gerar Novamente' :
-                            (Object.keys(data.schedule || {}).length > 0 ? 'Verificar' : 'Gerar Agora'))}
+                        {primaryButtonLabel}
                       </button>
                     </div>
 

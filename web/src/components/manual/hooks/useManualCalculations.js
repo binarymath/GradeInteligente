@@ -10,16 +10,71 @@ export const useManualCalculations = (data) => {
 
             const lines = [];
             let totalExpected = 0;
-            let totalAllocated = 0;
-            let totalPending = 0;
 
             const newPendingItems = []; // Lista estruturada
+
+            // === HELPER: Contar alocações válidas (com mesma lógica de scheduleService.js) ===
+            const timeSlots = data.timeSlots || [];
+            const slotById = new Map(timeSlots.map((slot, idx) => [String(slot.id ?? idx), slot]));
+            const isLessonSlot = (slotId) => {
+                const slot = slotById.get(String(slotId)) || timeSlots[Number(slotId)];
+                return !!(slot && slot.type === 'aula');
+            };
+
+            const countValidAllocations = (scheduleObj) => {
+                let count = 0;
+                const bySubject = {}; // Para detalhar por classe-matéria
+                
+                for (const [key, entry] of Object.entries(scheduleObj || {})) {
+                    let dayIdx = entry.dayIdx;
+                    let slotIdx = entry.slotIdx;
+
+                    const parts = String(key).split('-');
+                    if (parts.length >= 3) {
+                        const sStr = parts[parts.length - 1];
+                        const dStr = parts[parts.length - 2];
+                        const maybeSlot = parseInt(sStr, 10);
+                        const maybeDay = DAYS.indexOf(dStr);
+                        if (!isNaN(maybeSlot) && maybeDay >= 0) {
+                            slotIdx = maybeSlot;
+                            dayIdx = maybeDay;
+                        }
+                    }
+
+                    if ((dayIdx === undefined || slotIdx === undefined) && entry.timeKey) {
+                        const tParts = entry.timeKey.split('-');
+                        const dIdx = DAYS.indexOf(tParts[0]);
+                        if (dIdx >= 0) dayIdx = dIdx;
+                        const sIdx = parseInt(tParts[1], 10);
+                        if (!isNaN(sIdx)) slotIdx = sIdx;
+                    }
+
+                    if (dayIdx === undefined || dayIdx < 0 || slotIdx === undefined) continue;
+
+                    const cls = data.classes?.find(c => c.id === entry.classId);
+                    const slotId = timeSlots[slotIdx]?.id ?? String(slotIdx);
+                    if (!cls) continue;
+                    if (!isLessonSlot(slotId)) continue;
+                    if (!isSlotActiveLocal(data, entry.classId, dayIdx, slotId)) continue;
+
+                    count += 1;
+                    
+                    // Detalhar por (classId-subjectId)
+                    const aggKey = `${entry.classId}-${entry.subjectId}`;
+                    bySubject[aggKey] = (bySubject[aggKey] || 0) + 1;
+                }
+                return { total: count, bySubject };
+            };
+
+            const allocationResult = countValidAllocations(data.schedule);
+            const totalAllocated = allocationResult.total;
+            const allocatedIndex = allocationResult.bySubject;
 
             // === ANÁLISE DE SLOTS (baseado em atividades, não em configuração) ===
             let totalUsedSlots = 0;
             const slotAnalysis = [];
 
-            // Contar alocações por classe
+            // Contar alocações por classe (usando mesma validação)
             const classAllocations = {};
             Object.entries(data.schedule || {}).forEach(([key, entry]) => {
                 // Tentar extrair dia/slot da key ou entry para validação
@@ -62,6 +117,12 @@ export const useManualCalculations = (data) => {
                     return;
                 }
 
+                // Valida se é slot de aula
+                const slotId = timeSlots[slotIdx]?.id ?? String(slotIdx);
+                if (!isLessonSlot(slotId)) {
+                    return;
+                }
+
                 if (!classAllocations[entry.classId]) {
                     classAllocations[entry.classId] = 0;
                 }
@@ -72,20 +133,14 @@ export const useManualCalculations = (data) => {
             // Coletar todas as atividades esperadas (Agrupado por MATÉRIA/TURMA)
             const expectedByKey = {};
             const teachersByKey = {};
-            const seenActivities = new Set();
 
             (data.activities || []).forEach(act => {
-                const checkKey = `${act.classId}-${act.subjectId}-${act.teacherId}`;
                 const aggKey = `${act.classId}-${act.subjectId}`;
+                const qty = parseInt(act.quantity) || 0;
+                expectedByKey[aggKey] = (expectedByKey[aggKey] || 0) + qty;
 
-                if (!seenActivities.has(checkKey)) {
-                    const qty = parseInt(act.quantity) || 0;
-                    expectedByKey[aggKey] = (expectedByKey[aggKey] || 0) + qty;
-                    seenActivities.add(checkKey);
-
-                    if (!teachersByKey[aggKey]) teachersByKey[aggKey] = new Set();
-                    if (act.teacherId) teachersByKey[aggKey].add(act.teacherId);
-                }
+                if (!teachersByKey[aggKey]) teachersByKey[aggKey] = new Set();
+                if (act.teacherId) teachersByKey[aggKey].add(act.teacherId);
             });
 
             // Contar total esperado por classe
@@ -98,55 +153,44 @@ export const useManualCalculations = (data) => {
                 classExpected[classId] += expected;
             });
 
-            // Mostrar análise por classe
+            // Calcular capacidade de slots (aula) por turma
+            const classCapacity = {};
+            let totalCapacity = 0;
             for (const classData of (data.classes || [])) {
-                const expected = classExpected[classData.id] || 0;
-                const allocated = classAllocations[classData.id] || 0;
-                const free = Math.max(0, expected - allocated);
+                const hasActiveSlotsByDay = classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0;
+                const hasActiveSlots = classData.activeSlots && Array.isArray(classData.activeSlots) && classData.activeSlots.length > 0;
 
-                if (expected > 0) {
-                    slotAnalysis.push(`   • ${classData.name}: ${allocated}/${expected} ocupado(s) (${free} livre(s))`);
+                let capacity = 0;
+                if (hasActiveSlotsByDay) {
+                    Object.values(classData.activeSlotsByDay).forEach(slotIds => {
+                        if (!Array.isArray(slotIds)) return;
+                        slotIds.forEach(slotId => {
+                            if (isLessonSlot(slotId)) capacity += 1;
+                        });
+                    });
+                } else if (hasActiveSlots) {
+                    const perDay = classData.activeSlots.filter(isLessonSlot).length;
+                    capacity = perDay * DAYS.length;
+                }
+
+                classCapacity[classData.id] = capacity;
+                totalCapacity += capacity;
+            }
+
+            // Mostrar análise por classe (ocupados x capacidade real de slots)
+            for (const classData of (data.classes || [])) {
+                const capacity = classCapacity[classData.id] || 0;
+                const allocated = classAllocations[classData.id] || 0;
+                const free = Math.max(0, capacity - allocated);
+
+                if (capacity > 0) {
+                    slotAnalysis.push(`   • ${classData.name}: ${allocated}/${capacity} ocupado(s) (${free} livre(s))`);
                 }
             }
 
             // === ANÁLISE DE PENDÊNCIAS ===
-            // Índice de alocação por (turma-matéria)
-            const allocatedIndex = {};
-            Object.entries(data.schedule || {}).forEach(([key, entry]) => {
-                let dayIdx = entry.dayIdx;
-                let slotIdx = entry.slotIdx;
-
-                // PRIORIDADE 1: Parsear da Key
-                const parts = key.split('-');
-                if (parts.length >= 3) {
-                    const sStr = parts[parts.length - 1];
-                    const dStr = parts[parts.length - 2];
-                    const maybeSlot = parseInt(sStr, 10);
-                    const maybeDay = DAYS.indexOf(dStr);
-                    if (!isNaN(maybeSlot) && maybeDay >= 0) {
-                        slotIdx = maybeSlot;
-                        dayIdx = maybeDay;
-                    }
-                }
-                // PRIORIDADE 2: Internal timeKey
-                if ((dayIdx === undefined || slotIdx === undefined) && entry.timeKey) {
-                    const tParts = entry.timeKey.split('-');
-                    const dIdx = DAYS.indexOf(tParts[0]);
-                    if (dIdx >= 0) dayIdx = dIdx;
-                    else {
-                        const dNum = parseInt(tParts[0]);
-                        if (!isNaN(dNum)) dayIdx = dNum;
-                    }
-                }
-
-                if (dayIdx === undefined || dayIdx === -1 || slotIdx === undefined) return;
-                if (!isSlotActiveLocal(data, entry.classId, dayIdx, slotIdx)) return;
-
-                // Chave de agregação simplificada: Class-Subject
-                const aggKey = `${entry.classId}-${entry.subjectId}`;
-                allocatedIndex[aggKey] = (allocatedIndex[aggKey] || 0) + 1;
-            });
-
+            // allocatedIndex já está calculado acima com a mesma validação
+            
             // Coletar totais e calcular pendências por MATÉRIA
             let totalExcess = 0;
             const excessDetails = [];
@@ -158,8 +202,6 @@ export const useManualCalculations = (data) => {
                 const excess = Math.max(0, allocated - expected);
 
                 totalExpected += expected;
-                totalAllocated += allocated;
-                totalPending += missing;
                 totalExcess += excess;
 
                 const [classId, subjectId] = key.split('-');
@@ -187,6 +229,9 @@ export const useManualCalculations = (data) => {
                     excessDetails.push(`${subjectName} - ${className}: +${excess}`);
                 }
             });
+
+            // CORRIGIR: totalPending deve ser totalExpected - totalAllocated (simples cálculo)
+            const totalPending = Math.max(0, totalExpected - totalAllocated);
 
             const unknownAllocationsCount = Math.max(0, totalUsedSlots - totalAllocated);
 
@@ -230,7 +275,14 @@ export const useManualCalculations = (data) => {
             return {
                 pendingLines: [...header, '', '⬇️ ITENS PENDENTES:', ...lines],
                 slotAnalysis,
-                summary: { totalExpected, totalAllocated, totalPending, totalUsedSlots },
+                summary: {
+                    totalExpected,
+                    totalAllocated,
+                    totalPending,
+                    totalUsedSlots,
+                    totalCapacity,
+                    freeSlots: Math.max(0, totalCapacity - totalAllocated)
+                },
                 pendingItems: newPendingItems,
                 missingDetails
             };

@@ -114,9 +114,53 @@ export function getEntrySpan(manager, entry) {
  * Monta lista de pendências (quantidade a alocar) sem modificar a grade
  */
 export function buildPendingActivitiesForRepair(data, manager) {
+  const timeSlots = data.timeSlots || [];
+
+  // Helper: Validar se uma alocação é realmente válida (slot de aula + ativo)
+  const isValidAllocation = (entry) => {
+    if (!entry.classId || !entry.subjectId) return false;
+    
+    let slotIdx = entry.slotIdx;
+    let dayIdx = entry.dayIdx;
+    
+    // Se não tem slotIdx/dayIdx, tenta extrair do timeKey
+    if ((slotIdx === undefined || dayIdx === undefined) && entry.timeKey) {
+      const parts = entry.timeKey.split('-');
+      const dayStr = parts[0];
+      const slotStr = parts[1];
+      
+      dayIdx = DAYS.indexOf(dayStr);
+      slotIdx = parseInt(slotStr, 10);
+    }
+    
+    if (dayIdx === undefined || dayIdx < 0 || slotIdx === undefined) return false;
+    
+    const slot = timeSlots[slotIdx];
+    if (!slot || slot.type !== 'aula') return false;
+    
+    const classData = data.classes?.find(c => c.id === entry.classId);
+    if (!classData) return false;
+    
+    // Verificar se slot está ativo
+    const slotId = slot.id ?? String(slotIdx);
+    if (classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
+      const activeSlotsForDay = classData.activeSlotsByDay[dayIdx];
+      if (!activeSlotsForDay || !Array.isArray(activeSlotsForDay) || !activeSlotsForDay.includes(slotId)) {
+        return false;
+      }
+    } else if (classData.activeSlots && Array.isArray(classData.activeSlots)) {
+      if (!classData.activeSlots.includes(slotId)) return false;
+    }
+    
+    return true;
+  };
+
   const bookedCounts = {};
 
   for (const entry of manager.bookedEntries) {
+    // Filtrar apenas alocações válidas
+    if (!isValidAllocation(entry)) continue;
+    
     const key = `${entry.classId}-${entry.subjectId}`;
     bookedCounts[key] = (bookedCounts[key] || 0) + 1;
   }

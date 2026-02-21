@@ -66,6 +66,9 @@ const PendingSidebar = ({
                 {summary && (
                     <div className="text-xs text-slate-500 mt-1">
                         {summary.totalAllocated}/{summary.totalExpected} aulas alocadas ({summary.totalPending} faltantes)
+                        <div className="mt-1">
+                            Slots: {summary.totalCapacity} | Livres: {summary.freeSlots}
+                        </div>
                     </div>
                 )}
             </div>

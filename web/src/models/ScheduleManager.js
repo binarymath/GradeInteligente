@@ -190,11 +190,20 @@ class ScheduleManager {
     const slotId = this.timeSlots[slotIdx]?.id || String(slotIdx);
 
     if (cls) {
+      // 🔴 FIX: Se a turma não tem horários definidos, NÃO permite alocação
+      const hasActiveSlotsByDay = cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0;
+      const hasActiveSlots = cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0;
+      
+      if (!hasActiveSlotsByDay && !hasActiveSlots) {
+        // Turma sem horários definidos = NENHUMA aula pode ser alocada
+        return false;
+      }
+
       // Prioriza activeSlotsByDay se existir
-      if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+      if (hasActiveSlotsByDay) {
         const activeSlotsForDay = cls.activeSlotsByDay[dayIdx];
         if (!activeSlotsForDay || !activeSlotsForDay.includes(slotId)) return false;
-      } else if (cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0) {
+      } else if (hasActiveSlots) {
         // Fallback: usa activeSlots (todos os dias)
         if (!cls.activeSlots.includes(slotId)) return false;
       }
@@ -315,10 +324,19 @@ class ScheduleManager {
         const slotId = this.timeSlots[slotIdx]?.id || String(slotIdx);
         if (cls) {
           let isSlotActive = false;
-          if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+          const hasActiveSlotsByDay = cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0;
+          const hasActiveSlots = cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0;
+          
+          // 🔴 FIX: Se turma sem horários, não permite
+          if (!hasActiveSlotsByDay && !hasActiveSlots) {
+            stats.classInactive++;
+            continue;
+          }
+          
+          if (hasActiveSlotsByDay) {
             const activeSlotsForDay = cls.activeSlotsByDay[dayIdx];
             isSlotActive = activeSlotsForDay && activeSlotsForDay.includes(slotId);
-          } else if (cls.activeSlots && Array.isArray(cls.activeSlots)) {
+          } else if (hasActiveSlots) {
             isSlotActive = cls.activeSlots.includes(slotId);
           }
           if (!isSlotActive) { stats.classInactive++; continue; }
@@ -391,19 +409,19 @@ class ScheduleManager {
     if (cls) {
       let isSlotPermitted = false;
 
-      if (cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0) {
+      const hasActiveSlotsByDay = cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0;
+      const hasActiveSlots = cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0;
+
+      // 🔴 FIX: Se turma não tem horários, NEGAR qualquer alocação
+      if (!hasActiveSlotsByDay && !hasActiveSlots) {
+        isSlotPermitted = false;
+      } else if (hasActiveSlotsByDay) {
         const activeSlotsForDay = cls.activeSlotsByDay[dayIdx];
         if (activeSlotsForDay && Array.isArray(activeSlotsForDay) && activeSlotsForDay.includes(slotId)) {
           isSlotPermitted = true;
         }
-      } else if (cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0) {
+      } else if (hasActiveSlots) {
         if (cls.activeSlots.includes(slotId)) {
-          isSlotPermitted = true;
-        }
-      } else {
-        // Sem restrição definida: permitir apenas slots de aula (não intervalo/almoco/etc)
-        const slot = this.timeSlots[slotIdx];
-        if (slot && (!slot.type || slot.type === 'aula')) {
           isSlotPermitted = true;
         }
       }
@@ -1235,13 +1253,25 @@ class ScheduleManager {
     for (const [key, entry] of Object.entries(this.schedule)) {
       // Validação de segurança
       if (!entry || typeof entry !== 'object') continue;
-      if (!entry.timeKey || typeof entry.timeKey !== 'string') continue;
+
+      let timeKey = entry.timeKey;
+      if (!timeKey || typeof timeKey !== 'string') {
+        const keyParts = String(key).split('-');
+        if (keyParts.length >= 3) {
+          const dayPart = keyParts[keyParts.length - 2];
+          const slotPart = keyParts[keyParts.length - 1];
+          timeKey = `${dayPart}-${slotPart}`;
+          entry.timeKey = timeKey;
+        }
+      }
+
+      if (!timeKey || typeof timeKey !== 'string') continue;
 
       // Extrai dayIdx e slotIdx da key "classId-DayName-SlotIdx" ? 
       // Não, a key é "classId-timeKey", onde timeKey é "DayName-SlotIdx"
       // entry tem: { subjectId, teacherId, classId, timeKey, isDoubleLesson }
 
-      const parts = entry.timeKey.split('-');
+      const parts = timeKey.split('-');
       if (parts.length < 2) continue;
 
       const [dayName, slotIdxStr] = parts;
@@ -1256,10 +1286,10 @@ class ScheduleManager {
 
       // Marca ocupação
       if (!this.teacherSchedule[entry.teacherId]) this.teacherSchedule[entry.teacherId] = {};
-      this.teacherSchedule[entry.teacherId][entry.timeKey] = true;
+      this.teacherSchedule[entry.teacherId][timeKey] = true;
 
       if (!this.classSchedule[entry.classId]) this.classSchedule[entry.classId] = {};
-      this.classSchedule[entry.classId][entry.timeKey] = true;
+      this.classSchedule[entry.classId][timeKey] = true;
 
       const slot = this.timeSlots[slotIdx];
 
@@ -1277,7 +1307,7 @@ class ScheduleManager {
 
       // Marcar slot como protegido se for síncrono
       if (entry.isSynchronous) {
-        this.protectedSlots.add(`${entry.classId}-${entry.timeKey}`);
+        this.protectedSlots.add(`${entry.classId}-${timeKey}`);
         console.log(`🔒 Slot protegido: ${entry.classId} em ${entry.timeKey} (síncrono)`);
       }
     }

@@ -21,6 +21,7 @@ import { DAYS } from '../utils';
 // Imports dos novos módulos modularizados
 import {
   describeActivity,
+  isSlotActive,
   computeOverAllocations,
   buildPendingActivitiesForRepair
 } from './scheduleHelpers';
@@ -34,7 +35,8 @@ import {
   tryRepairDouble,
   relocateBlockingEntry,
   relocateBlockingEntryDeep,
-  tryRepairSingleDeep
+  tryRepairSingleDeep,
+  aggressiveExcessRemoval  // ⭐ ESTRATÉGIA 3: Import da nova função de excess removal agressivo
 } from './smartRepairService';
 import {
   analyzeExistingSchedule,
@@ -100,13 +102,35 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
     }
 
     // FASE 0: Processar aulas síncronas antes de gerar o resto
-    const MAX_LOCAL_ATTEMPTS = 250;
+    // ⭐ ESTRATÉGIA 5: Aumentar MAX_LOCAL_ATTEMPTS (rodadas de tentativa) para mais oportunidades
+    const MAX_LOCAL_ATTEMPTS = 350;  // Aumentado de 250 para 350 (+40%)
     let manager = new ScheduleManager(data, currentLimits);
     let result = null;
     let minPending = Infinity;
     let bestManager = null;
 
     setGenerationLog([`🔄 Analisando estado inicial...`]);
+
+    // 🔴 FIX: Verificar se há turmas sem horários definidos e alertar
+    const classesWithoutSlots = data.classes.filter(cls => {
+      const hasActiveSlotsByDay = cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0;
+      const hasActiveSlots = cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0;
+      return !hasActiveSlotsByDay && !hasActiveSlots;
+    });
+
+    if (classesWithoutSlots.length > 0) {
+      const logEntries = [
+        `🚨 ERRO: As seguinte(s) turma(s) NÃO têm horários definidos:`,
+        ...classesWithoutSlots.map(c => `   • ${c.name || c.id}`),
+        ``,
+        `⚠️ Por favor, edite essas turmas em "Dados" → "Turmas" e selecione os horários ativos.`,
+        ``,
+        `Operação cancelada.`
+      ];
+      setGenerationLog(prev => [...prev, ...logEntries]);
+      setGenerating(false);
+      return;
+    }
 
     const subjectsWithSyncConfigs = data.subjects.filter(
       s => s.isSynchronous && s.synchronousConfigs && s.synchronousConfigs.length > 0
@@ -170,7 +194,6 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
       activities: data.activities.filter(a => !allocatedSyncIds.includes(a.id))
     };
 
-    // FASE 1: Gerar múltiplas variações
     if (!shouldUseExisting) {
       setGenerationLog(prev => [...prev, `🔄 Executando ${MAX_LOCAL_ATTEMPTS} iterações para encontrar a melhor grade base...`]);
 
@@ -309,6 +332,61 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
         manager.bookedEntries = resolverResult.bookedEntries;
         totalAllocatedFinal = manager.bookedEntries.length;
         pendingActivities = incompleteActivities.length - (resolverResult.resolved ? incompleteActivities.length : 0); // Aproximado
+
+        // ⭐ ESTRATÉGIA 3: Se ainda há pendências > 10, tenta refinamento com excess removal agressivo
+        if (pendingActivities > 10) {
+          const refinementLog = [];
+          refinementLog.push('');
+          refinementLog.push('🔄 Iniciando refinamento iterativo (remoção agressiva de excessos)...');
+
+          const overInfoBefore = computeOverAllocations(data, manager.bookedEntries);
+          const removedCount = aggressiveExcessRemoval(manager, data, overInfoBefore, syncValidator, refinementLog);
+
+          if (removedCount > 0) {
+            refinementLog.push(`✅ ${removedCount} aula(s) removida(s), liberando slots para pendências`);
+            refinementLog.push('');
+
+            // Recalcular pendências com espaço liberado
+            incompleteActivities = [];
+            data.activities.forEach(act => {
+              const bookedCount = manager.bookedEntries.filter(e =>
+                e.classId === act.classId && e.subjectId === act.subjectId
+              ).length;
+
+              const missing = act.quantity - bookedCount;
+              if (missing > 0) {
+                for (let i = 0; i < missing; i++) {
+                  incompleteActivities.push(act);
+                }
+              }
+            });
+
+            // Tenta resolver novamente com espaço liberado
+            refinementLog.push(`🔄 Tentando SmartAllocationResolver novamente com ${incompleteActivities.length} aula(s)...`);
+            const resolver2 = new SmartAllocationResolver(data, manager.schedule, currentLimits, syncValidator);
+            const resolverResult2 = resolver2.resolve(incompleteActivities);
+
+            if (resolverResult2.resolved) {
+              manager.schedule = resolverResult2.schedule;
+              manager.bookedEntries = resolverResult2.bookedEntries;
+              totalAllocatedFinal = resolverResult2.bookedEntries.length;
+              pendingActivities = 0;
+              refinementLog.push(`✅ SUCESSO na iteração! Todas as pendências foram resolvidas.`);
+            } else {
+              manager.schedule = resolverResult2.schedule;
+              manager.bookedEntries = resolverResult2.bookedEntries;
+              totalAllocatedFinal = manager.bookedEntries.length;
+              const oldPending = pendingActivities;
+              pendingActivities = incompleteActivities.length - resolverResult2.bookedEntries.filter(e =>
+                incompleteActivities.some(a => a.classId === e.classId && a.subjectId === e.subjectId)
+              ).length;
+
+              refinementLog.push(`⚠️ Melhoria parcial: ${oldPending} → ${pendingActivities} pendências (-${oldPending - pendingActivities})`);
+            }
+
+            setGenerationLog(prev => [...prev, ...refinementLog]);
+          }
+        }
       }
     }
 
@@ -595,6 +673,92 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
     const manager = new ScheduleManager(data, LIMITS);
     manager.importExistingSchedule(data.schedule);
 
+    const timeSlots = data.timeSlots || [];
+    const slotById = new Map(timeSlots.map((slot, idx) => [String(slot.id ?? idx), slot]));
+    const isLessonSlot = (slotId) => {
+      const slot = slotById.get(String(slotId)) || timeSlots[Number(slotId)];
+      return !!(slot && slot.type === 'aula');
+    };
+
+    // HELPER: Função para contar aulas alocadas validamente
+    const countValidAllocations = (scheduleObj) => {
+      let count = 0;
+      for (const [key, entry] of Object.entries(scheduleObj || {})) {
+        let dayIdx = entry.dayIdx;
+        let slotIdx = entry.slotIdx;
+
+        const parts = String(key).split('-');
+        if (parts.length >= 3) {
+          const sStr = parts[parts.length - 1];
+          const dStr = parts[parts.length - 2];
+          const maybeSlot = parseInt(sStr, 10);
+          const maybeDay = DAYS.indexOf(dStr);
+          if (!isNaN(maybeSlot) && maybeDay >= 0) {
+            slotIdx = maybeSlot;
+            dayIdx = maybeDay;
+          }
+        }
+
+        if ((dayIdx === undefined || slotIdx === undefined) && entry.timeKey) {
+          const tParts = entry.timeKey.split('-');
+          const dIdx = DAYS.indexOf(tParts[0]);
+          if (dIdx >= 0) dayIdx = dIdx;
+          const sIdx = parseInt(tParts[1], 10);
+          if (!isNaN(sIdx)) slotIdx = sIdx;
+        }
+
+        if (dayIdx === undefined || dayIdx < 0 || slotIdx === undefined) continue;
+
+        const cls = data.classes?.find(c => c.id === entry.classId);
+        const slotId = timeSlots[slotIdx]?.id ?? String(slotIdx);
+        if (!cls) continue;
+        if (!isLessonSlot(slotId)) continue;
+        if (!isSlotActive(cls, dayIdx, slotId)) continue;
+
+        count += 1;
+      }
+      return count;
+    };
+
+    let totalCapacity = 0;
+    for (const classData of (data.classes || [])) {
+      const hasActiveSlotsByDay = classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0;
+      const hasActiveSlots = classData.activeSlots && Array.isArray(classData.activeSlots) && classData.activeSlots.length > 0;
+
+      if (hasActiveSlotsByDay) {
+        Object.values(classData.activeSlotsByDay).forEach(slotIds => {
+          if (!Array.isArray(slotIds)) return;
+          slotIds.forEach(slotId => {
+            if (isLessonSlot(slotId)) totalCapacity += 1;
+          });
+        });
+      } else if (hasActiveSlots) {
+        const perDay = classData.activeSlots.filter(isLessonSlot).length;
+        totalCapacity += perDay * DAYS.length;
+      }
+    }
+
+    let totalAllocated = countValidAllocations(data.schedule);
+
+    let totalAssigned = 0;
+    for (const act of data.activities || []) {
+      totalAssigned += Number(act.quantity) || 0;
+    }
+
+    const freeSlots = Math.max(0, totalCapacity - totalAllocated);
+    const pendingEstimated = Math.max(0, totalAssigned - totalAllocated);
+
+    log.push(`📦 Slots ativos (aula): ${totalCapacity}`);
+    log.push(`📌 Aulas atribuídas: ${totalAssigned}`);
+    log.push(`✅ Aulas alocadas: ${totalAllocated}`);
+    log.push(`🪑 Slots livres: ${freeSlots}`);
+    if (totalAssigned > totalCapacity) {
+      log.push(`⚠️ Total de aulas atribuídas (${totalAssigned}) ultrapassa slots disponíveis (${totalCapacity}) em ${totalAssigned - totalCapacity} aula(s). Ajuste necessário.`);
+    }
+    if (pendingEstimated > freeSlots) {
+      log.push(`⚠️ Pendências (${pendingEstimated}) maiores que slots livres (${freeSlots}). Ajuste necessário nas turmas/atividades.`);
+    }
+
     const pendingList = buildPendingActivitiesForRepair(data, manager);
     if (pendingList.length === 0) {
       log.push('✅ Nenhuma pendência encontrada para ajuste.');
@@ -619,68 +783,98 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
 
     const overInfo = computeOverAllocations(data, manager.bookedEntries);
     if (overInfo.totalExcess > 0) {
-      // log.push(`🧹 Removendo ${overInfo.totalExcess} aula(s) excedente(s) para liberar espaço...`);
-      // removeExcessAllocations(manager, overInfo, data, log, syncValidator);
-      log.push(`⚠️ Ignorando ${overInfo.totalExcess} excessos para preservar alocações forçadas.`);
+      log.push(`⚠️ Excessos detectados: ${overInfo.totalExcess} aula(s) acima do planejado.`);
     }
 
     let recovered = 0;
-    const MAX_ATTEMPTS_PER_ACTIVITY = 3;
-    const MAX_BATCH_SIZE = 5;
+    const MAX_ATTEMPTS_PER_ACTIVITY = totalNeeded > 20 ? 5 : 3;
+    const baseBatchSize = Math.min(15, Math.max(1, Math.ceil(totalNeeded * 0.25)));
+    const batchSizes = [15, 10, 5, 1].filter(size => size <= baseBatchSize || size === 1);
 
-    log.push(`🎯 Estratégia: Resolver apenas ${MAX_BATCH_SIZE} pendências por vez (Iterativo)...`);
+    const runRepairPass = (pendingBatch, passLabel, batchSize) => {
+      let recoveredInPass = 0;
+      log.push(`🎯 ${passLabel} Resolver até ${batchSize} pendências (iterativo).`);
 
-    for (const pending of pendingList) {
-      if (recovered >= MAX_BATCH_SIZE) {
-        log.push(`⏸️ Pausando reparo após resolver ${recovered} pendências (Lote concluído).`);
-        break;
-      }
-
-      let remaining = Number(pending.quantity) || 0;
-      const label = describeActivity(pending, data);
-      log.push(`➡️ Ajustando ${label} (${remaining} pendente(s))`);
-
-      let attempts = 0;
-      while (remaining > 0 && attempts < MAX_ATTEMPTS_PER_ACTIVITY && recovered < MAX_BATCH_SIZE) {
-        attempts++;
-        let fixed = 0;
-
-        if (fixed === 0 && pending.doubleLesson && remaining >= 2) {
-          fixed = tryRepairDouble(pending, manager, data, log, syncValidator);
-        }
-
-        if (fixed === 0 && pending.doubleLesson && remaining >= 2) {
-          const first = tryRepairSingle(pending, manager, data, log, true, syncValidator);
-          const second = first ? tryRepairSingle(pending, manager, data, log, true, syncValidator) : 0;
-          fixed = (first || 0) + (second || 0);
-          if (fixed > 0) {
-            log.push(`🔨 Aula dupla quebrada em ${fixed} aula(s) simples para ${label}.`);
-          }
-        }
-
-        if (fixed === 0) {
-          fixed = tryRepairSingleDeep(pending, manager, data, log, syncValidator, 3); // Deep swap depth 3
-          if (fixed === 0) {
-            fixed = tryRepairSingle(pending, manager, data, log, false, syncValidator);
-          }
-        }
-
-        if (fixed === 0) {
+      for (const pending of pendingBatch) {
+        if (recoveredInPass >= batchSize) {
+          log.push(`⏸️ Pausando reparo após resolver ${recoveredInPass} pendências (Lote concluído).`);
           break;
         }
 
-        recovered += fixed;
-        remaining -= fixed;
-        if (remaining < 0) remaining = 0;
+        let remaining = Number(pending.quantity) || 0;
+        const label = describeActivity(pending, data);
+        log.push(`➡️ Ajustando ${label} (${remaining} pendente(s))`);
+
+        let attempts = 0;
+        while (remaining > 0 && attempts < MAX_ATTEMPTS_PER_ACTIVITY && recoveredInPass < batchSize) {
+          attempts++;
+          let fixed = 0;
+
+          if (fixed === 0 && pending.doubleLesson && remaining >= 2) {
+            fixed = tryRepairDouble(pending, manager, data, log, syncValidator);
+          }
+
+          if (fixed === 0 && pending.doubleLesson && remaining >= 2) {
+            const first = tryRepairSingle(pending, manager, data, log, true, syncValidator);
+            const second = first ? tryRepairSingle(pending, manager, data, log, true, syncValidator) : 0;
+            fixed = (first || 0) + (second || 0);
+            if (fixed > 0) {
+              log.push(`🔨 Aula dupla quebrada em ${fixed} aula(s) simples para ${label}.`);
+            }
+          }
+
+          if (fixed === 0) {
+            fixed = tryRepairSingleDeep(pending, manager, data, log, syncValidator, 3); // Deep swap depth 3
+            if (fixed === 0) {
+              fixed = tryRepairSingle(pending, manager, data, log, false, syncValidator);
+            }
+          }
+
+          if (fixed === 0) {
+            break;
+          }
+
+          recoveredInPass += fixed;
+          remaining -= fixed;
+          if (remaining < 0) remaining = 0;
+        }
+
+        if (remaining > 0) {
+          log.push(`⚠️ Ainda faltam ${remaining} aula(s) para ${label}.`);
+        }
       }
 
-      if (remaining > 0) {
-        log.push(`⚠️ Ainda faltam ${remaining} aula(s) para ${label}.`);
+      return recoveredInPass;
+    };
+
+    let recoveredInFirstPass = 0;
+    for (const size of batchSizes) {
+      recoveredInFirstPass = runRepairPass(pendingList, `1a rodada (lote ${size})`, size);
+      if (recoveredInFirstPass > 0) break;
+    }
+    recovered += recoveredInFirstPass;
+
+    if (recovered === 0 && overInfo.totalExcess > 0) {
+      log.push(`🧹 Tentando liberar espaço removendo ${overInfo.totalExcess} excesso(s) não-síncrono(s)...`);
+      const removedCount = aggressiveExcessRemoval(manager, data, overInfo, syncValidator, log);
+      if (removedCount > 0) {
+        const refreshedPending = buildPendingActivitiesForRepair(data, manager);
+        if (refreshedPending.length > 0) {
+          let recoveredInSecondPass = 0;
+          for (const size of batchSizes) {
+            recoveredInSecondPass = runRepairPass(refreshedPending, `2a rodada (após remover ${removedCount} excedente(s), lote ${size})`, size);
+            if (recoveredInSecondPass > 0) break;
+          }
+          recovered += recoveredInSecondPass;
+        }
       }
     }
 
-    const remainingAfter = buildPendingActivitiesForRepair(data, manager)
-      .reduce((sum, act) => sum + (Number(act.quantity) || 0), 0);
+    const remainingPending = buildPendingActivitiesForRepair(data, manager);
+    const remainingAfter = remainingPending.reduce((sum, act) => sum + (Number(act.quantity) || 0), 0);
+
+    // RECALCULAR totalAllocated final (para refletir mudanças do Smart Repair)
+    const totalAllocatedFinal = countValidAllocations(manager.schedule);
 
     log.push('');
     log.push(`✅ Smart Repair finalizado: ${recovered} aula(s) realocada(s).`);
@@ -689,7 +883,120 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
       log.push('✅ Parabéns pelo trabalho sua grade foi construida com sucesso.');
     } else {
       log.push(`⏳ Pendências remanescentes: ${remainingAfter}`);
-      log.push(`💡 Clique em "Ajustar" novamente para resolver mais um lote de 5.`);
+      const currentFreeSlots = Math.max(0, totalCapacity - totalAllocatedFinal);
+      const overageTotalAssigned = Math.max(0, totalAssigned - totalCapacity);
+      log.push(`   🪑 ${currentFreeSlots} slots livres.`);
+      if (overageTotalAssigned > 0) {
+        log.push(`   ⚠️ ${overageTotalAssigned} aula(s) ultrapassando o limite do total de slots que é de ${totalCapacity}.`);
+      }
+
+      // === DIAGNÓSTICO DETALHADO DAS PENDÊNCIAS ===
+      log.push('');
+      log.push('📋 Análise das pendências não resolvidas:');
+      
+      const diagnosticByReason = {
+        'Turma cheia': [],
+        'Aula síncrona (grupo bloqueado)': [],
+        'Aula dupla (sem 2 slots livres)': [],
+        'Professor com conflitos': [],
+        'Outro motivo': []
+      };
+
+      for (const pending of remainingPending) {
+        const classData = data.classes?.find(c => c.id === pending.classId);
+        const subject = data.subjects?.find(s => s.id === pending.subjectId);
+        const teacher = data.teachers?.find(t => t.id === pending.teacherId);
+        
+        if (!classData || !subject) continue;
+
+        // Contar slots ativos para esta turma
+        let activeSlotsCount = 0;
+        if (classData.activeSlotsByDay && Object.keys(classData.activeSlotsByDay).length > 0) {
+          for (const slotIds of Object.values(classData.activeSlotsByDay)) {
+            if (Array.isArray(slotIds)) {
+              const lessonSlots = slotIds.filter(slotId => {
+                const slot = data.timeSlots?.[slotId];
+                return slot?.type === 'aula';
+              });
+              activeSlotsCount += lessonSlots.length;
+            }
+          }
+        } else if (classData.activeSlots && Array.isArray(classData.activeSlots)) {
+          const lessonSlots = classData.activeSlots.filter(slotId => {
+            const slot = data.timeSlots?.[slotId];
+            return slot?.type === 'aula';
+          });
+          activeSlotsCount += lessonSlots.length * DAYS.length;
+        }
+
+        // Contar quantas aulas desta turma já estão alocadas
+        let allocatedForClass = 0;
+        for (const entry of manager.bookedEntries) {
+          if (entry.classId === pending.classId) allocatedForClass += 1;
+        }
+
+        // Determinar motivo da pendência
+        let reason = 'Outro motivo';
+
+        if (pending.isSynchronous || pending.isGranularSync || pending.syncronizeGroup) {
+          reason = 'Aula síncrona (grupo bloqueado)';
+        } else if (pending.doubleLesson && currentFreeSlots < 2) {
+          reason = 'Aula dupla (sem 2 slots livres)';
+        } else if (allocatedForClass >= activeSlotsCount && activeSlotsCount > 0) {
+          reason = 'Turma cheia';
+        } else if (teacher) {
+          // Verificar conflitos de professor
+          const teacherEntries = manager.bookedEntries.filter(e => e.teacherId === pending.teacherId);
+          if (teacherEntries.length > 0) {
+            reason = 'Professor com conflitos';
+          }
+        }
+
+        diagnosticByReason[reason].push({
+          quantity: pending.quantity,
+          className: classData.name,
+          subjectName: subject.name,
+          teacherName: teacher?.name || 'Professor',
+          pending: pending
+        });
+      }
+
+      // Exibir resumo agrupado
+      for (const [reason, items] of Object.entries(diagnosticByReason)) {
+        if (items.length === 0) continue;
+
+        const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
+        log.push(`   🔹 ${reason}: ${totalQty} aula(s)`);
+
+        // Agrupar por turma para visibilidade
+        const byClass = {};
+        items.forEach(item => {
+          if (!byClass[item.className]) byClass[item.className] = [];
+          byClass[item.className].push(item);
+        });
+
+        for (const [className, classItems] of Object.entries(byClass)) {
+          const qty = classItems.reduce((sum, item) => sum + item.quantity, 0);
+          log.push(`      • ${className}: ${qty} aula(s)`);
+          classItems.forEach(item => {
+            log.push(`        - ${item.subjectName} (Prof. ${item.teacherName})`);
+          });
+        }
+      }
+
+      const suggestedBatch = batchSizes.find(size => size > 1) || 1;
+      log.push(`💡 Clique em "Ajustar" novamente para resolver mais um lote de ${suggestedBatch}.`);
+    }
+
+    // === RESUMO FINAL DA OPERAÇÃO ===
+    log.push('');
+    log.push('📊 RESUMO FINAL DA OPERAÇÃO:');
+    log.push(`   ✅ Smart Repair finalizado: ${recovered} aula(s) realocada(s).`);
+    log.push(`   ⏳ Pendências remanescentes: ${remainingAfter}`);
+    log.push(`   🪑 ${Math.max(0, totalCapacity - totalAllocatedFinal)} slots livres.`);
+    const finalOverage = Math.max(0, totalAssigned - totalCapacity);
+    if (finalOverage > 0) {
+      log.push(`   ⚠️ ${finalOverage} aula(s) ultrapassando o limite do total de slots que é de ${totalCapacity}.`);
     }
 
     setData(prev => ({ ...prev, schedule: manager.schedule }));

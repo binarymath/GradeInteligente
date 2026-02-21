@@ -16,7 +16,33 @@ export function useScheduleVerifier(data) {
             const log = ['🔍 Verificando grade restaurada...'];
 
             if (!data.schedule || Object.keys(data.schedule).length === 0) {
-                log.push('⚠️ Nenhuma grade encontrada.');
+                // 🔴 FIX: Verificar se realmente não há grade OU se há turmas sem horários
+                const classesWithoutSlots = (data.classes || []).filter(cls => {
+                    const hasActiveSlotsByDay = cls.activeSlotsByDay && Object.keys(cls.activeSlotsByDay).length > 0;
+                    const hasActiveSlots = cls.activeSlots && Array.isArray(cls.activeSlots) && cls.activeSlots.length > 0;
+                    return !hasActiveSlotsByDay && !hasActiveSlots;
+                });
+
+                if (classesWithoutSlots.length > 0) {
+                    log.push('');
+                    log.push('🚨 PROBLEMA IDENTIFICADO:');
+                    log.push('As seguinte turma(s) NÃO possuem horários cadastrados:');
+                    classesWithoutSlots.forEach(cls => {
+                        log.push(`   • ${cls.name || cls.id}`);
+                    });
+                    log.push('');
+                    log.push('Para gerar a grade, você precisa:');
+                    log.push('1. Ir em "Dados" → "Turmas"');
+                    log.push('2. Editar cada turma acima e selecionar os horários permitidos');
+                    log.push('3. Salvar e tentar gerar novamente');
+                } else {
+                    log.push('⚠️ Nenhuma grade encontrada.');
+                    log.push('');
+                    log.push('Para gerar sua primeira grade:');
+                    log.push('1. Clique em "Gerar Agora"');
+                    log.push('2. Aguarde o processamento (2-3 minutos)');
+                    log.push('3. A grade será gerada automaticamente');
+                }
                 setGenerationLog(log);
                 setGenerating(false);
                 return;
