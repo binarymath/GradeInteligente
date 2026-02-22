@@ -456,26 +456,9 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
       setGenerationLog(prev => [...prev, '', '🚨 Ativando modo AGRESSIVO para resolver pendências restantes...']);
       const aggressiveLog = [];
 
-      // 5.1: Resolver com relaxamento de constraints (permitir mais aulas da mesma matéria por dia)
-      const relaxedLimits = { ...currentLimits, MAX_SAME_SUBJECT_PER_DAY: 4 }; // Aumentado de 2 para 4
-      aggressiveLog.push(`⚙️ Permitindo até 4 aulas da mesma matéria por dia (em vez de 2)...`);
-      
-      const relaxedResolver = new SmartAllocationResolver(data, manager.schedule, relaxedLimits, syncValidator);
-      const relaxedResult = relaxedResolver.resolve(incompleteActivities);
-      
-      if (relaxedResult.resolved || relaxedResult.bookedEntries.length > manager.bookedEntries.length) {
-        const before = manager.bookedEntries.length;
-        manager.schedule = relaxedResult.schedule;
-        manager.bookedEntries = relaxedResult.bookedEntries;
-        totalAllocatedFinal = manager.bookedEntries.length;
-        pendingActivities = Math.max(0, totalExpectedActivities - totalAllocatedFinal);
-        aggressiveLog.push(`✅ +${manager.bookedEntries.length - before} aula(s) alocada(s) (${pendingActivities} pendências restantes)`);
-      }
-
-      // 5.2: Se ainda houver pendências, quebrar TODAS as duplas obrigatoriamente
-      if (pendingActivities > 20) {
-        aggressiveLog.push('');
-        aggressiveLog.push(`🔨 Quebrando TODAS as aulas duplas da grade (forçado)...`);
+  
+      // 5.1: Quebra obrigatória de duplas para liberar slots
+      aggressiveLog.push(`🔨 Quebrando aulas duplas para liberar slots...`);
         
         const doubleEntries = manager.bookedEntries.filter(e => {
           const slot = data.timeSlots[e.slotIdx];
@@ -510,7 +493,7 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
           aggressiveLog.push(`   Liberados ${freed} slot(s) para alocação`);
           
           // Retenta allocation com slots libertos
-          const retryResolver = new SmartAllocationResolver(data, manager.schedule, relaxedLimits, syncValidator);
+          const retryResolver = new SmartAllocationResolver(data, manager.schedule, currentLimits, syncValidator);
           const retryResult = retryResolver.resolve(incompleteActivities);
           
           if (retryResult.bookedEntries.length > manager.bookedEntries.length) {
@@ -528,7 +511,7 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
         aggressiveLog.push('');
         aggressiveLog.push('� Ativando modo EXTREMO (força alocação ignorando conflitos menores)...');
         
-        const forceResolver = new ForceAllocationResolver(data, manager.schedule, relaxedLimits);
+        const forceResolver = new ForceAllocationResolver(data, manager.schedule, currentLimits);
         const forceResult = forceResolver.resolve(incompleteActivities);
         
         if (forceResult.allocatedCount > 0) {
