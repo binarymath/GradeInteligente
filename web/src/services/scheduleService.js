@@ -198,6 +198,11 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
       setGenerationLog(prev => [...prev, `🔄 Executando ${MAX_LOCAL_ATTEMPTS} iterações para encontrar a melhor grade base...`]);
 
       for (let i = 0; i < MAX_LOCAL_ATTEMPTS; i++) {
+        // Yield a cada 20 iterações para permitir que o navegador responda
+        if (i % 20 === 0 && i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
         // Usa o data filtrado
         const tempManager = new ScheduleManager(dataForGeneration, currentLimits, [], true);
 
@@ -477,8 +482,15 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
     // LIMPAR AULAS EM HORÁRIOS/DIAS NÃO PERMITIDOS
     const invalidAulas = [];
     const invalidDetails = []; // Para log detalhado
+    let processedCount = 0;
 
     for (const [key, entry] of Object.entries(data.schedule)) {
+      // Yield a cada 50 aulas processadas
+      if (processedCount % 50 === 0 && processedCount > 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      processedCount++;
+
       if (!entry.classId || !entry.subjectId) continue;
 
       const parts = key.split('-');
@@ -577,7 +589,14 @@ export async function smartRepairAsync(data, setData, setGenerationLog, setRepai
     };
 
     // 1. Agrupar todas as aulas por Professor (usando Nome para garantir unicidade visual)
+    let groupProcessedCount = 0;
     for (const [key, entry] of Object.entries(data.schedule)) {
+      // Yield a cada 50 aulas processadas
+      if (groupProcessedCount % 50 === 0 && groupProcessedCount > 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      groupProcessedCount++;
+
       if (!entry.teacherId) continue;
 
       const teacher = teacherMap.get(entry.teacherId);
