@@ -449,6 +449,93 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
         overInfo.totalExcess = refreshed.totalExcess;
       }
     }
+
+    // ⭐ FASE 5: ESTRATÉGIA AGRESSIVA - Se ainda há muitas pendências (>30), usar táticas extremas
+    if (pendingActivities > 30) {
+      setGenerationLog(prev => [...prev, '', '🚨 Ativando modo AGRESSIVO para resolver pendências restantes...']);
+      const aggressiveLog = [];
+
+      // 5.1: Resolver com relaxamento de constraints (permitir mais aulas da mesma matéria por dia)
+      const relaxedLimits = { ...currentLimits, MAX_SAME_SUBJECT_PER_DAY: 4 }; // Aumentado de 2 para 4
+      aggressiveLog.push(`⚙️ Permitindo até 4 aulas da mesma matéria por dia (em vez de 2)...`);
+      
+      const relaxedResolver = new SmartAllocationResolver(data, manager.schedule, relaxedLimits, syncValidator);
+      const relaxedResult = relaxedResolver.resolve(incompleteActivities);
+      
+      if (relaxedResult.resolved || relaxedResult.bookedEntries.length > manager.bookedEntries.length) {
+        const before = manager.bookedEntries.length;
+        manager.schedule = relaxedResult.schedule;
+        manager.bookedEntries = relaxedResult.bookedEntries;
+        totalAllocatedFinal = manager.bookedEntries.length;
+        pendingActivities = Math.max(0, totalExpectedActivities - totalAllocatedFinal);
+        aggressiveLog.push(`✅ +${manager.bookedEntries.length - before} aula(s) alocada(s) (${pendingActivities} pendências restantes)`);
+      }
+
+      // 5.2: Se ainda houver pendências, quebrar TODAS as duplas obrigatoriamente
+      if (pendingActivities > 20) {
+        aggressiveLog.push('');
+        aggressiveLog.push(`🔨 Quebrando TODAS as aulas duplas da grade (forçado)...`);
+        
+        const doubleEntries = manager.bookedEntries.filter(e => {
+          const slot = data.timeSlots[e.slotIdx];
+          const nextSlot = e.slotIdx + 1 < data.timeSlots.length ? data.timeSlots[e.slotIdx + 1] : null;
+          
+          // Detecta se é dupla verificando se há consecutivos
+          return nextSlot && manager.bookedEntries.some(e2 => 
+            e2.classId === e.classId && 
+            e2.dayIdx === e.dayIdx && 
+            e2.slotIdx === e.slotIdx + 1 &&
+            e2.subjectId === e.subjectId
+          );
+        });
+
+        // Remove as segundas aulas das duplas para liberar slots
+        let freed = 0;
+        const keysToRemove = [];
+        doubleEntries.forEach(entry => {
+          const nextKey = `${entry.classId}-${DAYS[entry.dayIdx]}-${entry.slotIdx + 1}`;
+          if (manager.schedule[nextKey]) {
+            keysToRemove.push(nextKey);
+            freed++;
+          }
+        });
+
+        keysToRemove.forEach(key => delete manager.schedule[key]);
+        manager.bookedEntries = manager.bookedEntries.filter(e => 
+          !keysToRemove.includes(`${e.classId}-${DAYS[e.dayIdx]}-${e.slotIdx}`)
+        );
+        
+        if (freed > 0) {
+          aggressiveLog.push(`   Liberados ${freed} slot(s) para alocação`);
+          
+          // Retenta allocation com slots libertos
+          const retryResolver = new SmartAllocationResolver(data, manager.schedule, relaxedLimits, syncValidator);
+          const retryResult = retryResolver.resolve(incompleteActivities);
+          
+          if (retryResult.bookedEntries.length > manager.bookedEntries.length) {
+            manager.schedule = retryResult.schedule;
+            manager.bookedEntries = retryResult.bookedEntries;
+            totalAllocatedFinal = manager.bookedEntries.length;
+            pendingActivities = Math.max(0, totalExpectedActivities - totalAllocatedFinal);
+            aggressiveLog.push(`✅ +${retryResult.bookedEntries.length - (manager.bookedEntries.length - freed)} aula(s) realocada(s)`);
+          }
+        }
+      }
+
+      // 5.3: Se AINDA há muitas pendências, sugerir ações ao usuário
+      if (pendingActivities > 20) {
+        aggressiveLog.push('');
+        aggressiveLog.push('💡 Sugestões para resolver as pendências restantes:');
+        aggressiveLog.push(`   1️⃣ Reduzir quantidade de aulas de algumas matérias`);
+        aggressiveLog.push(`   2️⃣ Adicionar mais dias de aula (se possível para turmas)`);
+        aggressiveLog.push(`   3️⃣ Revisar indisponibilidades de professores (podem estar bloqueando muitos slots)`);
+        aggressiveLog.push(`   4️⃣ Dividir turmas síncronas em lotes menores para liberar horários`);
+        aggressiveLog.push(`   5️⃣ Estender turno de algumas turmas (Manhã → Integral, etc)`);
+      }
+
+      setGenerationLog(prev => [...prev, ...aggressiveLog]);
+    }
+
     // Gerar log final
     const finalLog = generateFinalLog(data, manager, overInfo, generationStartTime);
 
