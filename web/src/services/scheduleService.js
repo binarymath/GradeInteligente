@@ -12,6 +12,7 @@
 import ScheduleManager from '../models/ScheduleManager';
 import SmartAllocationResolver from '../models/SmartAllocationResolver';
 import DoubleBreakResolver from '../models/DoubleBreakResolver';
+import ForceAllocationResolver from '../models/ForceAllocationResolver';
 import SynchronousScheduler from './SynchronousScheduler';
 import SynchronousClassValidator from './SynchronousClassValidator';
 
@@ -525,7 +526,30 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
       // 5.3: Se AINDA há muitas pendências, sugerir ações ao usuário
       if (pendingActivities > 20) {
         aggressiveLog.push('');
-        aggressiveLog.push('💡 Sugestões para resolver as pendências restantes:');
+        aggressiveLog.push('� Ativando modo EXTREMO (força alocação ignorando conflitos menores)...');
+        
+        const forceResolver = new ForceAllocationResolver(data, manager.schedule, relaxedLimits);
+        const forceResult = forceResolver.resolve(incompleteActivities);
+        
+        if (forceResult.allocatedCount > 0) {
+          manager.schedule = forceResult.schedule;
+          manager.bookedEntries = forceResult.bookedEntries;
+          totalAllocatedFinal = manager.bookedEntries.length;
+          pendingActivities = Math.max(0, totalExpectedActivities - totalAllocatedFinal);
+          aggressiveLog.push(`✅ +${forceResult.allocatedCount} aula(s) alocada(s) em modo extremo (${pendingActivities} pendências)`);
+          
+          if (forceResult.warnings && forceResult.warnings.length > 0) {
+            aggressiveLog.push('');
+            aggressiveLog.push('⚠️ Avisos de alocação extrema:');
+            forceResult.warnings.forEach(w => aggressiveLog.push(`   ${w}`));
+          }
+        }
+      }
+
+      // 5.4: Se AINDA há muitas pendências, sugerir ações ao usuário
+      if (pendingActivities > 20) {
+        aggressiveLog.push('');
+        aggressiveLog.push('�💡 Sugestões para resolver as pendências restantes:');
         aggressiveLog.push(`   1️⃣ Reduzir quantidade de aulas de algumas matérias`);
         aggressiveLog.push(`   2️⃣ Adicionar mais dias de aula (se possível para turmas)`);
         aggressiveLog.push(`   3️⃣ Revisar indisponibilidades de professores (podem estar bloqueando muitos slots)`);
@@ -538,6 +562,7 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
 
     // Gerar log final
     const finalLog = generateFinalLog(data, manager, overInfo, generationStartTime);
+    setGenerationLog(prev => [...prev, ...finalLog]);
 
   } catch (error) {
     console.error("Erro fatal na geração:", error);
