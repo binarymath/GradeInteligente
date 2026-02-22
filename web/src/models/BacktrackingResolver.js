@@ -18,7 +18,7 @@ class BacktrackingResolver {
     this.timeSlots = data.timeSlots;
     this.lessonIndices = this.timeSlots.map((_, i) => i).filter(i => this.timeSlots[i].type === 'aula');
 
-    this.maxTimeMs = 30000; // 30 segundos máximo
+    this.maxTimeMs = 120000; // 120 segundos máximo (2 minutos)
     this.startTime = Date.now();
     this.attemptCount = 0;
     this.maxAttempts = 10000;

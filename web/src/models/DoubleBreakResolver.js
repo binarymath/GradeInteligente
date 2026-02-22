@@ -18,7 +18,7 @@ class DoubleBreakResolver {
     this.timeSlots = data.timeSlots;
     this.lessonIndices = this.timeSlots.map((_, i) => i).filter(i => this.timeSlots[i].type === 'aula');
     
-    this.maxTimeMs = 20000; // 20 segundos máximo
+    this.maxTimeMs = 90000; // 90 segundos máximo (1,5 minuto)
     this.startTime = Date.now();
     this.attemptCount = 0;
     this.maxAttempts = 5000;
