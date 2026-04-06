@@ -40,6 +40,22 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
   const [specificDayTitle, setSpecificDayTitle] = useState('');
   const [specificDayDescription, setSpecificDayDescription] = useState('');
 
+  // Estado para eventos semanais do professor
+  const [isAddingTeacherEvent, setIsAddingTeacherEvent] = useState(false);
+  const [teacherEventTitle, setTeacherEventTitle] = useState('');
+  const [teacherEventDayIdx, setTeacherEventDayIdx] = useState(0);
+  const [teacherEventSlotIdx, setTeacherEventSlotIdx] = useState('');
+  const [teacherEventColor, setTeacherEventColor] = useState('bg-orange-100 border-orange-300 text-orange-800');
+
+  const TEACHER_EVENT_COLORS = [
+    { name: 'Laranja', style: 'bg-orange-100 border-orange-300 text-orange-800' },
+    { name: 'Teal', style: 'bg-teal-100 border-teal-300 text-teal-800' },
+    { name: 'Azul', style: 'bg-blue-100 border-blue-300 text-blue-800' },
+    { name: 'Roxo', style: 'bg-purple-100 border-purple-300 text-purple-800' },
+    { name: 'Verde', style: 'bg-emerald-100 border-emerald-300 text-emerald-800' },
+    { name: 'Rosa', style: 'bg-pink-100 border-pink-300 text-pink-800' },
+  ];
+
   const syncSchoolYear = () => {
     setCalendarSettings(prev => ({ ...prev, schoolYearStart: schoolStart, schoolYearEnd: schoolEnd }));
   };
@@ -123,6 +139,35 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
     setCalendarSettings(prev => ({
       ...prev,
       specificDayEvents: (prev.specificDayEvents || []).filter(e => e.id !== id)
+    }));
+  };
+
+  const addTeacherEvent = () => {
+    if (!teacherEventTitle.trim()) { alert('Informe o título do evento.'); return; }
+    if (teacherEventSlotIdx === '') { alert('Selecione o horário.'); return; }
+
+    const newEvent = {
+      id: Date.now().toString(),
+      teacherId: selectedEntity,
+      title: teacherEventTitle.trim(),
+      dayIdx: parseInt(teacherEventDayIdx),
+      slotIdx: parseInt(teacherEventSlotIdx),
+      color: teacherEventColor
+    };
+
+    setCalendarSettings(prev => ({
+      ...prev,
+      teacherFixedEvents: [...(prev.teacherFixedEvents || []), newEvent]
+    }));
+
+    setTeacherEventTitle('');
+    setIsAddingTeacherEvent(false);
+  };
+
+  const removeTeacherEvent = (id) => {
+    setCalendarSettings(prev => ({
+      ...prev,
+      teacherFixedEvents: (prev.teacherFixedEvents || []).filter(e => e.id !== id)
     }));
   };
 
@@ -340,6 +385,133 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
               </div>
             )}
           </div>
+
+          {/* NOVA SEÇÃO: Eventos Semanais do Professor (Somente Visão Professor) */}
+          {viewMode === 'teacher' && selectedEntity && (
+            <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border-2 border-indigo-200 rounded-xl p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="w-5 h-5 text-indigo-600" />
+                <h4 className="font-bold text-indigo-800 text-base">Eventos Semanais do Professor</h4>
+              </div>
+              <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+                Adicione compromissos que se repetem toda semana (ex: Almoço, Café, Reunião ATPCG) apenas para este professor.
+              </p>
+
+              {!isAddingTeacherEvent ? (
+                <button
+                  onClick={() => setIsAddingTeacherEvent(true)}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 shadow-sm flex items-center gap-2 transition-colors"
+                >
+                  <Plus size={16} /> Adicionar Evento Semanal
+                </button>
+              ) : (
+                <div className="bg-white rounded-lg p-4 border border-indigo-300 shadow-sm space-y-3">
+                  <div className="grid md:grid-cols-4 gap-3">
+                    <div className="flex flex-col md:col-span-2">
+                      <label className="text-xs font-semibold text-slate-700 mb-1">Título (Ex: Almoço)</label>
+                      <input
+                        type="text"
+                        value={teacherEventTitle}
+                        onChange={e => setTeacherEventTitle(e.target.value)}
+                        placeholder="Nome do evento..."
+                        className="border rounded px-3 py-2 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500"
+                        list="common-events"
+                      />
+                      <datalist id="common-events">
+                        <option value="Reunião ATPCG" />
+                        <option value="Reunião ATPCA" />
+                        <option value="Horário de Estudo" />
+                        <option value="Multiplica" />
+                        <option value="Almoço" />
+                        <option value="Café" />
+                      </datalist>
+                    </div>
+                    <div className="flex flex-col">
+                      <label className="text-xs font-semibold text-slate-700 mb-1">Dia</label>
+                      <select
+                        value={teacherEventDayIdx}
+                        onChange={e => setTeacherEventDayIdx(e.target.value)}
+                        className="border rounded px-2 py-2 text-sm bg-slate-50"
+                      >
+                        {DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex flex-col">
+                      <label className="text-xs font-semibold text-slate-700 mb-1">Horário</label>
+                      <select
+                        value={teacherEventSlotIdx}
+                        onChange={e => setTeacherEventSlotIdx(e.target.value)}
+                        className="border rounded px-2 py-2 text-sm bg-slate-50"
+                      >
+                        <option value="">Selecione...</option>
+                        {data.timeSlots.map((slot, i) => (
+                          <option key={i} value={i}>{slot.start} - {slot.end} ({slot.type})</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex flex-col">
+                    <label className="text-xs font-semibold text-slate-700 mb-2">Cor do Evento</label>
+                    <div className="flex flex-wrap gap-2">
+                      {TEACHER_EVENT_COLORS.map(c => (
+                        <button
+                          key={c.style}
+                          onClick={() => setTeacherEventColor(c.style)}
+                          className={`w-8 h-8 rounded-full border-2 transition-all ${c.style.split(' ')[0]} ${teacherEventColor === c.style ? 'border-slate-800 scale-110 shadow-md' : 'border-transparent hover:scale-105'}`}
+                          title={c.name}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={addTeacherEvent}
+                      className="bg-indigo-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-indigo-700 flex items-center gap-1"
+                    >
+                      <Plus size={16} /> Adicionar
+                    </button>
+                    <button
+                      onClick={() => setIsAddingTeacherEvent(false)}
+                      className="bg-slate-300 text-slate-700 px-4 py-2 rounded text-sm font-medium hover:bg-slate-400"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de eventos semanais do professor */}
+              {calendarSettings.teacherFixedEvents && calendarSettings.teacherFixedEvents.filter(e => e.teacherId === selectedEntity).length > 0 && (
+                <div className="mt-4">
+                  <div className="text-xs font-bold text-indigo-700 mb-2">Eventos Semanais deste Professor</div>
+                  <ul className="divide-y divide-indigo-100 bg-white border border-indigo-200 rounded-lg shadow-sm">
+                    {calendarSettings.teacherFixedEvents
+                      .filter(e => e.teacherId === selectedEntity)
+                      .map(ev => (
+                        <li key={ev.id} className="flex items-center justify-between px-4 py-2 hover:bg-indigo-50 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-3 h-3 rounded-full ${ev.color.split(' ')[0]}`} />
+                            <div className="text-xs">
+                              <span className="font-bold text-slate-800">{ev.title}</span>
+                              <span className="text-slate-500 ml-2">
+                                {DAYS[ev.dayIdx]} o {data.timeSlots[ev.slotIdx]?.start}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => removeTeacherEvent(ev.id)}
+                            className="text-red-500 hover:text-red-700 p-1 transition-colors"
+                            title="Remover evento"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center print:hidden">
@@ -471,17 +643,30 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
                               );
                             }
                           } else if (viewMode === 'teacher') {
-                            const entry = Object.entries(data.schedule).find(([key, val]) => val.teacherId === selectedEntity && val.timeKey === timeKey);
-                            if (entry) {
-                              const item = entry[1];
-                              const subj = data.subjects.find(s => s.id === item.subjectId);
-                              const cls = data.classes.find(c => c.id === item.classId);
+                            // Primeiro verifica se há um evento semanal personalizado para este professor/slot
+                            const fixedEvt = (calendarSettings.teacherFixedEvents || []).find(
+                              e => e.teacherId === selectedEntity && e.dayIdx === dayIdx && e.slotIdx === absoluteIndex
+                            );
+
+                            if (fixedEvt) {
                               cellContent = (
-                                <div className="text-xs p-1 rounded" style={getEntityColorStyle(subj?.id, subj?.name)}>
-                                  <div className="font-bold">{subj?.name}</div>
-                                  <div className="opacity-75">{cls?.name}</div>
+                                <div className={`text-[11px] p-1 rounded border shadow-sm font-bold h-full flex flex-col justify-center text-center ${fixedEvt.color}`}>
+                                  {fixedEvt.title}
                                 </div>
                               );
+                            } else {
+                              const entry = Object.entries(data.schedule).find(([key, val]) => val.teacherId === selectedEntity && val.timeKey === timeKey);
+                              if (entry) {
+                                const item = entry[1];
+                                const subj = data.subjects.find(s => s.id === item.subjectId);
+                                const cls = data.classes.find(c => c.id === item.classId);
+                                cellContent = (
+                                  <div className="text-xs p-1 rounded" style={getEntityColorStyle(subj?.id, subj?.name)}>
+                                    <div className="font-bold">{subj?.name}</div>
+                                    <div className="opacity-75">{cls?.name}</div>
+                                  </div>
+                                );
+                              }
                             }
                           } else if (viewMode === 'subject') {
                             const entries = Object.values(data.schedule).filter(val => val.subjectId === selectedEntity && val.timeKey === timeKey);

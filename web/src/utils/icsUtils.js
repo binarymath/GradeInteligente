@@ -288,8 +288,60 @@ export const generateICSForTeacher = (data, calendarSettings, teacherId) => {
         icsLines.push('END:VEVENT');
     });
 
+    // Adicionar Eventos Semanais Personalizados do Professor (Almoço, Café, ATPCG, etc.)
+    (calendarSettings.teacherFixedEvents || []).forEach(evt => {
+        if (evt.teacherId !== teacher.id) return;
+
+        const timeSlot = data.timeSlots[evt.slotIdx];
+        if (!timeSlot) return;
+
+        const targetJSDay = (evt.dayIdx + 1) % 7;
+        let eventDate = new Date(schoolStart);
+        let addDays = (targetJSDay - eventDate.getDay() + 7) % 7;
+        eventDate.setDate(eventDate.getDate() + addDays);
+        if (eventDate > schoolEnd) return;
+
+        const [startH, startM] = timeSlot.start.split(':');
+        const [endH, endM] = timeSlot.end.split(':');
+
+        eventCount++;
+        icsLines.push('BEGIN:VEVENT');
+        icsLines.push(`UID:${uid()}@gradeinteligente.com`);
+        icsLines.push(`DTSTAMP:${nowString}`);
+        icsLines.push(`SUMMARY:${cleanText(evt.title)}`);
+        icsLines.push(`DESCRIPTION:${cleanText(evt.title + ' (Recorrente)')}`);
+        icsLines.push(`DTSTART;TZID=America/Sao_Paulo:${formatICSTime(eventDate, startH, startM)}`);
+        icsLines.push(`DTEND;TZID=America/Sao_Paulo:${formatICSTime(eventDate, endH, endM)}`);
+
+        const untilDate = new Date(schoolEnd);
+        untilDate.setHours(23, 59, 59);
+        const untilStr = untilDate.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+        icsLines.push(`RRULE:FREQ=WEEKLY;UNTIL=${untilStr}`);
+
+        // Excluir datas de férias/feriados para estes eventos também
+        (calendarSettings.events || []).forEach(globalEvt => {
+            if (!globalEvt.start || !globalEvt.end) return;
+            const evtStart = parseDateInput(globalEvt.start);
+            const evtEnd = parseDateInput(globalEvt.end);
+            if (!evtStart || !evtEnd) return;
+
+            let cursor = new Date(evtStart);
+            let diff = (targetJSDay - cursor.getDay() + 7) % 7;
+            cursor.setDate(cursor.getDate() + diff);
+
+            while (cursor <= evtEnd) {
+                if (cursor >= evtStart) {
+                    icsLines.push(`EXDATE;TZID=America/Sao_Paulo:${formatICSTime(cursor, startH, startM)}`);
+                }
+                cursor.setDate(cursor.getDate() + 7);
+            }
+        });
+
+        icsLines.push('END:VEVENT');
+    });
+
     if (eventCount === 0) {
-        alert(`Nenhuma aula encontrada para o professor ${teacher.name} no período letivo configurado.`);
+        alert(`Nenhuma aula ou evento encontrado para o professor ${teacher.name} no período letivo configurado.`);
         return;
     }
 
