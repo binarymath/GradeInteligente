@@ -204,12 +204,13 @@ class BacktrackingResolver {
       return false;
     }
 
+    const isDouble = activity.doubleLesson || activity.isDoubleLesson;
     // Verifica se há conflito com intervalo de aula dupla
-    if (activity.isDoubleLesson && slotIdx + 1 >= this.timeSlots.length) {
+    if (isDouble && slotIdx + 1 >= this.timeSlots.length) {
       return false; // Não há espaço para aula dupla
     }
 
-    if (activity.isDoubleLesson) {
+    if (isDouble) {
       const nextSlot = this.timeSlots[slotIdx + 1];
       // Validação de segurança
       if (!nextSlot || nextSlot.type !== 'aula') {
@@ -233,6 +234,7 @@ class BacktrackingResolver {
    * @private
    */
   _allocateSlot(activity, dayIdx, slotIdx) {
+    const isDouble = activity.doubleLesson || activity.isDoubleLesson;
     const day = DAYS[dayIdx];
     const key = `${activity.classId}-${day}-${slotIdx}`;
     const slot = this.timeSlots[slotIdx];
@@ -242,7 +244,7 @@ class BacktrackingResolver {
       teacherId: activity.teacherId,
       classId: activity.classId,
       timeKey: `${day}-${slotIdx}`,
-      isDoubleLesson: activity.isDoubleLesson || false
+      isDoubleLesson: isDouble || false
     };
 
     // Marca como ocupado
@@ -269,7 +271,7 @@ class BacktrackingResolver {
     });
 
     // Se for aula dupla, aloca também o próximo slot
-    if (activity.isDoubleLesson) {
+    if (isDouble) {
       const nextSlotIdx = slotIdx + 1;
       const nextSlot = this.timeSlots[nextSlotIdx];
 
@@ -309,6 +311,7 @@ class BacktrackingResolver {
    * @private
    */
   _deallocateSlot(activity, dayIdx, slotIdx) {
+    const isDouble = activity.doubleLesson || activity.isDoubleLesson;
     const day = DAYS[dayIdx];
     const key = `${activity.classId}-${day}-${slotIdx}`;
     const timeKey = `${day}-${slotIdx}`;
@@ -317,10 +320,10 @@ class BacktrackingResolver {
 
     // Remove do rastreamento
     if (this.teacherSchedule[activity.teacherId]) {
-      delete this.teacherSchedule[activity.teacherId][timeKey];
+      this.teacherSchedule[activity.teacherId][timeKey] = false;
     }
     if (this.classSchedule[activity.classId]) {
-      delete this.classSchedule[activity.classId][timeKey];
+      this.classSchedule[activity.classId][timeKey] = false;
     }
 
     // Remove do array de entradas
@@ -332,17 +335,17 @@ class BacktrackingResolver {
     );
 
     // Se for aula dupla, desaloca também o próximo slot
-    if (activity.isDoubleLesson) {
+    if (isDouble) {
       const nextSlotIdx = slotIdx + 1;
       const nextTimeKey = `${day}-${nextSlotIdx}`;
 
       delete this.schedule[`${activity.classId}-${day}-${nextSlotIdx}`];
 
       if (this.teacherSchedule[activity.teacherId]) {
-        delete this.teacherSchedule[activity.teacherId][nextTimeKey];
+        this.teacherSchedule[activity.teacherId][nextTimeKey] = false;
       }
       if (this.classSchedule[activity.classId]) {
-        delete this.classSchedule[activity.classId][nextTimeKey];
+        this.classSchedule[activity.classId][nextTimeKey] = false;
       }
 
       this.bookedEntries = this.bookedEntries.filter(e =>
@@ -391,9 +394,11 @@ class BacktrackingResolver {
    */
   _sortByDifficulty(activities) {
     return activities.sort((a, b) => {
+      const aIsDouble = a.doubleLesson || a.isDoubleLesson;
+      const bIsDouble = b.doubleLesson || b.isDoubleLesson;
       // Aulas duplas primeiro (mais restritas)
-      if (a.isDoubleLesson && !b.isDoubleLesson) return -1;
-      if (!a.isDoubleLesson && b.isDoubleLesson) return 1;
+      if (aIsDouble && !bIsDouble) return -1;
+      if (!aIsDouble && bIsDouble) return 1;
 
       // Depois atividades com turno específico
       const aHasTurno = a.shift && a.shift !== 'Todos' ? 1 : 0;

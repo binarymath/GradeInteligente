@@ -179,6 +179,13 @@ class CSPScheduleManager {
         // Se computeSlotShift falhar, assume inviável
         return false;
       }
+
+      if (classData.activeSlotsByDay && Array.isArray(classData.activeSlotsByDay[dayIdx])) {
+        const slotIdStr = String(timeSlot.id || slotIdx);
+        if (!classData.activeSlotsByDay[dayIdx].includes(slotIdStr)) {
+          return false;
+        }
+      }
     }
 
     // 2. Verificar disponibilidade do professor
@@ -194,7 +201,8 @@ class CSPScheduleManager {
     }
 
     // 4. Aulas duplas - checar se há slot seguinte
-    if (activity.doubleLesson) {
+    const isDouble = activity.doubleLesson || activity.isDoubleLesson;
+    if (isDouble) {
       // Encontrar índice de slotIdx em lessonIndices
       const existingIndex = this.lessonIndices.indexOf(slotIdx);
       if (existingIndex < 0 || existingIndex >= this.lessonIndices.length - 1) return false;
@@ -476,7 +484,8 @@ class CSPScheduleManager {
     }
 
     // Para aulas duplas, verificar segundo slot
-    if (activity.doubleLesson) {
+    const isDouble = activity.doubleLesson || activity.isDoubleLesson;
+    if (isDouble) {
       const nextSlotIdx = this.lessonIndices[this.lessonIndices.indexOf(slotIdx) + 1];
       if (nextSlotIdx === undefined) return false;
       
@@ -494,6 +503,7 @@ class CSPScheduleManager {
 
   _assignValue(activity, value) {
     if (!value || !activity) return;
+    const isDouble = activity.doubleLesson || activity.isDoubleLesson;
     const parts = value.split('-');
     if (parts.length < 2) return;
     const [dayIdx, slotIdx] = parts.map(Number);
@@ -508,8 +518,8 @@ class CSPScheduleManager {
       slotIdx,
       timeKey,
       start: this.timeSlots[slotIdx].start,
-      end: activity.doubleLesson ? this.timeSlots[this.lessonIndices[this.lessonIndices.indexOf(slotIdx) + 1]].end : this.timeSlots[slotIdx].end,
-      isDoubleLesson: activity.doubleLesson,
+      end: isDouble ? this.timeSlots[this.lessonIndices[this.lessonIndices.indexOf(slotIdx) + 1]].end : this.timeSlots[slotIdx].end,
+      isDoubleLesson: isDouble,
       isSynchronous: activity.isSynchronous || false,
       isGranularSync: activity.isGranularSync || false,
       isFixed: activity.isFixed || false,
@@ -528,7 +538,7 @@ class CSPScheduleManager {
     this.classSchedule[activity.classId][timeKey] = true;
 
     // Para aulas duplas
-    if (activity.doubleLesson) {
+    if (isDouble) {
       const nextSlotIdx = this.lessonIndices[this.lessonIndices.indexOf(slotIdx) + 1];
       const nextTimeKey = `${DAYS[dayIdx]}-${nextSlotIdx}`;
       this.teacherSchedule[activity.teacherId][nextTimeKey] = true;
@@ -548,18 +558,19 @@ class CSPScheduleManager {
   _unassignValue(activity) {
     const value = this.schedule[activity.id];
     if (!value) return;
+    const isDouble = activity.doubleLesson || activity.isDoubleLesson;
 
     const { dayIdx, slotIdx, timeKey } = value;
 
     delete this.schedule[activity.id];
-    delete this.teacherSchedule[activity.teacherId][timeKey];
-    delete this.classSchedule[activity.classId][timeKey];
+    this.teacherSchedule[activity.teacherId][timeKey] = false;
+    this.classSchedule[activity.classId][timeKey] = false;
 
-    if (activity.doubleLesson) {
+    if (isDouble) {
       const nextSlotIdx = this.lessonIndices[this.lessonIndices.indexOf(slotIdx) + 1];
       const nextTimeKey = `${DAYS[dayIdx]}-${nextSlotIdx}`;
-      delete this.teacherSchedule[activity.teacherId][nextTimeKey];
-      delete this.classSchedule[activity.classId][nextTimeKey];
+      this.teacherSchedule[activity.teacherId][nextTimeKey] = false;
+      this.classSchedule[activity.classId][nextTimeKey] = false;
     }
 
     this.bookedEntries = this.bookedEntries.filter(e => 

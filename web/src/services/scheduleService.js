@@ -504,7 +504,6 @@ export async function generateScheduleAsync(data, setData, setGenerationLog, set
             aggressiveLog.push(`✅ +${retryResult.bookedEntries.length - (manager.bookedEntries.length - freed)} aula(s) realocada(s)`);
           }
         }
-      }
 
       // 5.3: Se AINDA há muitas pendências, sugerir ações ao usuário
       if (pendingActivities > 20) {
