@@ -19,7 +19,7 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom', 'lucide-react'],
           pdf: ['jspdf', 'jspdf-autotable'],
-          excel: ['exceljs', 'xlsx', 'file-saver']
+          excel: ['exceljs', 'file-saver']
         }
       }
     }
