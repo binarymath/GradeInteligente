@@ -163,7 +163,10 @@ class SynchronousScheduler {
       }
 
       // Se quantity permite mais usos, retorna ela
-      if (currentUses < activity.quantity) {
+      const isDouble = activity.doubleLesson || activity.isDoubleLesson;
+      const maxUses = isDouble ? activity.quantity * 2 : activity.quantity;
+
+      if (currentUses < maxUses) {
         return activity;
       }
     }

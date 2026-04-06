@@ -103,61 +103,54 @@ class SynchronousClassValidator {
           subjectId: subject.id,
           teacherId: null, // Granular aceita QUALQUER professor (wildcard)
           preferredSlots: config.timeSlots || [],
-          preferredDayIdx: null,
-          preferredSlotIdx: null,
+          mandatorySlots: [],
           isGranular: true
         };
 
         // Parse do slot (Granular format: Day-Index or Legacy)
         if (config.timeSlots && config.timeSlots.length > 0) {
-          const slotStr = config.timeSlots[0];
-          let dayName = null;
-          let slotIdx = null;
+          for (const slotStr of config.timeSlots) {
+            let dayName = null;
+            let slotIdx = null;
 
-          if (slotStr.includes('-slot')) {
-            const match = slotStr.match(/(.+?)-slot(\d+)/);
-            if (match) {
-              dayName = match[1];
-              slotIdx = parseInt(match[2]);
+            if (slotStr.includes('-slot')) {
+              const match = slotStr.match(/(.+?)-slot(\d+)/);
+              if (match) {
+                dayName = match[1];
+                slotIdx = parseInt(match[2]);
+              }
             } else {
+              const parts = slotStr.split('-');
+              if (parts.length >= 2) {
+                dayName = parts[0];
+                slotIdx = parseInt(parts[1]);
+              }
             }
-          } else {
-            const parts = slotStr.split('-');
-            if (parts.length >= 2) {
-              dayName = parts[0];
-              slotIdx = parseInt(parts[1]);
-            } else {
+
+            if (dayName) {
+              // Normalizar dia (Português/Inglês)
+              const ENGLISH_DAYS = {
+                'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4,
+                'Segunda': 0, 'Terça': 1, 'Terca': 1, 'Quarta': 2, 'Quinta': 3, 'Sexta': 4,
+                'Segunda-feira': 0, 'Terça-feira': 1, 'Quarta-feira': 2, 'Quinta-feira': 3, 'Sexta-feira': 4
+              };
+
+              let dayIdx = -1;
+
+              // Tenta mapear direto
+              if (ENGLISH_DAYS[dayName] !== undefined) {
+                dayIdx = ENGLISH_DAYS[dayName];
+              } else {
+                // Tenta via array DAYS (case sensitive original)
+                dayIdx = DAYS.indexOf(dayName);
+              }
+
+              // Aceita slotIdx 0 (segunda fix check)
+              if (dayIdx >= 0 && slotIdx != null && !isNaN(slotIdx)) {
+                groupData.mandatorySlots.push({ dayIdx, slotIdx });
+              }
             }
           }
-
-          if (dayName) {
-            // Normalizar dia (Português/Inglês)
-            const ENGLISH_DAYS = {
-              'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4,
-              'Segunda': 0, 'Terça': 1, 'Terca': 1, 'Quarta': 2, 'Quinta': 3, 'Sexta': 4,
-              'Segunda-feira': 0, 'Terça-feira': 1, 'Quarta-feira': 2, 'Quinta-feira': 3, 'Sexta-feira': 4
-            };
-
-            let dayIdx = -1;
-
-            // Tenta mapear direto
-            if (ENGLISH_DAYS[dayName] !== undefined) {
-              dayIdx = ENGLISH_DAYS[dayName];
-            } else {
-              // Tenta via array DAYS (case sensitive original)
-              dayIdx = DAYS.indexOf(dayName);
-            }
-
-
-            // Aceita slotIdx 0 (segunda fix check)
-            if (dayIdx >= 0 && slotIdx != null && !isNaN(slotIdx)) {
-              groupData.preferredDayIdx = dayIdx;
-              groupData.preferredSlotIdx = slotIdx;
-            } else {
-            }
-          } else {
-          }
-        } else {
         }
 
         groups.set(groupKey, groupData);
@@ -265,7 +258,7 @@ class SynchronousClassValidator {
   areInReservedSlot(managerOrEntries, classId, subjectId, teacherId) {
     const group = this.getSyncGroup(classId, subjectId, teacherId);
     if (!group) return true; // Não é síncrona
-    if (group.preferredDayIdx == null || group.preferredSlotIdx == null) return true; // Sem horário reservado
+    if (!group.mandatorySlots || group.mandatorySlots.length === 0) return true; // Sem horário reservado
 
     // ✅ Suporta tanto manager quanto array direto
     const bookedEntries = Array.isArray(managerOrEntries)
@@ -281,10 +274,10 @@ class SynchronousClassValidator {
       );
 
       for (const entry of entries) {
-        if (
-          entry.dayIdx !== group.preferredDayIdx ||
-          entry.slotIdx !== group.preferredSlotIdx
-        ) {
+        const isMatch = group.mandatorySlots.some(
+          slot => slot.dayIdx === entry.dayIdx && slot.slotIdx === entry.slotIdx
+        );
+        if (!isMatch) {
           return false; // Encontrou aula em posição diferente do reservado
         }
       }
@@ -379,7 +372,7 @@ class SynchronousClassValidator {
     const group = this.getSyncGroup(classId, subjectId, teacherId);
     if (!group) return false; // Não é síncrona
 
-    if (group.preferredDayIdx == null || group.preferredSlotIdx == null) {
+    if (!group.mandatorySlots || group.mandatorySlots.length === 0) {
       log.push('⚠️ Sem horário reservado para aulas síncronas');
       return false;
     }
@@ -416,66 +409,70 @@ class SynchronousClassValidator {
         // Usa o professor REAL da atividade, não o do grupo (que pode ser null)
         const realTeacherId = activity.teacherId;
 
-        if (manager._isAvailable(realTeacherId, cls, subjectId, group.preferredDayIdx, group.preferredSlotIdx)) {
-          manager._book(activity, group.preferredDayIdx, group.preferredSlotIdx, false, true);
-          allocated++;
-        } else {
-          // FORCE BOOK SUPER-IMPROVED: Remove TUDO que estiver no caminho (Class Slot e Teacher)
+        for (const slotObj of group.mandatorySlots) {
+          const { dayIdx, slotIdx } = slotObj;
 
-          // 1. Limpar o slot da turma (quem estiver ocupando a sala)
-          const classConflicts = manager.bookedEntries.filter(e =>
-            e.classId === cls &&
-            e.dayIdx === group.preferredDayIdx &&
-            e.slotIdx === group.preferredSlotIdx
-          );
+          if (manager._isAvailable(realTeacherId, cls, subjectId, dayIdx, slotIdx)) {
+            manager._book(activity, dayIdx, slotIdx, false, true);
+            allocated++;
+          } else {
+            // FORCE BOOK SUPER-IMPROVED: Remove TUDO que estiver no caminho (Class Slot e Teacher)
 
-          for (const conflict of classConflicts) {
-            manager._unbook(conflict.classId, conflict.dayIdx, conflict.slotIdx);
-            log.push(`⚠️ Removendo ocupante da sala para forçar síncrona: Turma ${conflict.classId}, Matéria ${conflict.subjectId}`);
-          }
-
-          // 2. Limpar o professor (se ele estiver dando aula em OUTRA turma)
-          if (realTeacherId) {
-            const teacherConflicts = manager.bookedEntries.filter(e =>
-              e.teacherId === realTeacherId &&
-              e.dayIdx === group.preferredDayIdx &&
-              e.slotIdx === group.preferredSlotIdx
+            // 1. Limpar o slot da turma (quem estiver ocupando a sala)
+            const classConflicts = manager.bookedEntries.filter(e =>
+              e.classId === cls &&
+              e.dayIdx === dayIdx &&
+              e.slotIdx === slotIdx
             );
 
-            for (const tConflict of teacherConflicts) {
-              manager._unbook(tConflict.classId, tConflict.dayIdx, tConflict.slotIdx);
-              log.push(`⚠️ Removendo professor ${realTeacherId} da turma ${tConflict.classId} para forçar síncrona`);
+            for (const conflict of classConflicts) {
+              manager._unbook(conflict.classId, conflict.dayIdx, conflict.slotIdx);
+              log.push(`⚠️ Removendo ocupante da sala para forçar síncrona: Turma ${conflict.classId}, Matéria ${conflict.subjectId}`);
             }
-          }
 
-          // Tenta novamente após limpar tudo
-          if (manager._isAvailable(realTeacherId, cls, subjectId, group.preferredDayIdx, group.preferredSlotIdx)) {
-            manager._book(activity, group.preferredDayIdx, group.preferredSlotIdx, false, true);
-            allocated++;
-            log.push(`✅ Síncrona forçada com sucesso após limpeza total.`);
-          } else {
-            // ULTIMATE FORCE: Se ainda falhar (por regras de turno, activeSlots ou limites),
-            // Ignora as regras e aloca mesmo assim. O usuário mandou!
-            log.push(`⚠️ Constraints check failed (Turno/ActiveSlots). Executando ULTIMATE FORCE.`);
+            // 2. Limpar o professor (se ele estiver dando aula em OUTRA turma)
+            if (realTeacherId) {
+              const teacherConflicts = manager.bookedEntries.filter(e =>
+                e.teacherId === realTeacherId &&
+                e.dayIdx === dayIdx &&
+                e.slotIdx === slotIdx
+              );
 
-            try {
-              manager._book(activity, group.preferredDayIdx, group.preferredSlotIdx, false, true);
+              for (const tConflict of teacherConflicts) {
+                manager._unbook(tConflict.classId, tConflict.dayIdx, tConflict.slotIdx);
+                log.push(`⚠️ Removendo professor ${realTeacherId} da turma ${tConflict.classId} para forçar síncrona`);
+              }
+            }
+
+            // Tenta novamente após limpar tudo
+            if (manager._isAvailable(realTeacherId, cls, subjectId, dayIdx, slotIdx)) {
+              manager._book(activity, dayIdx, slotIdx, false, true);
               allocated++;
-              log.push(`✅ Síncrona alocada via ULTIMATE FORCE (Regras ignoradas).`);
-            } catch (e) {
-              log.push(`❌ Falha crítica real no ULTIMATE FORCE: ${e.message}`);
+              log.push(`✅ Síncrona forçada com sucesso após limpeza total no slot ${dayIdx}-${slotIdx}.`);
+            } else {
+              // ULTIMATE FORCE: Se ainda falhar (por regras de turno, activeSlots ou limites),
+              // Ignora as regras e aloca mesmo assim. O usuário mandou!
+              log.push(`⚠️ Constraints check failed (Turno/ActiveSlots). Executando ULTIMATE FORCE no slot ${dayIdx}-${slotIdx}.`);
+
+              try {
+                manager._book(activity, dayIdx, slotIdx, false, true);
+                allocated++;
+                log.push(`✅ Síncrona alocada via ULTIMATE FORCE (Regras ignoradas) no slot ${dayIdx}-${slotIdx}.`);
+              } catch (e) {
+                log.push(`❌ Falha crítica real no ULTIMATE FORCE no slot ${dayIdx}-${slotIdx}: ${e.message}`);
+              }
             }
           }
         }
       }
     }
 
-    if (allocated === group.classes.length) {
-      const dayName = DAYS[group.preferredDayIdx];
-      log.push(`✅ ${group.classes.length} aulas síncronas corrigidas para ${dayName}-slot${group.preferredSlotIdx}`);
+    const totalToAllocate = group.classes.length * group.mandatorySlots.length;
+    if (allocated === totalToAllocate) {
+      log.push(`✅ ${allocated} aulas síncronas corrigidas com os slots obrigatórios.`);
       return true;
     } else {
-      log.push(`❌ Apenas ${allocated}/${group.classes.length} aulas síncronas foram realocadas durante correção.`);
+      log.push(`❌ Apenas ${allocated}/${totalToAllocate} aulas síncronas foram realocadas durante correção.`);
       return false;
     }
   }
@@ -486,9 +483,9 @@ class SynchronousClassValidator {
   isReservedSlot(classId, subjectId, teacherId, dayIdx, slotIdx) {
     const group = this.getSyncGroup(classId, subjectId, teacherId);
     if (!group) return true; // Não é síncrona
-    if (group.preferredDayIdx == null || group.preferredSlotIdx == null) return true; // Sem reserva
+    if (!group.mandatorySlots || group.mandatorySlots.length === 0) return true; // Sem reserva
 
-    return dayIdx === group.preferredDayIdx && slotIdx === group.preferredSlotIdx;
+    return group.mandatorySlots.some(slot => slot.dayIdx === dayIdx && slot.slotIdx === slotIdx);
   }
 
   /**
@@ -501,13 +498,9 @@ class SynchronousClassValidator {
 
 
 
-    if (group.preferredDayIdx == null || group.preferredSlotIdx == null) return null;
+    if (!group.mandatorySlots || group.mandatorySlots.length === 0) return null;
 
-    return {
-      dayIdx: group.preferredDayIdx,
-      slotIdx: group.preferredSlotIdx,
-      groupId: group.id
-    };
+    return group.mandatorySlots;
   }
 
   /**
@@ -524,7 +517,7 @@ class SynchronousClassValidator {
 
     for (const group of this.syncGroups.values()) {
 
-      if (group.preferredDayIdx === dayIdx && group.preferredSlotIdx === slotIdx) {
+      if (group.mandatorySlots && group.mandatorySlots.some(slot => slot.dayIdx === dayIdx && slot.slotIdx === slotIdx)) {
 
         // Encontra todas as atividades deste grupo (uma por turma)
         for (const classId of group.classes) {

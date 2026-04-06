@@ -205,13 +205,16 @@ class BacktrackingResolver {
     }
 
     const isDouble = activity.doubleLesson || activity.isDoubleLesson;
+    const currentIndex = this.lessonIndices.indexOf(slotIdx);
+    const nextSlotIdx = this.lessonIndices[currentIndex + 1];
+
     // Verifica se há conflito com intervalo de aula dupla
-    if (isDouble && slotIdx + 1 >= this.timeSlots.length) {
+    if (isDouble && nextSlotIdx === undefined) {
       return false; // Não há espaço para aula dupla
     }
 
     if (isDouble) {
-      const nextSlot = this.timeSlots[slotIdx + 1];
+      const nextSlot = this.timeSlots[nextSlotIdx];
       // Validação de segurança
       if (!nextSlot || nextSlot.type !== 'aula') {
         return false; // Próximo slot não existe ou é intervalo
@@ -272,7 +275,8 @@ class BacktrackingResolver {
 
     // Se for aula dupla, aloca também o próximo slot
     if (isDouble) {
-      const nextSlotIdx = slotIdx + 1;
+      const currentIndex = this.lessonIndices.indexOf(slotIdx);
+      const nextSlotIdx = this.lessonIndices[currentIndex + 1];
       const nextSlot = this.timeSlots[nextSlotIdx];
 
       // Validação de segurança
@@ -336,7 +340,8 @@ class BacktrackingResolver {
 
     // Se for aula dupla, desaloca também o próximo slot
     if (isDouble) {
-      const nextSlotIdx = slotIdx + 1;
+      const currentIndex = this.lessonIndices.indexOf(slotIdx);
+      const nextSlotIdx = this.lessonIndices[currentIndex + 1];
       const nextTimeKey = `${day}-${nextSlotIdx}`;
 
       delete this.schedule[`${activity.classId}-${day}-${nextSlotIdx}`];

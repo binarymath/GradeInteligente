@@ -216,9 +216,9 @@ class CSPScheduleManager {
   }
 
   _areConsecutive(slotIdx1, slotIdx2) {
-    return Math.abs(slotIdx1 - slotIdx2) === 1 &&
-      this.timeSlots[slotIdx1]?.type === 'aula' &&
-      this.timeSlots[slotIdx2]?.type === 'aula';
+    const pos1 = this.lessonIndices.indexOf(slotIdx1);
+    const pos2 = this.lessonIndices.indexOf(slotIdx2);
+    return pos1 >= 0 && pos2 >= 0 && Math.abs(pos1 - pos2) === 1;
   }
 
   // ============================================

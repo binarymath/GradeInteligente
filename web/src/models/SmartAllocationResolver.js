@@ -613,15 +613,15 @@ class SmartAllocationResolver {
 
     // ⭐ VALIDAÇÃO #1: Validar aula síncrona obrigatória
     if (this.syncValidator) {
-      const mandatorySlot = this.syncValidator.getMandatorySlot(
+      const mandatorySlots = this.syncValidator.getMandatorySlot(
         activity.classId,
         activity.subjectId,
         activity.teacherId
       );
 
-      if (mandatorySlot) {
-
-        if (dayIdx !== mandatorySlot.dayIdx || slotIdx !== mandatorySlot.slotIdx) {
+      if (mandatorySlots) {
+        const isMatch = mandatorySlots.some(slot => slot.dayIdx === dayIdx && slot.slotIdx === slotIdx);
+        if (!isMatch) {
           return false;
         }
       }
