@@ -11,6 +11,22 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
   const [eventEnd, setEventEnd] = useState('');
   const [editingEventId, setEditingEventId] = useState(null);
 
+  // Estados para Eventos Semanais de Professores
+  const [teacherEventOpenId, setTeacherEventOpenId] = useState(null);
+  const [twTitle, setTwTitle] = useState('');
+  const [twDay, setTwDay] = useState(0);
+  const [twSlot, setTwSlot] = useState('');
+  const [twColor, setTwColor] = useState('bg-orange-100 border-orange-300 text-orange-800');
+
+  const TE_COLORS = [
+    { name: 'Laranja', style: 'bg-orange-100 border-orange-300 text-orange-800' },
+    { name: 'Teal', style: 'bg-teal-100 border-teal-300 text-teal-800' },
+    { name: 'Azul', style: 'bg-blue-100 border-blue-300 text-blue-800' },
+    { name: 'Roxo', style: 'bg-purple-100 border-purple-300 text-purple-800' },
+    { name: 'Verde', style: 'bg-emerald-100 border-emerald-300 text-emerald-800' },
+    { name: 'Rosa', style: 'bg-pink-100 border-pink-300 text-pink-800' },
+  ];
+
   const syncSchoolYear = () => {
     setCalendarSettings(prev => ({ ...prev, schoolYearStart: schoolStart, schoolYearEnd: schoolEnd }));
   };
@@ -57,6 +73,34 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
   const removeEvent = (id) => {
     if (editingEventId === id) cancelEditing();
     setCalendarSettings(prev => ({ ...prev, events: prev.events.filter(e => e.id !== id) }));
+  };
+
+  const addTeacherWeeklyEvent = (teacherId) => {
+    if (!twTitle.trim()) { alert('Informe o título.'); return; }
+    if (twSlot === '') { alert('Selecione o horário.'); return; }
+
+    const newEvt = {
+      id: Date.now().toString(),
+      teacherId,
+      title: twTitle.trim(),
+      dayIdx: parseInt(twDay),
+      slotIdx: parseInt(twSlot),
+      color: twColor
+    };
+
+    setCalendarSettings(prev => ({
+      ...prev,
+      teacherFixedEvents: [...(prev.teacherFixedEvents || []), newEvt]
+    }));
+
+    setTwTitle('');
+  };
+
+  const removeTeacherWeeklyEvent = (id) => {
+    setCalendarSettings(prev => ({
+      ...prev,
+      teacherFixedEvents: (prev.teacherFixedEvents || []).filter(e => e.id !== id)
+    }));
   };
 
   return (
@@ -211,15 +255,94 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
         <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-600" /> Agendas por Professor</h4>
         <p className="text-[11px] text-slate-500">Baixe a agenda individual de cada professor já considerando férias e feriados cadastrados.</p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {[...data.teachers].sort((a, b) => a.name.localeCompare(b.name)).map(teacher => (
-            <div key={teacher.id} className="border border-slate-200 rounded-lg p-3 flex items-center justify-between bg-slate-50 hover:bg-white transition-colors">
-              <div className="flex flex-col">
-                <span className="text-sm font-semibold text-slate-700">{teacher.name}</span>
-                <span className="text-[10px] text-slate-500">Turnos: {teacher.shifts?.join(', ') || 'N/A'}</span>
+          {[...data.teachers].sort((a, b) => a.name.localeCompare(b.name)).map(teacher => {
+            const isExpanded = teacherEventOpenId === teacher.id;
+            const myEvents = (calendarSettings.teacherFixedEvents || []).filter(e => e.teacherId === teacher.id);
+
+            return (
+              <div key={teacher.id} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-slate-50 hover:bg-white transition-colors">
+                <div className="p-3 flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-slate-700">{teacher.name}</span>
+                    <span className="text-[10px] text-slate-500">Turnos: {teacher.shifts?.join(', ') || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setTeacherEventOpenId(isExpanded ? null : teacher.id);
+                        if (!isExpanded) setTwTitle('');
+                      }}
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded text-xs font-medium border transition-colors ${isExpanded ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                      title="Gerenciar Almoço, Café e Eventos Semanais"
+                    >
+                      <Clock size={14} />
+                      {myEvents.length > 0 ? `${myEvents.length} Eventos` : 'Eventos'}
+                    </button>
+                    <button onClick={() => generateICSForTeacher(data, calendarSettings, teacher.id)} className="flex items-center gap-1 bg-emerald-600 text-white px-2 py-1.5 rounded text-xs font-medium hover:bg-emerald-700 shadow-sm"><Download size={14} /> Agenda</button>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="p-3 bg-white border-t border-slate-100 flex flex-col gap-3">
+                    <div className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Novo Evento Semanal</div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                      <div className="flex flex-col col-span-2">
+                        <input
+                          type="text"
+                          value={twTitle}
+                          onChange={e => setTwTitle(e.target.value)}
+                          placeholder="Almoço, Café, ATPCG..."
+                          className="border rounded px-2 py-1.5 text-xs bg-slate-50 focus:bg-white focus:border-indigo-500"
+                          list="teacher-event-suggestions"
+                        />
+                        <datalist id="teacher-event-suggestions">
+                          <option value="Almoço" />
+                          <option value="Café" />
+                          <option value="Reunião ATPCG" />
+                          <option value="Reunião ATPCA" />
+                          <option value="Horário de Estudo" />
+                        </datalist>
+                      </div>
+                      <select value={twDay} onChange={e => setTwDay(e.target.value)} className="border rounded px-2 py-1.5 text-xs bg-slate-50">
+                        {DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
+                      </select>
+                      <select value={twSlot} onChange={e => setTwSlot(e.target.value)} className="border rounded px-2 py-1.5 text-xs bg-slate-50">
+                        <option value="">Horário...</option>
+                        {data.timeSlots.map((ts, i) => <option key={i} value={i}>{ts.start} ({ts.type})</option>)}
+                      </select>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex gap-1.5">
+                        {TE_COLORS.map(c => (
+                          <button
+                            key={c.style}
+                            onClick={() => setTwColor(c.style)}
+                            className={`w-5 h-5 rounded-full border shadow-sm transition-transform ${c.style.split(' ')[0]} ${twColor === c.style ? 'scale-125 border-slate-600 ring-2 ring-indigo-200' : 'border-transparent hover:scale-110'}`}
+                          />
+                        ))}
+                      </div>
+                      <button onClick={() => addTeacherWeeklyEvent(teacher.id)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-indigo-700 transition-colors">Adicionar</button>
+                    </div>
+
+                    {myEvents.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {myEvents.map(evt => (
+                          <div key={evt.id} className="flex items-center justify-between p-2 rounded border border-slate-100 bg-slate-50/50">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${evt.color.split(' ')[0]}`} />
+                              <span className="text-xs font-bold text-slate-700">{evt.title}</span>
+                              <span className="text-[10px] text-slate-500 uppercase tracking-tighter">— {DAYS[evt.dayIdx]}, {data.timeSlots[evt.slotIdx]?.start}</span>
+                            </div>
+                            <button onClick={() => removeTeacherWeeklyEvent(evt.id)} className="text-red-400 hover:text-red-600 p-0.5"><Trash2 size={12} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <button onClick={() => generateICSForTeacher(data, calendarSettings, teacher.id)} className="flex items-center gap-1 bg-emerald-600 text-white px-2 py-1.5 rounded text-xs font-medium hover:bg-emerald-700"><Download size={14} /> Agenda</button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
