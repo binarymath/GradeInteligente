@@ -301,8 +301,8 @@ export const generateICSForTeacher = (data, calendarSettings, teacherId) => {
         eventDate.setDate(eventDate.getDate() + addDays);
         if (eventDate > schoolEnd) return;
 
-        const [startH, startM] = timeSlot.start.split(':');
-        const [endH, endM] = timeSlot.end.split(':');
+        const [startH, startM] = (evt.startTime || timeSlot.start).split(':');
+        const [endH, endM] = (evt.endTime || timeSlot.end).split(':');
 
         eventCount++;
         icsLines.push('BEGIN:VEVENT');

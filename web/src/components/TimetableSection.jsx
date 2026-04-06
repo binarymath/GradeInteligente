@@ -477,9 +477,11 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
                             );
 
                             if (fixedEvt) {
+                              const timeStr = (fixedEvt.startTime && fixedEvt.endTime) ? `${fixedEvt.startTime}-${fixedEvt.endTime}` : '';
                               cellContent = (
                                 <div className={`text-[11px] p-1 rounded border shadow-sm font-bold h-full flex flex-col justify-center text-center ${fixedEvt.color}`}>
-                                  {fixedEvt.title}
+                                  <div>{fixedEvt.title}</div>
+                                  {timeStr && <div className="text-[9px] opacity-70 font-normal leading-tight">{timeStr}</div>}
                                 </div>
                               );
                             } else {

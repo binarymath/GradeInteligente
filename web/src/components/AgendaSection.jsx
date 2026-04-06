@@ -16,6 +16,8 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
   const [twTitle, setTwTitle] = useState('');
   const [twDay, setTwDay] = useState(0);
   const [twSlot, setTwSlot] = useState('');
+  const [twStart, setTwStart] = useState('');
+  const [twEnd, setTwEnd] = useState('');
   const [twColor, setTwColor] = useState('bg-orange-100 border-orange-300 text-orange-800');
 
   const TE_COLORS = [
@@ -85,6 +87,8 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
       title: twTitle.trim(),
       dayIdx: parseInt(twDay),
       slotIdx: parseInt(twSlot),
+      startTime: twStart,
+      endTime: twEnd,
       color: twColor
     };
 
@@ -100,6 +104,56 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
     setCalendarSettings(prev => ({
       ...prev,
       teacherFixedEvents: (prev.teacherFixedEvents || []).filter(e => e.id !== id)
+    }));
+  };
+
+  const autoFillStudyTime = (teacherId) => {
+    if (!data.timeSlots || data.timeSlots.length === 0) return;
+
+    const existingEvents = calendarSettings.teacherFixedEvents || [];
+    const newEvents = [];
+    const DAYS_NAMES = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
+
+    DAYS_NAMES.forEach((day, dayIdx) => {
+      data.timeSlots.forEach((slot, slotIdx) => {
+        if (slot.type !== 'aula') return;
+
+        // Verifica se professor já tem aula na grade
+        const timeKey = `slot-${day}-${slotIdx}`;
+        const hasClass = Object.values(data.schedule || {}).some(
+          s => s.teacherId === teacherId && s.timeKey === timeKey
+        );
+
+        if (!hasClass) {
+          // Verifica se já não existe evento manual ou de estudo neste slot/dia
+          const isOccupied = existingEvents.some(
+            e => e.teacherId === teacherId && e.dayIdx === dayIdx && e.slotIdx === slotIdx
+          );
+
+          if (!isOccupied) {
+            newEvents.push({
+              id: `auto-${teacherId}-${dayIdx}-${slotIdx}`,
+              teacherId,
+              title: "Horário de Estudo",
+              dayIdx,
+              slotIdx,
+              startTime: slot.start,
+              endTime: slot.end,
+              color: "bg-blue-100 border-blue-300 text-blue-800"
+            });
+          }
+        }
+      });
+    });
+
+    if (newEvents.length === 0) {
+      alert("Não há mais janelas vazias para preencher como 'Horário de Estudo'.");
+      return;
+    }
+
+    setCalendarSettings(prev => ({
+      ...prev,
+      teacherFixedEvents: [...(prev.teacherFixedEvents || []), ...newEvents]
     }));
   };
 
@@ -301,17 +355,51 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
                           <option value="Reunião ATPCG" />
                           <option value="Reunião ATPCA" />
                           <option value="Horário de Estudo" />
+                          <option value="Multiplica" />
                         </datalist>
                       </div>
                       <select value={twDay} onChange={e => setTwDay(e.target.value)} className="border rounded px-2 py-1.5 text-xs bg-slate-50">
                         {DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
                       </select>
-                      <select value={twSlot} onChange={e => setTwSlot(e.target.value)} className="border rounded px-2 py-1.5 text-xs bg-slate-50">
-                        <option value="">Horário...</option>
+                      <select
+                        value={twSlot}
+                        onChange={e => {
+                          const idx = e.target.value;
+                          setTwSlot(idx);
+                          if (idx !== '' && data.timeSlots[idx]) {
+                            setTwStart(data.timeSlots[idx].start);
+                            setTwEnd(data.timeSlots[idx].end);
+                          }
+                        }}
+                        className="border rounded px-2 py-1.5 text-xs bg-slate-50"
+                      >
+                        <option value="">Horário (Slot)...</option>
                         {data.timeSlots.map((ts, i) => <option key={i} value={i}>{ts.start} ({ts.type})</option>)}
                       </select>
                     </div>
-                    <div className="flex items-center justify-between gap-2">
+
+                    <div className="grid grid-cols-2 gap-3 items-end">
+                      <div className="flex flex-col">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Início do Evento</label>
+                        <input
+                          type="time"
+                          value={twStart}
+                          onChange={e => setTwStart(e.target.value)}
+                          className="border rounded px-2 py-1.5 text-xs bg-slate-50 focus:bg-white"
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Fim do Evento</label>
+                        <input
+                          type="time"
+                          value={twEnd}
+                          onChange={e => setTwEnd(e.target.value)}
+                          className="border rounded px-2 py-1.5 text-xs bg-slate-50 focus:bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 border-t border-slate-50 pt-3">
                       <div className="flex gap-1.5">
                         {TE_COLORS.map(c => (
                           <button
@@ -322,6 +410,18 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
                         ))}
                       </div>
                       <button onClick={() => addTeacherWeeklyEvent(teacher.id)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-indigo-700 transition-colors">Adicionar</button>
+                    </div>
+
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 space-y-1.5">
+                      <p className="text-[10px] text-indigo-700 leading-tight">
+                        <span className="font-bold">Dica:</span> Clique abaixo para preencher automaticamente todos os horários vagos deste professor com "Horário de Estudo".
+                      </p>
+                      <button
+                        onClick={() => autoFillStudyTime(teacher.id)}
+                        className="w-full bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-600 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <Edit2 size={14} /> Autopreencher "H. Estudo"
+                      </button>
                     </div>
 
                     {myEvents.length > 0 && (
