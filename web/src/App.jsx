@@ -73,6 +73,7 @@ const App = () => {
   const [isClassFilterOpen, setIsClassFilterOpen] = useState(false); // Toggle for the class filter dropdown
   const dropdownRef = useRef(null);
   const classFilterRef = useRef(null); // Ref for Class Filter dropdown
+  const workerRef = useRef(null);       // Ref para o Web Worker de geração de grade
 
   // Fechar dropdowns ao clicar fora
   useEffect(() => {
@@ -842,13 +843,29 @@ const App = () => {
   const generateSchedule = useCallback(() => {
     setIsVerified(true); // Ao gerar, marca como verificado
 
+    // Terminar worker anterior (se o utilizador clicou novamente antes de terminar)
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
+
     // Clear schedule immediately for visual feedback and consistency
     setData(prev => ({ ...prev, schedule: {}, scheduleConflicts: [] }));
 
     // Pass clean data to the generator to ensure no ghost conflicts
     const cleanData = { ...data, schedule: {}, scheduleConflicts: [] };
-    generateScheduleAsync(cleanData, setData, setGenerationLog, setGenerating);
+    workerRef.current = generateScheduleAsync(cleanData, setData, setGenerationLog, setGenerating);
   }, [data]);
+
+  // Cleanup: terminar worker se o componente for desmontado durante uma geração
+  useEffect(() => {
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleSmartRepair = useCallback(() =>
     smartRepairAsync(data, setData, setGenerationLog, setRepairing),

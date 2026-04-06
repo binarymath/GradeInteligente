@@ -19,6 +19,11 @@ class SmartAllocationResolver {
     this.timeSlots = data.timeSlots;
     this.lessonIndices = this.timeSlots.map((_, i) => i).filter(i => this.timeSlots[i].type === 'aula');
 
+    // O(1): Mapas de entidades indexados por id
+    this.classMap = Object.fromEntries((data.classes || []).map(c => [c.id, c]));
+    this.teacherMap = Object.fromEntries((data.teachers || []).map(t => [t.id, t]));
+    this.subjectMap = Object.fromEntries((data.subjects || []).map(s => [s.id, s]));
+
     // ⭐ ESTRATÉGIA 1: Aumentar limites para zerar pendências
     this.maxTimeMs = 180000; // 180 segundos (3 minutos) - 6x mais tempo
     this.startTime = Date.now();
@@ -499,12 +504,12 @@ class SmartAllocationResolver {
       const impossibleSubjects = new Set(impossible.map(c => `${c.activity.classId}-${c.activity.subjectId}`));
 
       const details = impossible.map(combo => {
-        const subj = this.data.subjects?.find(s => s.id === combo.activity.subjectId);
-        const cls = this.data.classes?.find(c => c.id === combo.activity.classId);
-        const teacher = this.data.teachers?.find(t => t.id === combo.activity.teacherId);
+        const subj = this.subjectMap[combo.activity.subjectId]; // O(1)
+        const cls  = this.classMap[combo.activity.classId];    // O(1)
+        const teacher = this.teacherMap[combo.activity.teacherId]; // O(1)
 
-        const subjName = subj?.name || combo.activity.subjectId;
-        const clsName = cls?.name || combo.activity.classId;
+        const subjName  = subj?.name   || combo.activity.subjectId;
+        const clsName   = cls?.name    || combo.activity.classId;
         const teachName = teacher?.name || combo.activity.teacherId;
 
         return `${subjName} (${clsName}) - Prof. ${teachName}`;
@@ -643,7 +648,7 @@ class SmartAllocationResolver {
     }
 
     // 1. VERIFICAR SE SLOT ESTÁ EM activeSlots/activeSlotsByDay DA TURMA
-    const classData = this.data.classes?.find(c => c.id === activity.classId);
+    const classData = this.classMap[activity.classId]; // O(1)
     if (!classData) {
       return false;
     }

@@ -98,6 +98,7 @@ class CSPScheduleManager {
       this.logMessage('❌ Erro: timeSlots não encontrados ou inválidos.');
       this.timeSlots = [];
       this.lessonIndices = [];
+      this.lessonIndexPosition = new Map();
       return;
     }
     
@@ -111,6 +112,22 @@ class CSPScheduleManager {
         this.lessonIndices.push(i);
       }
     }
+    
+    // O(1): Mapa de posição em lessonIndices (elimina .indexOf() no hot path)
+    this.lessonIndexPosition = new Map(
+      this.lessonIndices.map((slotIdx, pos) => [slotIdx, pos])
+    );
+
+    // O(1): Mapas de entidades indexados por id
+    this.teacherMap = Object.fromEntries(
+      (this.data.teachers || []).map(t => [t.id, t])
+    );
+    this.classMap = Object.fromEntries(
+      (this.data.classes || []).map(c => [c.id, c])
+    );
+    this.subjectMap = Object.fromEntries(
+      (this.data.subjects || []).map(s => [s.id, s])
+    );
     
     if (this.lessonIndices.length === 0) {
       this.logMessage('⚠️ Aviso: Nenhum slot de aula encontrado.');
@@ -129,6 +146,11 @@ class CSPScheduleManager {
       this.logMessage('⚠️ Sem slots de aula disponíveis.');
       return;
     }
+
+    // O(1): Mapa de atividades por id (usado em _conflictExists e _orderDomainValues)
+    this.activityMap = Object.fromEntries(
+      this.activities.map(a => [a.id, a])
+    );
     
     for (const activity of this.activities) {
       if (!activity || !activity.id) continue;
@@ -155,9 +177,9 @@ class CSPScheduleManager {
     const timeSlot = this.timeSlots[slotIdx];
     if (!timeSlot || !timeSlot.start || !timeSlot.end) return false;
     
-    const classData = this.data.classes.find(c => c.id === activity.classId);
-    const teacher = this.data.teachers.find(t => t.id === activity.teacherId);
-    const subject = this.data.subjects.find(s => s.id === activity.subjectId);
+    const classData = this.classMap[activity.classId];
+    const teacher = this.teacherMap[activity.teacherId];
+    const subject = this.subjectMap[activity.subjectId];
 
     // 1. Verificar turno
     if (classData && timeSlot) {
@@ -203,9 +225,9 @@ class CSPScheduleManager {
     // 4. Aulas duplas - checar se há slot seguinte
     const isDouble = activity.doubleLesson || activity.isDoubleLesson;
     if (isDouble) {
-      // Encontrar índice de slotIdx em lessonIndices
-      const existingIndex = this.lessonIndices.indexOf(slotIdx);
-      if (existingIndex < 0 || existingIndex >= this.lessonIndices.length - 1) return false;
+      // O(1): posição em lessonIndices via Map
+      const existingIndex = this.lessonIndexPosition.get(slotIdx);
+      if (existingIndex === undefined || existingIndex >= this.lessonIndices.length - 1) return false;
       
       const nextSlotIdx = this.lessonIndices[existingIndex + 1];
       if (!nextSlotIdx && nextSlotIdx !== 0) return false;
@@ -216,9 +238,9 @@ class CSPScheduleManager {
   }
 
   _areConsecutive(slotIdx1, slotIdx2) {
-    const pos1 = this.lessonIndices.indexOf(slotIdx1);
-    const pos2 = this.lessonIndices.indexOf(slotIdx2);
-    return pos1 >= 0 && pos2 >= 0 && Math.abs(pos1 - pos2) === 1;
+    const pos1 = this.lessonIndexPosition.get(slotIdx1);
+    const pos2 = this.lessonIndexPosition.get(slotIdx2);
+    return pos1 !== undefined && pos2 !== undefined && Math.abs(pos1 - pos2) === 1;
   }
 
   // ============================================
@@ -308,8 +330,8 @@ class CSPScheduleManager {
     const [dayI, slotI] = parts1.map(Number);
     const [dayJ, slotJ] = parts2.map(Number);
 
-    const activityI = this.activities.find(a => a.id === xiId);
-    const activityJ = this.activities.find(a => a.id === xjId);
+    const activityI = this.activityMap[xiId];
+    const activityJ = this.activityMap[xjId];
 
     // Hard Constraint 1: Professor não pode estar em dois lugares ao mesmo tempo
     if (activityI.teacherId === activityJ.teacherId) {
@@ -422,7 +444,7 @@ class CSPScheduleManager {
     // LCV: Least Constraining Value
     // Ordenar valores que deixam mais opções para variáveis vizinhas
     const domain = this.domains.get(activityId);
-    const activity = this.activities.find(a => a.id === activityId);
+    const activity = this.activityMap[activityId];
 
     if (!domain || domain.size === 0) return [];
 
@@ -486,7 +508,8 @@ class CSPScheduleManager {
     // Para aulas duplas, verificar segundo slot
     const isDouble = activity.doubleLesson || activity.isDoubleLesson;
     if (isDouble) {
-      const nextSlotIdx = this.lessonIndices[this.lessonIndices.indexOf(slotIdx) + 1];
+      const posIdx = this.lessonIndexPosition.get(slotIdx);
+      const nextSlotIdx = posIdx !== undefined ? this.lessonIndices[posIdx + 1] : undefined;
       if (nextSlotIdx === undefined) return false;
       
       const nextTimeKey = `${DAYS[dayIdx]}-${nextSlotIdx}`;
@@ -509,6 +532,9 @@ class CSPScheduleManager {
     const [dayIdx, slotIdx] = parts.map(Number);
     const timeKey = `${DAYS[dayIdx]}-${slotIdx}`;
 
+    const posForAssign = this.lessonIndexPosition.get(slotIdx);
+    const nextSlotForAssign = posForAssign !== undefined ? this.lessonIndices[posForAssign + 1] : undefined;
+
     this.schedule[activity.id] = {
       activityId: activity.id,
       classId: activity.classId,
@@ -518,7 +544,7 @@ class CSPScheduleManager {
       slotIdx,
       timeKey,
       start: this.timeSlots[slotIdx].start,
-      end: isDouble ? this.timeSlots[this.lessonIndices[this.lessonIndices.indexOf(slotIdx) + 1]].end : this.timeSlots[slotIdx].end,
+      end: isDouble ? this.timeSlots[nextSlotForAssign].end : this.timeSlots[slotIdx].end,
       isDoubleLesson: isDouble,
       isSynchronous: activity.isSynchronous || false,
       isGranularSync: activity.isGranularSync || false,
@@ -539,8 +565,7 @@ class CSPScheduleManager {
 
     // Para aulas duplas
     if (isDouble) {
-      const nextSlotIdx = this.lessonIndices[this.lessonIndices.indexOf(slotIdx) + 1];
-      const nextTimeKey = `${DAYS[dayIdx]}-${nextSlotIdx}`;
+      const nextTimeKey = `${DAYS[dayIdx]}-${nextSlotForAssign}`;
       this.teacherSchedule[activity.teacherId][nextTimeKey] = true;
       this.classSchedule[activity.classId][nextTimeKey] = true;
     }
@@ -567,8 +592,9 @@ class CSPScheduleManager {
     this.classSchedule[activity.classId][timeKey] = false;
 
     if (isDouble) {
-      const nextSlotIdx = this.lessonIndices[this.lessonIndices.indexOf(slotIdx) + 1];
-      const nextTimeKey = `${DAYS[dayIdx]}-${nextSlotIdx}`;
+      const posUnassign = this.lessonIndexPosition.get(slotIdx);
+      const nextSlotUnassign = posUnassign !== undefined ? this.lessonIndices[posUnassign + 1] : undefined;
+      const nextTimeKey = `${DAYS[dayIdx]}-${nextSlotUnassign}`;
       this.teacherSchedule[activity.teacherId][nextTimeKey] = false;
       this.classSchedule[activity.classId][nextTimeKey] = false;
     }

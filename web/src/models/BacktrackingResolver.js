@@ -18,10 +18,21 @@ class BacktrackingResolver {
     this.timeSlots = data.timeSlots;
     this.lessonIndices = this.timeSlots.map((_, i) => i).filter(i => this.timeSlots[i].type === 'aula');
 
-    this.maxTimeMs = 120000; // 120 segundos máximo (2 minutos)
+    // O(1): Mapa de posição em lessonIndices (elimina .indexOf() no hot path)
+    this.lessonIndexPosition = new Map(
+      this.lessonIndices.map((slotIdx, pos) => [slotIdx, pos])
+    );
+
+    // O(1): Mapa de turmas por id
+    this.classMap = Object.fromEntries(
+      (data.classes || []).map(c => [c.id, c])
+    );
+
+    // Sem limites: o algoritmo corre no Web Worker até resolver completamente
+    this.maxTimeMs = Infinity;
+    this.maxAttempts = Infinity;
     this.startTime = Date.now();
     this.attemptCount = 0;
-    this.maxAttempts = 10000;
     this.log = [];
   }
 
@@ -114,18 +125,7 @@ class BacktrackingResolver {
    * @private
    */
   _backtrack(pendingActivities, index) {
-    // Verifica timeout
-    if (Date.now() - this.startTime > this.maxTimeMs) {
-      this.log.push('⏱️ Timeout: 30 segundos atingidos');
-      return false;
-    }
-
-    // Verifica limite de tentativas
-    if (this.attemptCount > this.maxAttempts) {
-      this.log.push(`⏱️ Limite de ${this.maxAttempts} tentativas atingido`);
-      return false;
-    }
-
+    // Sem timeout nem limite de tentativas: o Worker permite exloração exaustiva
     // Base case: todas as atividades foram alocadas
     if (index === pendingActivities.length) {
       return true;
@@ -176,7 +176,7 @@ class BacktrackingResolver {
 
     // Verifica se o turno da turma permite este horário
     if (activityTurno !== 'Todos') {
-      const classObj = this.data.classes?.find(c => c.id === activity.classId);
+      const classObj = this.classMap[activity.classId]; // O(1)
       if (classObj && classObj.shift && classObj.shift !== 'Todos' && classObj.shift !== activityTurno) {
         return false;
       }
@@ -205,8 +205,8 @@ class BacktrackingResolver {
     }
 
     const isDouble = activity.doubleLesson || activity.isDoubleLesson;
-    const currentIndex = this.lessonIndices.indexOf(slotIdx);
-    const nextSlotIdx = this.lessonIndices[currentIndex + 1];
+    const currentIndex = this.lessonIndexPosition.get(slotIdx); // O(1)
+    const nextSlotIdx = currentIndex !== undefined ? this.lessonIndices[currentIndex + 1] : undefined;
 
     // Verifica se há conflito com intervalo de aula dupla
     if (isDouble && nextSlotIdx === undefined) {
@@ -275,9 +275,9 @@ class BacktrackingResolver {
 
     // Se for aula dupla, aloca também o próximo slot
     if (isDouble) {
-      const currentIndex = this.lessonIndices.indexOf(slotIdx);
-      const nextSlotIdx = this.lessonIndices[currentIndex + 1];
-      const nextSlot = this.timeSlots[nextSlotIdx];
+      const currentIdx = this.lessonIndexPosition.get(slotIdx); // O(1)
+      const nextSlotIdx = currentIdx !== undefined ? this.lessonIndices[currentIdx + 1] : undefined;
+      const nextSlot = nextSlotIdx !== undefined ? this.timeSlots[nextSlotIdx] : null;
 
       // Validação de segurança
       if (!nextSlot) {
@@ -340,11 +340,11 @@ class BacktrackingResolver {
 
     // Se for aula dupla, desaloca também o próximo slot
     if (isDouble) {
-      const currentIndex = this.lessonIndices.indexOf(slotIdx);
-      const nextSlotIdx = this.lessonIndices[currentIndex + 1];
-      const nextTimeKey = `${day}-${nextSlotIdx}`;
+      const currentIdx = this.lessonIndexPosition.get(slotIdx); // O(1)
+      const nextSlotIdxD = currentIdx !== undefined ? this.lessonIndices[currentIdx + 1] : undefined;
+      const nextTimeKey = `${day}-${nextSlotIdxD}`;
 
-      delete this.schedule[`${activity.classId}-${day}-${nextSlotIdx}`];
+      delete this.schedule[`${activity.classId}-${day}-${nextSlotIdxD}`];
 
       if (this.teacherSchedule[activity.teacherId]) {
         this.teacherSchedule[activity.teacherId][nextTimeKey] = false;
@@ -357,7 +357,7 @@ class BacktrackingResolver {
         !(e.teacherId === activity.teacherId &&
           e.classId === activity.classId &&
           e.dayIdx === dayIdx &&
-          e.slotIdx === nextSlotIdx)
+          e.slotIdx === nextSlotIdxD)
       );
     }
   }

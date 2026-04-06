@@ -7,6 +7,10 @@ export default defineConfig({
   define: {
     '__BUILD_DATE__': JSON.stringify(new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date()))
   },
+  // Garantir que Web Workers usam ES Modules (necessário para imports dinâmicos no worker)
+  worker: {
+    format: 'es'
+  },
   root: 'web',
   base: '/',
   build: {
