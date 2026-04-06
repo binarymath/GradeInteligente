@@ -97,14 +97,30 @@ export function getEntrySpan(manager, entry) {
   const baseKey = `${entry.classId}-${DAYS[dayIdx]}-${baseSlot}`;
   const current = manager.schedule[baseKey];
 
+  // Extrai de forma segura os timeSlots e constrói o índice real de aulas
+  const timeSlots = manager.timeSlots || (manager.data && manager.data.timeSlots) || [];
+  const lessonIndices = timeSlots.map((_, i) => i).filter(i => timeSlots[i]?.type === 'aula');
+  
+  const currentIndex = lessonIndices.indexOf(baseSlot);
+
   if (current?.isDoubleLesson) {
-    return [baseSlot, baseSlot + 1];
+    // Se é aula dupla, o span deve ir até à PRÓXIMA aula válida, ignorando intervalos
+    const nextSlot = lessonIndices[currentIndex + 1];
+    if (nextSlot !== undefined) {
+      return [baseSlot, nextSlot];
+    }
+    return [baseSlot, baseSlot + 1]; // Fallback de segurança
   }
 
-  const prevKey = `${entry.classId}-${DAYS[dayIdx]}-${baseSlot - 1}`;
-  const prev = manager.schedule[prevKey];
-  if (prev?.isDoubleLesson && prev.teacherId === entry.teacherId && prev.subjectId === entry.subjectId) {
-    return [baseSlot - 1, baseSlot];
+  if (currentIndex > 0) {
+    // Verifica se a aula válida ANTERIOR era a primeira metade desta aula dupla
+    const prevSlot = lessonIndices[currentIndex - 1];
+    const prevKey = `${entry.classId}-${DAYS[dayIdx]}-${prevSlot}`;
+    const prev = manager.schedule[prevKey];
+    
+    if (prev?.isDoubleLesson && prev.teacherId === entry.teacherId && prev.subjectId === entry.subjectId) {
+      return [prevSlot, baseSlot];
+    }
   }
 
   return [baseSlot];
