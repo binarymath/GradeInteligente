@@ -145,10 +145,16 @@ export function useScheduleVerifier(data) {
             }
 
             // 4. Demand Analysis
+            const makeActivityKey = (classId, subjectId, teacherId) => `${classId}::${subjectId}::${teacherId || 'none'}`;
+            const parseActivityKey = (key) => {
+                const [classId, subjectId, teacherId] = key.split('::');
+                return { classId, subjectId, teacherId };
+            };
+
             const allocations = {};
             for (const [key, entry] of Object.entries(data.schedule)) {
                 if (entry.classId && entry.subjectId) {
-                    const actKey = `${entry.classId}-${entry.subjectId}-${entry.teacherId || 'none'}`;
+                    const actKey = makeActivityKey(entry.classId, entry.subjectId, entry.teacherId);
                     if (!allocations[actKey]) allocations[actKey] = [];
                     allocations[actKey].push({ key, entry });
                 }
@@ -156,7 +162,7 @@ export function useScheduleVerifier(data) {
 
             const demandMap = {};
             for (const activity of data.activities) {
-                const key = `${activity.classId}-${activity.subjectId}-${activity.teacherId || 'none'}`;
+                const key = makeActivityKey(activity.classId, activity.subjectId, activity.teacherId);
                 if (!demandMap[key]) demandMap[key] = { totalNeeded: 0, activity };
                 demandMap[key].totalNeeded += Number(activity.quantity) || 0;
             }
@@ -171,7 +177,7 @@ export function useScheduleVerifier(data) {
                 if (allocated < demand.totalNeeded) {
                     const missing = demand.totalNeeded - allocated;
                     pending += missing;
-                    const [classId, subjectId, teacherId] = key.split('-');
+                    const { classId, subjectId, teacherId } = parseActivityKey(key);
                     pendingDetails.push({
                         subject: subjectMap.get(subjectId)?.name || subjectId,
                         class: classMap.get(classId)?.name || classId,
@@ -181,7 +187,7 @@ export function useScheduleVerifier(data) {
                 } else if (allocated > demand.totalNeeded) {
                     const excessQty = allocated - demand.totalNeeded;
                     excess += excessQty;
-                    const [classId, subjectId, teacherId] = key.split('-');
+                    const { classId, subjectId, teacherId } = parseActivityKey(key);
                     const locations = allocations[key].map(alloc => {
                         const slot = data.timeSlots[alloc.entry.slotIdx];
                         const dayName = data.schedule[alloc.key]?.dayLabel || 'Dia?';

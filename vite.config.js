@@ -7,6 +7,14 @@ export default defineConfig({
   define: {
     '__BUILD_DATE__': JSON.stringify(new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date()))
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true
+      }
+    }
+  },
   // Garantir que Web Workers usam ES Modules (necessário para imports dinâmicos no worker)
   worker: {
     format: 'es'

@@ -93,3 +93,4 @@ get_hashes.py
 MD/
 
 DebugTeste/
+.env*.local

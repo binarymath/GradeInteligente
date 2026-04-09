@@ -16,22 +16,15 @@ import AgendaSection from './components/AgendaSection';
 import AboutSection from './components/AboutSection';
 import ManualEditSection from './components/ManualEditSection';
 import ExportButtons from './components/ExportButtons';
+import { useGradeData } from './hooks/useGradeData';
 
 import { exportBackup, importBackup } from './services/stateService';
 import { generateScheduleAsync, smartRepairAsync } from './services/scheduleService';
-
-const INITIAL_STATE = {
-  timeSlots: [],
-  teachers: [],
-  subjects: [],
-  classes: [],
-  activities: [],
-  schedule: {},
-  scheduleConflicts: []
-};
+import { generateScheduleWithSolver } from './services/solverService';
 
 const App = () => {
-  const [data, setData] = useState(INITIAL_STATE);
+  // ── Estado global: persistência gerida pelo useGradeData via TanStack Query ──
+  const { data, setData, calendarSettings, setCalendarSettings, isLoading } = useGradeData();
 
 
   // Restauração de navegação salva no localStorage (view, subView, viewMode, selectedEntity, sidebarOpen)
@@ -91,14 +84,7 @@ const App = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
   const [selectedShift, setSelectedShift] = useState('Todos');
-  const [calendarSettings, setCalendarSettings] = useState(() => {
-    const curYear = new Date().getFullYear();
-    return {
-      schoolYearStart: `${curYear}-02-01`,
-      schoolYearEnd: `${curYear}-12-15`,
-      events: []
-    };
-  });
+  // calendarSettings e setCalendarSettings agora vêm do useGradeData hook (acima)
 
   const [showLog, setShowLog] = useState(true);
 
@@ -157,50 +143,6 @@ const App = () => {
     }
   }, [view, subView, viewMode, selectedEntities, sidebarOpen]);
 
-  // Carregar estado persistente via Electron (se disponível) ao iniciar
-  useEffect(() => {
-    const loadPersisted = async () => {
-      try {
-        // Fallback para LocalStorage
-        const lsData = localStorage.getItem('grade_data');
-        if (lsData) {
-          const parsed = JSON.parse(lsData);
-          if (parsed && typeof parsed === 'object') {
-            let migratedData = migrateData(parsed);
-            if (migratedData) {
-              // DEEP CLEAN: Remove ghost allocations on load
-              if (migratedData.schedule) {
-                migratedData.schedule = cleanSchedule(migratedData);
-              }
-              setData(prev => ({ ...prev, ...migratedData }));
-            }
-          }
-        }
-
-        const lsCalendar = localStorage.getItem('grade_calendar');
-        if (lsCalendar) {
-          const parsed = JSON.parse(lsCalendar);
-          if (parsed && typeof parsed === 'object') setCalendarSettings(prev => ({ ...prev, ...parsed }));
-        }
-      } catch (e) {
-        // ignore IPC errors
-      }
-    };
-    loadPersisted();
-  }, []);
-
-  // Salvar estado persistente via LocalStorage quando mudar
-  useEffect(() => {
-    const savePersisted = async () => {
-      try {
-        localStorage.setItem('grade_data', JSON.stringify(data));
-      } catch (e) {
-        // ignore errors
-      }
-    };
-    savePersisted();
-  }, [data]);
-
   // 🔴 FIX: Reset isVerified quando dados de config mudam (não quando schedule muda)
   useEffect(() => {
     // Se usuário alterou turmas, professores, matérias ou atividades, a grade atual pode estar inválida
@@ -220,16 +162,9 @@ const App = () => {
     setIsVerified(false);
   }, [Object.keys(data.schedule || {}).length]); // Monitora mudanças na quantidade de aulas
 
-  useEffect(() => {
-    const saveCalendar = async () => {
-      try {
-        localStorage.setItem('grade_calendar', JSON.stringify(calendarSettings));
-      } catch (e) {
-        // ignore errors
-      }
-    };
-    saveCalendar();
-  }, [calendarSettings]);
+  // ✅ REMOVIDO: useEffect de carregamento do localStorage (useGradeData hook via TanStack Query)
+  // ✅ REMOVIDO: useEffect de salvamento de `data` (useGradeData hook via persistQueryClient)
+  // ✅ REMOVIDO: useEffect de salvamento de `calendarSettings` (useGradeData hook via persistQueryClient)
 
   const handleExportState = useCallback(() => {
     // Exporta versão 2 com dados e configurações de calendário
@@ -488,12 +423,18 @@ const App = () => {
       }
 
       // Coletar todas as alocações por (matéria-turma-professor)
+      const makeActivityKey = (classId, subjectId, teacherId) => `${classId}::${subjectId}::${teacherId || 'none'}`;
+      const parseActivityKey = (key) => {
+        const [classId, subjectId, teacherId] = key.split('::');
+        return { classId, subjectId, teacherId };
+      };
+
       const allocations = {};
       for (const [key, entry] of Object.entries(data.schedule)) {
         if (!entry.classId || !entry.subjectId) {
           continue;
         }
-        const actKey = `${entry.classId}-${entry.subjectId}-${entry.teacherId || 'none'}`;
+        const actKey = makeActivityKey(entry.classId, entry.subjectId, entry.teacherId);
         if (!allocations[actKey]) {
           allocations[actKey] = [];
         }
@@ -503,7 +444,7 @@ const App = () => {
       // Verifica pendências baseado em (matéria-turma-professor)
       const demandMap = {};
       for (const activity of data.activities) {
-        const key = `${activity.classId}-${activity.subjectId}-${activity.teacherId || 'none'}`;
+        const key = makeActivityKey(activity.classId, activity.subjectId, activity.teacherId);
         if (!demandMap[key]) demandMap[key] = { totalNeeded: 0, activity };
         demandMap[key].totalNeeded += Number(activity.quantity) || 0;
       }
@@ -518,7 +459,7 @@ const App = () => {
         if (allocated < demand.totalNeeded) {
           const missing = demand.totalNeeded - allocated;
           pending += missing;
-          const [classId, subjectId, teacherId] = key.split('-');
+          const { classId, subjectId, teacherId } = parseActivityKey(key);
           const className = classMap.get(classId)?.name || classId;
           const subjectName = subjectMap.get(subjectId)?.name || subjectId;
           const teacherName = teacherId !== 'none'
@@ -535,7 +476,7 @@ const App = () => {
         } else if (allocated > demand.totalNeeded) {
           const excessQty = allocated - demand.totalNeeded;
           excess += excessQty;
-          const [classId, subjectId, teacherId] = key.split('-');
+          const { classId, subjectId, teacherId } = parseActivityKey(key);
           const className = classMap.get(classId)?.name || classId;
           const subjectName = subjectMap.get(subjectId)?.name || subjectId;
           const teacherName = teacherId !== 'none'
@@ -607,7 +548,7 @@ const App = () => {
         }
 
         for (const [key, entry] of Object.entries(allocations)) {
-          const [, , teacherId] = key.split('-');
+          const { teacherId } = parseActivityKey(key);
           const actualTeacherId = teacherId === 'none' ? 'nenhum' : teacherId;
           if (teacherStatus.has(actualTeacherId)) {
             teacherStatus.get(actualTeacherId).allocated += entry.length;
@@ -635,7 +576,7 @@ const App = () => {
         }
 
         for (const [key, entry] of Object.entries(allocations)) {
-          const [, subjectId] = key.split('-');
+          const { subjectId } = parseActivityKey(key);
           if (subjectStatus.has(subjectId)) {
             subjectStatus.get(subjectId).allocated += entry.length;
           }
@@ -666,7 +607,7 @@ const App = () => {
         }
 
         for (const [key, entry] of Object.entries(allocations)) {
-          const [classId] = key.split('-');
+          const { classId } = parseActivityKey(key);
           if (classStatus.has(classId)) {
             classStatus.get(classId).allocated += entry.length;
           }
@@ -857,6 +798,41 @@ const App = () => {
     workerRef.current = generateScheduleAsync(cleanData, setData, setGenerationLog, setGenerating);
   }, [data]);
 
+  const generateScheduleCsp = useCallback(async () => {
+    // Terminar worker local anterior para evitar concorrência de engines
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
+
+    setGenerating(true);
+    setGenerationLog(['🧠 Iniciando geração com Motor CSP (OR-Tools via API Python)...']);
+
+    try {
+      const cleanData = { ...data, schedule: {}, scheduleConflicts: [] };
+      const schedule = await generateScheduleWithSolver(cleanData, (line) => {
+        setGenerationLog(prev => [...prev, line]);
+      });
+
+      setData(prev => ({ ...prev, schedule, scheduleConflicts: [] }));
+      setIsVerified(true);
+      setHasVerifiedOnce(true);
+      setGenerationLog(prev => [
+        ...prev,
+        '🎯 Grade Inteligente (Motor CSP) gerada com sucesso.',
+        `📦 Total de alocações: ${Object.keys(schedule).length}`
+      ]);
+    } catch (error) {
+      setGenerationLog(prev => [
+        ...prev,
+        `❌ Erro no Motor CSP: ${error?.message || 'Falha desconhecida.'}`
+      ]);
+      setIsVerified(false);
+    } finally {
+      setGenerating(false);
+    }
+  }, [data, setData]);
+
   // Cleanup: terminar worker se o componente for desmontado durante uma geração
   useEffect(() => {
     return () => {
@@ -1013,6 +989,15 @@ const App = () => {
                       >
                         {primaryButtonLabel}
                       </button>
+                      <button
+                        onClick={generateScheduleCsp}
+                        disabled={generating || repairing}
+                        className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        aria-busy={generating}
+                        title="Usar OR-Tools no backend para geração CSP"
+                      >
+                        Gerar Grade Inteligente (Motor CSP)
+                      </button>
                     </>
                   )}
                 </div>
@@ -1039,6 +1024,15 @@ const App = () => {
                         aria-busy={generating}
                       >
                         {primaryButtonLabel}
+                      </button>
+                      <button
+                        onClick={generateScheduleCsp}
+                        disabled={generating || repairing}
+                        className="bg-emerald-600 text-white px-3 py-1.5 text-xs rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        aria-busy={generating}
+                        title="Usar OR-Tools no backend para geração CSP"
+                      >
+                        Gerar Grade Inteligente (Motor CSP)
                       </button>
                     </div>
 
