@@ -94,3 +94,4 @@ MD/
 
 DebugTeste/
 .env*.local
+.venv/
