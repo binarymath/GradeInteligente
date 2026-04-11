@@ -1,7 +1,6 @@
 import React from 'react';
 import { Rocket, Settings, AlertTriangle, Upload, ChevronUp, ChevronDown, X } from 'lucide-react';
 import TimetableSection from '../TimetableSection';
-import ExportButtons from '../ExportButtons';
 
 const GenerateView = ({
     generating,
@@ -74,15 +73,6 @@ const GenerateView = ({
 
                 {/* Export / Import Controls */}
                 <div className="flex flex-wrap gap-2 w-full xl:w-auto border-t xl:border-t-0 pt-3 xl:pt-0 border-slate-100">
-                    <ExportButtons
-                        viewMode={viewMode}
-                        selectedEntities={selectedEntities}
-                        filteredClassIds={filteredClassIds}
-                        data={data}
-                        displayPeriods={displayPeriods}
-                        onExportState={handleExportState}
-                        exportExcel={exportExcel}
-                    />
 
                     <div className="hidden md:block w-px h-8 bg-slate-300 mx-2"></div>
 

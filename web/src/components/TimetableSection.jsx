@@ -3,7 +3,6 @@ import { Calendar, Plus, Trash2, Pencil, X } from 'lucide-react';
 import { DAYS } from '../utils';
 import { useDisplayPeriods } from '../hooks/useDisplayPeriods';
 import { computeSlotShift } from '../utils/time';
-import ExportButtons from './ExportButtons';
 import { generateICSForClass, generateICSForTeacher } from '../utils/icsUtils';
 import { getEntityColorStyle } from '../utils/colors';
 
@@ -155,7 +154,6 @@ const TimetableSection = ({ data, viewMode, selectedEntity, calendarSettings, se
         <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100 flex flex-col gap-6 print:hidden">
           <div className="flex justify-between items-center">
             <h3 className="font-bold text-slate-800 flex items-center gap-2"><Calendar className="w-5 h-5 text-indigo-600" /> Agenda Escolar</h3>
-            <ExportButtons viewMode={viewMode} selectedEntity={selectedEntity} data={data} displayPeriods={displayPeriods} calendarSettings={calendarSettings} />
           </div>
           <div className="grid lg:grid-cols-3 gap-6">
             {/* Ano Letivo */}

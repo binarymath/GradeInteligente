@@ -56,6 +56,7 @@ const App = () => {
   const [sidebarOpen, setSidebarOpen] = useState(initialNav.sidebarOpen);
   const [generating, setGenerating] = useState(false);
   const [repairing, setRepairing] = useState(false);
+  const [cspFailed, setCspFailed] = useState(false);
   const [isVerified, setIsVerified] = useState(false); // Controla se já verificou a grade
   const [hasVerifiedOnce, setHasVerifiedOnce] = useState(false);
   const [generationLog, setGenerationLog] = useState([]);
@@ -248,12 +249,12 @@ const App = () => {
           log.push('Para gerar a grade, você precisa:');
           log.push('1. Ir em "Dados" → "Turmas"');
           log.push('2. Editar cada turma acima e selecionar os horários permitidos');
-          log.push('3. Salvar e tentar gerar novamente');
+          log.push('3. Salvar e tentar gerar de novo');
         } else {
           log.push('⚠️ Nenhuma grade encontrada.');
           log.push('');
           log.push('Para gerar sua primeira grade:');
-          log.push('1. Clique em "Gerar Agora"');
+          log.push('1. Clique em "Verificar"');
           log.push('2. Aguarde o processamento (2-3 minutos)');
           log.push('3. A grade será gerada automaticamente');
         }
@@ -348,7 +349,7 @@ const App = () => {
         log.push('🔧 Solução:');
         log.push('   1. Edite cada turma em "Dados" → "Turmas"');
         log.push('   2. Marque os horários permitidos para cada turma');
-        log.push('   3. Regenere a grade com "Gerar Novamente"');
+        log.push('   3. Regenere a grade com "Gerar Grade" ou "Gerar Grade Flash"');
       }
 
       // === SEGUNDA CAMADA: VERIFICAÇÃO DE CONFLITO POR NOME DE PROFESSOR ===
@@ -419,7 +420,7 @@ const App = () => {
         log.push('🚨 CONFLITOS DE PROFESSOR (POR NOME):');
         log.push('   O mesmo professor está alocado em mais de uma turma no mesmo horário.');
         nameConflicts.forEach(c => log.push(`   • ${c}`));
-        log.push('   💡 Use "Ajustar" para remover as duplicatas automaticamente.');
+        log.push('   💡 Use "Análise e Ajuste" para remover as duplicatas automaticamente.');
       }
 
       // Coletar todas as alocações por (matéria-turma-professor)
@@ -520,7 +521,7 @@ const App = () => {
       if (pending === 0 && excess === 0) {
         log.push('✅ Grade está completa e balanceada!');
       } else {
-        log.push('💡 Use "Ajustar" para corrigir pendências/excessos.');
+        log.push('💡 Use "Análise e Ajuste" para corrigir pendências/excessos.');
       }
 
       // === ANÁLISE DE SATISFAÇÃO POR ENTIDADE ===
@@ -805,6 +806,7 @@ const App = () => {
       workerRef.current = null;
     }
 
+    setCspFailed(false);
     setGenerating(true);
     setGenerationLog(['🧠 Iniciando geração com Motor CSP (OR-Tools via API Python)...']);
 
@@ -819,13 +821,15 @@ const App = () => {
       setHasVerifiedOnce(true);
       setGenerationLog(prev => [
         ...prev,
-        '🎯 Grade Inteligente (Motor CSP) gerada com sucesso.',
+        '🎯 Grade gerada com sucesso via CSP.',
         `📦 Total de alocações: ${Object.keys(schedule).length}`
       ]);
     } catch (error) {
+      setCspFailed(true);
       setGenerationLog(prev => [
         ...prev,
-        `❌ Erro no Motor CSP: ${error?.message || 'Falha desconhecida.'}`
+        `❌ Erro no Motor CSP: ${error?.message || 'Falha desconhecida.'}`,
+        '➡️ Caso necessário, use Edição Manual para ajustes finais.'
       ]);
       setIsVerified(false);
     } finally {
@@ -849,11 +853,14 @@ const App = () => {
   );
 
   const hasSchedule = Object.keys(data.schedule || {}).length > 0;
-  const canGenerateNow = isVerified || !hasSchedule;
-  const primaryAction = canGenerateNow ? generateSchedule : verifySchedule;
-  const primaryButtonLabel = generating
-    ? (canGenerateNow ? 'Gerando...' : 'Verificando...')
-    : (isVerified ? 'Gerar Novamente' : (hasSchedule ? 'Verificar' : 'Gerar Agora'));
+  const showAdvancedActions = hasVerifiedOnce;
+  const flashButtonLabel = generating ? 'Gerando Grade Flash...' : 'Gerar Grade Flash';
+  const legacyButtonLabel = generating ? 'Gerando Grade...' : 'Gerar Grade';
+  const verifyButtonLabel = generating ? 'Verificando...' : 'Verificar';
+  const repairButtonLabel = repairing ? 'Analisando...' : 'Análise e Ajuste';
+  const actionButtonClass = 'bg-blue-900 text-white px-4 py-2 rounded hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors';
+  const actionButtonCompactClass = 'bg-blue-900 text-white px-3 py-1.5 text-xs rounded hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors';
+  const actionCaptionClass = 'text-[11px] leading-snug text-slate-500 max-w-[13rem]';
 
   const isElectron = typeof window !== 'undefined' && window.grade;
 
@@ -951,10 +958,9 @@ const App = () => {
           <div className="flex items-center gap-4 shrink-0">
             {/* Status da API e Configuração */}
 
-
             <input type="file" ref={fileInputRef} onChange={handleImportState} style={{ display: 'none' }} accept=".json" />
-            <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 bg-white border border-slate-300 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 transition-colors text-sm font-medium" title="Importar Backup"><Upload size={16} /> <span className="hidden sm:inline">Restaurar</span></button>
-            <button onClick={handleExportState} className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-1.5 rounded hover:bg-indigo-700 transition-colors text-sm font-medium" title="Salvar Backup"><Download size={16} /> <span className="hidden sm:inline">Backup</span></button>
+            <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-2 bg-blue-900 text-white px-3 py-1.5 rounded hover:bg-blue-800 transition-colors text-sm font-medium" title="Importar Backup"><Upload size={16} /> <span className="hidden sm:inline">Restaurar</span></button>
+            <button onClick={handleExportState} className="flex items-center gap-2 bg-blue-900 text-white px-3 py-1.5 rounded hover:bg-blue-800 transition-colors text-sm font-medium" title="Salvar Backup"><Download size={16} /> <span className="hidden sm:inline">Backup</span></button>
           </div>
         </header>
         <div className="flex-1 p-2 lg:p-4 overflow-y-auto">
@@ -965,77 +971,69 @@ const App = () => {
           {view === 'manualEdit' && <ManualEditSection data={data} setData={setData} />}
           {view === 'generate' && (
             <div className="flex flex-col gap-4">
-              <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-slate-200">
-                <h2 className="text-lg font-bold text-slate-800">Gerar Grade</h2>
-                <div className="flex items-center gap-2">
-                  {generationLog.length === 0 && (
-                    <>
-                      {hasVerifiedOnce && hasSchedule && (
-                        <button
-                          onClick={handleSmartRepair}
-                          disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
-                          className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                          aria-busy={repairing}
-                          title="Analisar e ajustar grade atual sem regenerar"
-                        >
-                          {repairing ? 'Analisando e Ajustando...' : 'Analisar e Ajustar'}
-                        </button>
-                      )}
+              <div className="flex flex-wrap items-center gap-3 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <h2 className="text-lg font-bold text-slate-800 mr-auto">Gerar Grade</h2>
+                
+                {!showAdvancedActions ? (
+                  <button
+                    onClick={verifySchedule}
+                    disabled={generating || repairing}
+                    className={actionButtonClass}
+                    aria-busy={generating}
+                    title="Verifica se a grade atual está consistente antes de liberar a geração"
+                  >
+                    {verifyButtonLabel}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={generateSchedule}
+                      disabled={generating || repairing}
+                      className={actionButtonClass}
+                      aria-busy={generating}
+                      title="Gera a grade pelo motor local rápido"
+                    >
+                      {legacyButtonLabel}
+                    </button>
+
+                    <button
+                      onClick={generateScheduleCsp}
+                      disabled={generating || repairing}
+                      className={actionButtonClass}
+                      aria-busy={generating}
+                      title="Gera a grade usando o motor CSP com OR-Tools"
+                    >
+                      {flashButtonLabel}
+                    </button>
+
+                    {hasVerifiedOnce && hasSchedule && (
                       <button
-                        onClick={primaryAction}
-                        disabled={generating || repairing}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        aria-busy={generating}
+                        onClick={handleSmartRepair}
+                        disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
+                        className={actionButtonClass}
+                        aria-busy={repairing}
+                        title="Analisa a grade atual e corrige pendências"
                       >
-                        {primaryButtonLabel}
+                        {repairButtonLabel}
                       </button>
+                    )}
+
+                    {cspFailed && (
                       <button
-                        onClick={generateScheduleCsp}
+                        onClick={() => setView('manualEdit')}
                         disabled={generating || repairing}
-                        className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        aria-busy={generating}
-                        title="Usar OR-Tools no backend para geração CSP"
+                        className={actionButtonClass}
+                        title="Abre a edição manual quando o motor CSP não encontra solução"
                       >
-                        Gerar Grade Inteligente (Motor CSP)
+                        Edição Manual
                       </button>
-                    </>
-                  )}
-                </div>
+                    )}
+                  </>
+                )}
               </div>
               {generationLog.length > 0 && (
                 <div className="flex flex-col">
-                  <div className="flex justify-between items-center mb-2">
-                    <div className="flex items-center gap-2">
-                      {hasVerifiedOnce && hasSchedule && (
-                        <button
-                          onClick={handleSmartRepair}
-                          disabled={generating || repairing || !data.schedule || Object.keys(data.schedule || {}).length === 0}
-                          className="bg-emerald-600 text-white px-3 py-1.5 text-xs rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                          aria-busy={repairing}
-                          title="Analisar e ajustar grade atual sem regenerar"
-                        >
-                          {repairing ? 'Analisando e Ajustando...' : 'Analisar e Ajustar'}
-                        </button>
-                      )}
-                      <button
-                        onClick={primaryAction}
-                        disabled={generating || repairing}
-                        className="bg-indigo-600 text-white px-3 py-1.5 text-xs rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        aria-busy={generating}
-                      >
-                        {primaryButtonLabel}
-                      </button>
-                      <button
-                        onClick={generateScheduleCsp}
-                        disabled={generating || repairing}
-                        className="bg-emerald-600 text-white px-3 py-1.5 text-xs rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        aria-busy={generating}
-                        title="Usar OR-Tools no backend para geração CSP"
-                      >
-                        Gerar Grade Inteligente (Motor CSP)
-                      </button>
-                    </div>
-
+                  <div className="flex justify-end items-center mb-2">
                     <button
                       onClick={() => setShowLog(!showLog)}
                       className="flex items-center gap-1 text-slate-500 hover:text-indigo-600 text-xs font-semibold uppercase tracking-wider transition-colors"
@@ -1105,6 +1103,17 @@ const App = () => {
                   )}
                 </div>
               )}
+              
+              <div className="mt-8 mb-6">
+                <ExportButtons 
+                  viewMode={viewMode}
+                  selectedEntities={selectedEntities}
+                  data={data}
+                  displayPeriods={displayPeriods}
+                  filteredClassIds={filteredClassIds}
+                  calendarSettings={calendarSettings}
+                />
+              </div>
 
               <div className="flex flex-wrap gap-6 mb-4">
                 <div className="flex flex-col">
@@ -1272,17 +1281,7 @@ const App = () => {
                 )}
 
                 {/* Botão Global de Impressão */}
-                {/* Botões de Exportação (Consolidados) */}
-                <div className="flex flex-col justify-end gap-2">
-                  <ExportButtons
-                    viewMode={viewMode}
-                    selectedEntities={selectedEntities}
-                    data={data}
-                    displayPeriods={displayPeriods}
-                    filteredClassIds={filteredClassIds}
-                    calendarSettings={calendarSettings}
-                  />
-                </div>
+                {/* Botões de Exportação movidos para o Header */}
               </div>
 
               {/* Renderização das Grades Selecionadas */}
