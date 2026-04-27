@@ -1,6 +1,19 @@
-
 import { uid, DAYS } from '../utils';
 import { getSubjectColor } from './colors';
+
+const getHexFromTailwind = (twClass) => {
+    if (!twClass) return '#4285F4'; // Blue default
+    if (twClass.startsWith('#')) return twClass; // Native HEX
+    if (twClass.includes('orange')) return '#F97316';
+    if (twClass.includes('teal')) return '#14B8A6';
+    if (twClass.includes('blue')) return '#3B82F6';
+    if (twClass.includes('purple') || twClass.includes('indigo')) return '#8B5CF6';
+    if (twClass.includes('emerald') || twClass.includes('green')) return '#10B981';
+    if (twClass.includes('pink') || twClass.includes('rose')) return '#EC4899';
+    if (twClass.includes('red')) return '#EF4444';
+    if (twClass.includes('yellow')) return '#F59E0B';
+    return '#4285F4';
+};
 
 // Generates ICS for a specific class (turma) using global events
 export const generateICSForClass = (data, calendarSettings, classId) => {
@@ -263,7 +276,7 @@ export const generateICSForTeacher = (data, calendarSettings, teacherId) => {
             }
         });
 
-        const color = getSubjectColor(subject.id, subject.name);
+        const colorHex = getHexFromTailwind(calendarSettings.defaultClassColor || 'bg-purple-100 border-purple-300 text-purple-800');
 
         eventCount++;
         icsLines.push('BEGIN:VEVENT');
@@ -272,8 +285,8 @@ export const generateICSForTeacher = (data, calendarSettings, teacherId) => {
         icsLines.push(`SUMMARY:${cleanText(subject.name + ' (' + cls.name + ')')}`);
         icsLines.push(`DESCRIPTION:${cleanText('Turma: ' + cls.name)}`);
         icsLines.push(`CATEGORIES:${cleanText(subject.name)}`);
-        icsLines.push(`COLOR:${color.bg}`);
-        icsLines.push(`X-APPLE-CALENDAR-COLOR:${color.bg}`);
+        icsLines.push(`COLOR:${colorHex}`);
+        icsLines.push(`X-APPLE-CALENDAR-COLOR:${colorHex}`);
         icsLines.push(`DTSTART;TZID=America/Sao_Paulo:${formatICSTime(eventDate, startH, startM)}`);
         icsLines.push(`DTEND;TZID=America/Sao_Paulo:${formatICSTime(eventDate, endH, endM)}`);
 
@@ -292,8 +305,18 @@ export const generateICSForTeacher = (data, calendarSettings, teacherId) => {
     (calendarSettings.teacherFixedEvents || []).forEach(evt => {
         if (evt.teacherId !== teacher.id) return;
 
-        const timeSlot = data.timeSlots[evt.slotIdx];
-        if (!timeSlot) return;
+        let startH, startM, endH, endM;
+
+        if (evt.slotIdx !== undefined && evt.slotIdx !== null && evt.slotIdx !== '') {
+            const timeSlot = data.timeSlots[evt.slotIdx];
+            if (!timeSlot) return;
+            [startH, startM] = (evt.startTime || timeSlot.start).split(':');
+            [endH, endM] = (evt.endTime || timeSlot.end).split(':');
+        } else {
+            if (!evt.startTime || !evt.endTime) return;
+            [startH, startM] = evt.startTime.split(':');
+            [endH, endM] = evt.endTime.split(':');
+        }
 
         const targetJSDay = (evt.dayIdx + 1) % 7;
         let eventDate = new Date(schoolStart);
@@ -301,8 +324,7 @@ export const generateICSForTeacher = (data, calendarSettings, teacherId) => {
         eventDate.setDate(eventDate.getDate() + addDays);
         if (eventDate > schoolEnd) return;
 
-        const [startH, startM] = (evt.startTime || timeSlot.start).split(':');
-        const [endH, endM] = (evt.endTime || timeSlot.end).split(':');
+        const hexColor = getHexFromTailwind(evt.color);
 
         eventCount++;
         icsLines.push('BEGIN:VEVENT');
@@ -310,6 +332,8 @@ export const generateICSForTeacher = (data, calendarSettings, teacherId) => {
         icsLines.push(`DTSTAMP:${nowString}`);
         icsLines.push(`SUMMARY:${cleanText(evt.title)}`);
         icsLines.push(`DESCRIPTION:${cleanText(evt.title + ' (Recorrente)')}`);
+        icsLines.push(`COLOR:${hexColor}`);
+        icsLines.push(`X-APPLE-CALENDAR-COLOR:${hexColor}`);
         icsLines.push(`DTSTART;TZID=America/Sao_Paulo:${formatICSTime(eventDate, startH, startM)}`);
         icsLines.push(`DTEND;TZID=America/Sao_Paulo:${formatICSTime(eventDate, endH, endM)}`);
 

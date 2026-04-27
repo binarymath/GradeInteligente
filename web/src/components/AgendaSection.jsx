@@ -20,6 +20,16 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
   const [twEnd, setTwEnd] = useState('');
   const [twColor, setTwColor] = useState('bg-orange-100 border-orange-300 text-orange-800');
 
+  const [isPEIFullWeek, setIsPEIFullWeek] = useState(false);
+
+  // Estados para Inserção Coletiva
+  const [collectiveTitle, setCollectiveTitle] = useState('');
+  const [collectiveDay, setCollectiveDay] = useState(0);
+  const [collectiveSlot, setCollectiveSlot] = useState('');
+  const [collectiveStart, setCollectiveStart] = useState('');
+  const [collectiveEnd, setCollectiveEnd] = useState('');
+  const [collectiveTeachers, setCollectiveTeachers] = useState([]);
+
   const TE_COLORS = [
     { name: 'Laranja', style: 'bg-orange-100 border-orange-300 text-orange-800' },
     { name: 'Teal', style: 'bg-teal-100 border-teal-300 text-teal-800' },
@@ -79,14 +89,14 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
 
   const addTeacherWeeklyEvent = (teacherId) => {
     if (!twTitle.trim()) { alert('Informe o título.'); return; }
-    if (twSlot === '') { alert('Selecione o horário.'); return; }
+    if (twSlot === '' && (!twStart || !twEnd)) { alert('Selecione o horário ou informe o Início/Fim.'); return; }
 
     const newEvt = {
-      id: Date.now().toString(),
+      id: Date.now().toString() + Math.random(),
       teacherId,
       title: twTitle.trim(),
       dayIdx: parseInt(twDay),
-      slotIdx: parseInt(twSlot),
+      slotIdx: twSlot === '' ? null : parseInt(twSlot),
       startTime: twStart,
       endTime: twEnd,
       color: twColor
@@ -107,39 +117,93 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
     }));
   };
 
+  const timeToMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  const getSlotShift = (slot) => {
+    if (slot.shift && slot.shift !== '') return slot.shift;
+    const startMins = timeToMinutes(slot.start);
+    if (startMins < 12 * 60 + 30) return 'Manhã';
+    if (startMins < 18 * 60) return 'Tarde';
+    return 'Noite';
+  };
+
+  const checkOverlap = (startA, endA, startB, endB) => {
+    return timeToMinutes(startA) < timeToMinutes(endB) && timeToMinutes(endA) > timeToMinutes(startB);
+  };
+
   const autoFillStudyTime = (teacherId) => {
     if (!data.timeSlots || data.timeSlots.length === 0) return;
+
+    const teacher = data.teachers.find(t => t.id === teacherId);
+    if (!teacher) return;
+
+    const teacherShiftSet = new Set(teacher.shifts || []);
+    const hasIntegral = Array.from(teacherShiftSet).some(s => s.startsWith('Integral'));
 
     const existingEvents = calendarSettings.teacherFixedEvents || [];
     const newEvents = [];
     const DAYS_NAMES = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
 
     DAYS_NAMES.forEach((day, dayIdx) => {
+      // Se não é semana PEI, verificar se o professor tem aula neste dia
+      if (!isPEIFullWeek) {
+        const hasClassThisDay = Object.values(data.schedule || {}).some(
+          s => s.teacherId === teacherId && s.timeKey.startsWith(`slot-${day}-`)
+        );
+        if (!hasClassThisDay) return;
+      }
+
       data.timeSlots.forEach((slot, slotIdx) => {
         if (slot.type !== 'aula') return;
 
-        // Verifica se professor já tem aula na grade
-        const timeKey = `slot-${day}-${slotIdx}`;
-        const hasClass = Object.values(data.schedule || {}).some(
-          s => s.teacherId === teacherId && s.timeKey === timeKey
-        );
+        // Verifica turno
+        const slotShift = getSlotShift(slot);
+        const matchesShift = teacherShiftSet.has(slotShift) || hasIntegral;
+        if (!matchesShift) return;
 
-        if (!hasClass) {
-          // Verifica se já não existe evento manual ou de estudo neste slot/dia
-          const isOccupied = existingEvents.some(
-            e => e.teacherId === teacherId && e.dayIdx === dayIdx && e.slotIdx === slotIdx
-          );
+        // Verifica se professor já tem aula na grade neste horário ou se há *sobreposição* de relógio (escolas com turnos entrelaçados)
+        const hasClassOverlap = Object.values(data.schedule || {}).some(s => {
+          if (s.teacherId !== teacherId) return false;
+          
+          // Confere se a aula cai no mesmo dia
+          const sDay = s.timeKey.split('-')[0];
+          if (sDay !== day) return false;
 
-          if (!isOccupied) {
+          // Extrai o índice do slot da aula real
+          const sSlotIdx = parseInt(s.timeKey.split('-')[1], 10);
+          const classSlot = data.timeSlots[sSlotIdx];
+          if (!classSlot) return false;
+
+          // Se a aula fisicamente sobrepoe o tempo deste slot vazio atual, nós consideramos ele bloqueado (overlap cruzado na grade de horários da escola)
+          return checkOverlap(slot.start, slot.end, classSlot.start, classSlot.end);
+        });
+
+        if (!hasClassOverlap) {
+          // Detectar colisão com eventos individuais (Horário de Estudo ou Almoço)
+          const hasOverlap = existingEvents.some(e => {
+            if (e.teacherId !== teacherId || e.dayIdx !== dayIdx) return false;
+            // Colisão óbvia de slot
+            if (e.slotIdx !== undefined && e.slotIdx !== null && e.slotIdx === slotIdx) return true;
+            // Colisão temporal (Overlap numérico)
+            const eStart = e.startTime || (e.slotIdx !== null ? data.timeSlots[e.slotIdx]?.start : '00:00');
+            const eEnd = e.endTime || (e.slotIdx !== null ? data.timeSlots[e.slotIdx]?.end : '00:00');
+            return checkOverlap(slot.start, slot.end, eStart, eEnd);
+          });
+
+          if (!hasOverlap) {
             newEvents.push({
-              id: `auto-${teacherId}-${dayIdx}-${slotIdx}`,
+              id: `auto-${teacherId}-${dayIdx}-${slotIdx}-${Date.now()}`,
               teacherId,
               title: "Horário de Estudo",
               dayIdx,
               slotIdx,
               startTime: slot.start,
               endTime: slot.end,
-              color: "bg-blue-100 border-blue-300 text-blue-800"
+              color: calendarSettings.defaultStudyColor || 'bg-slate-200 border-slate-300 text-slate-700'
             });
           }
         }
@@ -147,7 +211,7 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
     });
 
     if (newEvents.length === 0) {
-      alert("Não há mais janelas vazias para preencher como 'Horário de Estudo'.");
+      alert("Não há horários disponíveis no turno do professor para preencher ou os espaços já estão ocupados.");
       return;
     }
 
@@ -155,6 +219,32 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
       ...prev,
       teacherFixedEvents: [...(prev.teacherFixedEvents || []), ...newEvents]
     }));
+  };
+
+  const addCollectiveEvent = () => {
+    if (!collectiveTitle.trim()) { alert('Informe o título (Ex: ATPCG).'); return; }
+    if (collectiveSlot === '' && (!collectiveStart || !collectiveEnd)) { alert('Selecione o horário ou digite Início e Fim.'); return; }
+    if (collectiveTeachers.length === 0) { alert('Selecione ao menos um professor.'); return; }
+
+    const newEvents = collectiveTeachers.map(teacherId => ({
+      id: Date.now().toString() + Math.random(),
+      teacherId,
+      title: collectiveTitle.trim(),
+      dayIdx: parseInt(collectiveDay),
+      slotIdx: collectiveSlot === '' ? null : parseInt(collectiveSlot),
+      startTime: collectiveStart,
+      endTime: collectiveEnd,
+      color: 'bg-indigo-100 border-indigo-300 text-indigo-800'
+    }));
+
+    setCalendarSettings(prev => ({
+      ...prev,
+      teacherFixedEvents: [...(prev.teacherFixedEvents || []), ...newEvents]
+    }));
+
+    setCollectiveTitle('');
+    setCollectiveTeachers([]);
+    alert(`Evento atribuído a ${collectiveTeachers.length} professores com sucesso!`);
   };
 
   return (
@@ -290,12 +380,12 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
           </div>
         </div>
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
+      <div className="bg-white border border-sky-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
         <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calendar className="w-5 h-5 text-indigo-600" /> Agendas por Turma</h4>
         <p className="text-[11px] text-slate-500">Baixe a agenda individual de cada turma já considerando férias e feriados cadastrados.</p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[...data.classes].sort((a, b) => a.name.localeCompare(b.name)).map(cls => (
-            <div key={cls.id} className="border border-slate-200 rounded-lg p-3 flex items-center justify-between bg-slate-50 hover:bg-white transition-colors">
+            <div key={cls.id} className="border border-sky-100 rounded-lg p-3 flex items-center justify-between bg-sky-50/30 hover:bg-white hover:border-sky-300 hover:shadow-md transition-all">
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-slate-700">{cls.name}</span>
                 <span className="text-[10px] text-slate-500">Turno: {cls.shift}</span>
@@ -305,16 +395,62 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
           ))}
         </div>
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
-        <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calendar className="w-5 h-5 text-emerald-600" /> Agendas por Professor</h4>
-        <p className="text-[11px] text-slate-500">Baixe a agenda individual de cada professor já considerando férias e feriados cadastrados.</p>
+      <div className="bg-white border border-sky-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
+        <div className="flex justify-between items-start md:items-center flex-col md:flex-row gap-3">
+          <div>
+            <h4 className="font-bold text-slate-700 flex items-center gap-2"><Calendar className="w-5 h-5 text-sky-600" /> Agendas por Professor</h4>
+            <p className="text-[11px] text-slate-500">Baixe a agenda individual de cada professor já considerando férias e feriados cadastrados.</p>
+          </div>
+          
+          <div className="flex gap-6 p-3 bg-white border border-sky-100 rounded-xl shadow-sm items-center">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-sky-800 uppercase tracking-tight">Estilo Aulas</span>
+              <label 
+                className="flex w-8 h-8 rounded-full border-2 border-slate-200 shadow-md cursor-pointer hover:scale-110 hover:shadow-lg transition-all"
+                style={{ backgroundColor: (calendarSettings.defaultClassColor?.startsWith('#')) ? calendarSettings.defaultClassColor : '#EAB308' }}
+                title="Alterar Cor Padrão das Aulas"
+              >
+                <input 
+                  type="color" 
+                  value={(calendarSettings.defaultClassColor?.startsWith('#')) ? calendarSettings.defaultClassColor : '#eab308'}
+                  onInput={(e) => {
+                    e.currentTarget.parentElement.style.backgroundColor = e.target.value;
+                    setCalendarSettings(p => ({...p, defaultClassColor: e.target.value}));
+                  }}
+                  onChange={(e) => setCalendarSettings(p => ({...p, defaultClassColor: e.target.value}))}
+                  className="sr-only"
+                />
+              </label>
+            </div>
+            <div className="w-px h-6 bg-sky-200"></div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-sky-800 uppercase tracking-tight">Auto Estudos</span>
+              <label 
+                className="flex w-8 h-8 rounded-full border-2 border-slate-200 shadow-md cursor-pointer hover:scale-110 hover:shadow-lg transition-all"
+                style={{ backgroundColor: (calendarSettings.defaultStudyColor?.startsWith('#')) ? calendarSettings.defaultStudyColor : '#94A3B8' }}
+                title="Alterar Cor Automática dos Estudos"
+              >
+                <input 
+                  type="color" 
+                  value={(calendarSettings.defaultStudyColor?.startsWith('#')) ? calendarSettings.defaultStudyColor : '#94a3b8'}
+                  onInput={(e) => {
+                    e.currentTarget.parentElement.style.backgroundColor = e.target.value;
+                    setCalendarSettings(p => ({...p, defaultStudyColor: e.target.value}));
+                  }}
+                  onChange={(e) => setCalendarSettings(p => ({...p, defaultStudyColor: e.target.value}))}
+                  className="sr-only"
+                />
+              </label>
+            </div>
+          </div>
+        </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[...data.teachers].sort((a, b) => a.name.localeCompare(b.name)).map(teacher => {
             const isExpanded = teacherEventOpenId === teacher.id;
             const myEvents = (calendarSettings.teacherFixedEvents || []).filter(e => e.teacherId === teacher.id);
 
             return (
-              <div key={teacher.id} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-slate-50 hover:bg-white transition-colors">
+              <div key={teacher.id} className="border border-sky-100 rounded-lg overflow-hidden flex flex-col bg-sky-50/30 hover:bg-white hover:border-sky-300 hover:shadow-md transition-all">
                 <div className="p-3 flex items-center justify-between">
                   <div className="flex flex-col">
                     <span className="text-sm font-semibold text-slate-700">{teacher.name}</span>
@@ -373,7 +509,7 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
                         }}
                         className="border rounded px-2 py-1.5 text-xs bg-slate-50"
                       >
-                        <option value="">Horário (Slot)...</option>
+                        <option value="">(Horário Personalizado / Livre)</option>
                         {data.timeSlots.map((ts, i) => <option key={i} value={i}>{ts.start} ({ts.type})</option>)}
                       </select>
                     </div>
@@ -412,10 +548,19 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
                       <button onClick={() => addTeacherWeeklyEvent(teacher.id)} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-indigo-700 transition-colors">Adicionar</button>
                     </div>
 
-                    <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 space-y-1.5">
+                    <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 space-y-2">
                       <p className="text-[10px] text-indigo-700 leading-tight">
-                        <span className="font-bold">Dica:</span> Clique abaixo para preencher automaticamente todos os horários vagos deste professor com "Horário de Estudo".
+                        <span className="font-bold">Dica:</span> Clique abaixo para preencher automaticamente todos os horários vagos pertencentes ao <b>Turno</b> deste professor com "Horário de Estudo".
                       </p>
+                      <label className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-800 cursor-pointer mb-2">
+                        <input
+                          type="checkbox"
+                          checked={isPEIFullWeek}
+                          onChange={e => setIsPEIFullWeek(e.target.checked)}
+                          className="w-3.5 h-3.5 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500"
+                        />
+                        Preencher também dias inteiros sem aula (Regime PEI)
+                      </label>
                       <button
                         onClick={() => autoFillStudyTime(teacher.id)}
                         className="w-full bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-600 hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all flex items-center justify-center gap-1.5"
@@ -426,16 +571,21 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
 
                     {myEvents.length > 0 && (
                       <div className="mt-2 space-y-1">
-                        {myEvents.map(evt => (
+                        {myEvents.map(evt => {
+                          const isHex = evt.color && evt.color.startsWith('#');
+                          return (
                           <div key={evt.id} className="flex items-center justify-between p-2 rounded border border-slate-100 bg-slate-50/50">
                             <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${evt.color.split(' ')[0]}`} />
+                              <div 
+                                className={`w-2 h-2 rounded-full ${isHex ? '' : evt.color.split(' ')[0]}`}
+                                style={isHex ? { backgroundColor: evt.color } : undefined}
+                              />
                               <span className="text-xs font-bold text-slate-700">{evt.title}</span>
                               <span className="text-[10px] text-slate-500 uppercase tracking-tighter">— {DAYS[evt.dayIdx]}, {data.timeSlots[evt.slotIdx]?.start}</span>
                             </div>
                             <button onClick={() => removeTeacherWeeklyEvent(evt.id)} className="text-red-400 hover:text-red-600 p-0.5"><Trash2 size={12} /></button>
                           </div>
-                        ))}
+                        )})}
                       </div>
                     )}
                   </div>
@@ -443,6 +593,114 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Inserção Coletiva de Eventos */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 flex flex-col gap-4">
+        <div className="flex justify-between items-center">
+          <h4 className="font-bold text-slate-700 flex items-center gap-2">
+            <Users className="w-5 h-5 text-purple-600" />
+            Inserção Coletiva de Eventos (Coordenação)
+          </h4>
+        </div>
+        <p className="text-[11px] text-slate-500">
+          Adicione reuniões ou apontamentos semanais (ex: ATPCG, Evento Conjunto) para múltiplos professores de uma só vez.
+        </p>
+        <div className="bg-purple-50 border border-purple-100 rounded-lg p-4 space-y-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="flex flex-col col-span-2">
+              <label className="text-xs font-semibold text-slate-600 mb-1">Título do Evento</label>
+              <input
+                type="text"
+                value={collectiveTitle}
+                onChange={e => setCollectiveTitle(e.target.value)}
+                placeholder="Exemplo: Reunião ATPCG"
+                className="border rounded px-2 py-1.5 text-sm bg-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-slate-600 mb-1">Dia da Semana</label>
+              <select value={collectiveDay} onChange={e => setCollectiveDay(e.target.value)} className="border rounded px-2 py-1.5 text-sm bg-white">
+                {DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-slate-600 mb-1">Horário (Slot)</label>
+              <select
+                value={collectiveSlot}
+                onChange={e => {
+                  const idx = e.target.value;
+                  setCollectiveSlot(idx);
+                  if (idx !== '' && data.timeSlots[idx]) {
+                    setCollectiveStart(data.timeSlots[idx].start);
+                    setCollectiveEnd(data.timeSlots[idx].end);
+                  }
+                }}
+                className="border rounded px-2 py-1.5 text-sm bg-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+              >
+                <option value="">(Horário Personalizado / Livre)</option>
+                {data.timeSlots.map((ts, i) => <option key={i} value={i}>{ts.start} ({ts.type})</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 pb-3 border-b border-purple-200">
+             <div className="flex flex-col">
+                <label className="text-xs font-semibold text-slate-600 mb-1">Início do Evento</label>
+                <input
+                  type="time"
+                  value={collectiveStart}
+                  onChange={e => setCollectiveStart(e.target.value)}
+                  className="border rounded px-2 py-1.5 text-sm bg-white focus:border-purple-500"
+                />
+             </div>
+             <div className="flex flex-col">
+                <label className="text-xs font-semibold text-slate-600 mb-1">Fim do Evento</label>
+                <input
+                  type="time"
+                  value={collectiveEnd}
+                  onChange={e => setCollectiveEnd(e.target.value)}
+                  className="border rounded px-2 py-1.5 text-sm bg-white focus:border-purple-500"
+                />
+             </div>
+          </div>
+          
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700">Selecione os Professores ({collectiveTeachers.length} marcados)</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCollectiveTeachers(data.teachers.map(t => t.id))}
+                  className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded"
+                >Selecionar Todos</button>
+                <button
+                  onClick={() => setCollectiveTeachers([])}
+                  className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded"
+                >Limpar Múltiplos</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2 max-h-[150px] overflow-y-auto p-2 border border-purple-200 bg-white rounded-lg">
+              {[...data.teachers].sort((a,b) => a.name.localeCompare(b.name)).map(t => (
+                <label key={t.id} className="flex items-center gap-1.5 text-xs cursor-pointer truncate" title={t.name}>
+                  <input
+                    type="checkbox"
+                    checked={collectiveTeachers.includes(t.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) setCollectiveTeachers(prev => [...prev, t.id]);
+                      else setCollectiveTeachers(prev => prev.filter(id => id !== t.id));
+                    }}
+                    className="w-3.5 h-3.5 text-purple-600 rounded border-purple-300"
+                  />
+                  <span className="truncate">{t.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-end pt-2">
+            <button onClick={addCollectiveEvent} className="bg-purple-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-purple-700 transition-colors shadow-sm flex items-center gap-1.5">
+              <Plus size={16} /> Aplicar Evento Coletivo
+            </button>
+          </div>
         </div>
       </div>
 
