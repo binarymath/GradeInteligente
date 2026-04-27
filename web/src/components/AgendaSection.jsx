@@ -415,7 +415,6 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
                   value={(calendarSettings.defaultClassColor?.startsWith('#')) ? calendarSettings.defaultClassColor : '#eab308'}
                   onInput={(e) => {
                     e.currentTarget.parentElement.style.backgroundColor = e.target.value;
-                    setCalendarSettings(p => ({...p, defaultClassColor: e.target.value}));
                   }}
                   onChange={(e) => setCalendarSettings(p => ({...p, defaultClassColor: e.target.value}))}
                   className="sr-only"
@@ -435,7 +434,6 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
                   value={(calendarSettings.defaultStudyColor?.startsWith('#')) ? calendarSettings.defaultStudyColor : '#94a3b8'}
                   onInput={(e) => {
                     e.currentTarget.parentElement.style.backgroundColor = e.target.value;
-                    setCalendarSettings(p => ({...p, defaultStudyColor: e.target.value}));
                   }}
                   onChange={(e) => setCalendarSettings(p => ({...p, defaultStudyColor: e.target.value}))}
                   className="sr-only"
