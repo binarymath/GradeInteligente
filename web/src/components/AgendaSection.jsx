@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { Plus, Check, X, Trash2, Clock, BookOpen, Star, Save, Coffee, Utensils, Sun, Sunset, Moon, Layers, Users, Edit2, Settings, HelpCircle, Download, FileText, Calculator, Calendar, Printer, Pencil } from 'lucide-react';
 import { uid, DAYS } from '../utils';
 import { generateICSForClass, generateICSForTeacher } from '../utils/icsUtils';
@@ -21,6 +21,28 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
   const [twColor, setTwColor] = useState('bg-orange-100 border-orange-300 text-orange-800');
 
   const [isPEIFullWeek, setIsPEIFullWeek] = useState(false);
+
+  // Timers para Debounce das cores nativas a fim de evitar sobrecarga no TanStack Query
+  const classColorTimer = useRef(null);
+  const studyColorTimer = useRef(null);
+
+  const handleClassColorInput = (e) => {
+    const val = e.target.value;
+    e.currentTarget.parentElement.style.backgroundColor = val;
+    if (classColorTimer.current) clearTimeout(classColorTimer.current);
+    classColorTimer.current = setTimeout(() => {
+      setCalendarSettings(p => ({...p, defaultClassColor: val}));
+    }, 400);
+  };
+
+  const handleStudyColorInput = (e) => {
+    const val = e.target.value;
+    e.currentTarget.parentElement.style.backgroundColor = val;
+    if (studyColorTimer.current) clearTimeout(studyColorTimer.current);
+    studyColorTimer.current = setTimeout(() => {
+      setCalendarSettings(p => ({...p, defaultStudyColor: val}));
+    }, 400);
+  };
 
   // Estados para Inserção Coletiva
   const [collectiveTitle, setCollectiveTitle] = useState('');
@@ -413,10 +435,7 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
                 <input 
                   type="color" 
                   value={(calendarSettings.defaultClassColor?.startsWith('#')) ? calendarSettings.defaultClassColor : '#eab308'}
-                  onInput={(e) => {
-                    e.currentTarget.parentElement.style.backgroundColor = e.target.value;
-                  }}
-                  onChange={(e) => setCalendarSettings(p => ({...p, defaultClassColor: e.target.value}))}
+                  onInput={handleClassColorInput}
                   className="sr-only"
                 />
               </label>
@@ -432,10 +451,7 @@ const AgendaSection = ({ data, calendarSettings, setCalendarSettings }) => {
                 <input 
                   type="color" 
                   value={(calendarSettings.defaultStudyColor?.startsWith('#')) ? calendarSettings.defaultStudyColor : '#94a3b8'}
-                  onInput={(e) => {
-                    e.currentTarget.parentElement.style.backgroundColor = e.target.value;
-                  }}
-                  onChange={(e) => setCalendarSettings(p => ({...p, defaultStudyColor: e.target.value}))}
+                  onInput={handleStudyColorInput}
                   className="sr-only"
                 />
               </label>
